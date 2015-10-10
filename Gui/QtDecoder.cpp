@@ -65,9 +65,7 @@ QtReader::QtReader(boost::shared_ptr<Natron::Node> node)
 
 QtReader::~QtReader()
 {
-    if (_img) {
-        delete _img;
-    }
+    delete _img;
 }
 
 std::string
@@ -160,7 +158,7 @@ QtReader::initializeKnobs()
     _timeOffset = getNode()->createKnob<KnobInt>( QObject::tr("Time offset").toStdString() );
     _timeOffset->setAnimationEnabled(false);
     _timeOffset->setDefaultValue(0,0);
-    _timeOffset->setSecret(true);
+    _timeOffset->setSecretByDefault(true);
 } // initializeKnobs
 
 void
@@ -446,9 +444,7 @@ QtReader::getRegionOfDefinition(U64 /*hash*/,double time,
 
     if (filename != _filename) {
         _filename = filename;
-        if (_img) {
-            delete _img;
-        }
+        delete _img;
         _img = new QImage( _filename.c_str() );
         if (_img->format() == QImage::Format_Invalid) {
             setPersistentMessage(Natron::eMessageTypeError, QObject::tr("Failed to load the image ").toStdString() + filename);

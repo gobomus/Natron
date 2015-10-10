@@ -5,7 +5,7 @@
 #
 
 
-CWD=$(pwd)
+CWD=`pwd`
 
 #The local.sh file must exist, please see the README.
 if [ -f $CWD/local.sh ]; then
@@ -18,11 +18,11 @@ fi
 
 #THE FOLLOWING CAN BE MODIFIED TO CONFIGURE RELEASE BUILDS
 #----------------------------------------------------------
-NATRON_GIT_TAG=tags/2.0.0
-IOPLUG_GIT_TAG=tags/2.0.0
-MISCPLUG_GIT_TAG=tags/2.0.0
-ARENAPLUG_GIT_TAG=tags/2.0.0
-CVPLUG_GIT_TAG=tags/2.0.0
+NATRON_GIT_TAG=tags/2.0.0-RC1
+IOPLUG_GIT_TAG=tags/Natron-2.0.0-RC1
+MISCPLUG_GIT_TAG=tags/Natron-2.0.0-RC1
+ARENAPLUG_GIT_TAG=tags/Natron-2.0.0-RC1
+CVPLUG_GIT_TAG=tags/Natron-2.0.0-RC1
 #----------------------------------------------------------
 
 
@@ -64,10 +64,10 @@ INC_PATH=$CWD/include
 
 # Keep existing tag, else make a new one
 if [ -z "$TAG" ]; then
-  TAG=$(date +%Y%m%d%H%M)
+    TAG=`date +%Y%m%d%H%M`
 fi
 
-OS=$(uname -o)
+OS=`uname -o`
 REPO_DIR_PREFIX=$CWD/build_
 
 
@@ -141,15 +141,15 @@ FFMPEG_MXE_BIN_32_LGPL_TAR=ffmpeg-2.7.2-windows-i686-shared-LGPL.tar.xz
 
 NATRON_API_DOC=https://media.readthedocs.org/pdf/natron/workshop/natron.pdf # TODO generate own
 
-GCC_V=$(gcc --version | awk '{print $0;exit 0;}' | awk '{print $7}' | sed 's#\.# #g')
-GCC_MAJOR=$(echo $GCC_V | awk '{print $1}')
-GCC_MINOR=$(echo $GCC_V | awk '{print $2}')
+GCC_V=`gcc --version | awk '{print $0;exit 0;}' | awk '{print $7}' | sed -e 's#\.# #g'`
+GCC_MAJOR=`echo $GCC_V | awk '{print $1}'`
+GCC_MINOR=`echo $GCC_V | awk '{print $2}'`
 if [ "$GCC_MAJOR" -lt "4" ]; then
-  echo "Wrong GCC version. Must be at least 4.8"
-  exit 1
+    echo "Wrong GCC version. Must be at least 4.8"
+    exit 1
 elif [ "$GCC_MAJOR" -eq "4" ] && [ "$GCC_MINOR" -lt "8" ]; then
-  echo "Wrong GCC version. Must be at least 4.8"
-  exit 1
+    echo "Wrong GCC version. Must be at least 4.8"
+    exit 1
 fi
 
 # Threads

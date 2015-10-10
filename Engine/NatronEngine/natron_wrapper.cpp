@@ -4,6 +4,7 @@
 CLANG_DIAG_OFF(mismatched-tags)
 GCC_DIAG_OFF(unused-parameter)
 GCC_DIAG_OFF(missing-field-initializers)
+GCC_DIAG_OFF(missing-declarations)
 #include <shiboken.h> // produces many warnings
 #include <pysidesignal.h>
 #include <pysideproperty.h>
@@ -1105,6 +1106,12 @@ void init_Natron(PyObject* module)
         return ;
     if (!Shiboken::Enum::createScopedEnumItem(SbkNatronEngineTypes[SBK_NATRON_PIXMAPENUM_IDX],
         &Sbk_Natron_Type, "NATRON_PIXMAP_VIEWER_RENDER_SCALE_CHECKED", (long) Natron::NATRON_PIXMAP_VIEWER_RENDER_SCALE_CHECKED))
+        return ;
+    if (!Shiboken::Enum::createScopedEnumItem(SbkNatronEngineTypes[SBK_NATRON_PIXMAPENUM_IDX],
+        &Sbk_Natron_Type, "NATRON_PIXMAP_VIEWER_AUTOCONTRAST_ENABLED", (long) Natron::NATRON_PIXMAP_VIEWER_AUTOCONTRAST_ENABLED))
+        return ;
+    if (!Shiboken::Enum::createScopedEnumItem(SbkNatronEngineTypes[SBK_NATRON_PIXMAPENUM_IDX],
+        &Sbk_Natron_Type, "NATRON_PIXMAP_VIEWER_AUTOCONTRAST_DISABLED", (long) Natron::NATRON_PIXMAP_VIEWER_AUTOCONTRAST_DISABLED))
         return ;
     if (!Shiboken::Enum::createScopedEnumItem(SbkNatronEngineTypes[SBK_NATRON_PIXMAPENUM_IDX],
         &Sbk_Natron_Type, "NATRON_PIXMAP_OPEN_FILE", (long) Natron::NATRON_PIXMAP_OPEN_FILE))

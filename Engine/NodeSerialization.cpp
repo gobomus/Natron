@@ -76,7 +76,7 @@ NodeSerialization::NodeSerialization(const boost::shared_ptr<Natron::Node> & n,b
             if (!knobs[i]->isUserKnob() &&
                 knobs[i]->getIsPersistant() &&
                 !isGroup && !isPage && !isButton
-                && knobs[i]->hasModifications()) {
+                && knobs[i]->hasModificationsForSerialization()) {
                 
                 ///For choice do a deepclone because we need entries
                 //bool doCopyKnobs = isChoice ? true : copyKnobs;
@@ -98,12 +98,15 @@ NodeSerialization::NodeSerialization(const boost::shared_ptr<Natron::Node> & n,b
         _nodeLabel = n->getLabel_mt_safe();
         
         _nodeScriptName = n->getScriptName_mt_safe();
+        
+        _cacheID = n->getCacheID();
 
         _pluginID = n->getPluginID();
         
-        _pythonModule = n->getPluginPythonModule();
-        
-        _pythonModuleVersion = n->getPluginPythonModuleVersion();
+        if(!n->hasPyPlugBeenEdited()) {
+            _pythonModule = n->getPluginPythonModule();
+            _pythonModuleVersion = n->getPluginPythonModuleVersion();
+        }
 
         _pluginMajorVersion = n->getMajorVersion();
 

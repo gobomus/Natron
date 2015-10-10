@@ -102,12 +102,26 @@ getDefaultOcioConfigPaths()
 void
 Settings::initializeKnobs()
 {
+    initializeKnobsGeneral();
+    initializeKnobsAppearance();
+    initializeKnobsViewers();
+    initializeKnobsNodeGraph();
+    initializeKnobsCaching();
+    initializeKnobsReaders();
+    initializeKnobsWriters();
+    initializeKnobsPlugins();
+    initializeKnobsPython();
+}
+
+void
+Settings::initializeKnobsGeneral()
+{
     _generalTab = Natron::createKnob<KnobPage>(this, "General");
 
     _natronSettingsExist = Natron::createKnob<KnobBool>(this, "Existing settings");
     _natronSettingsExist->setAnimationEnabled(false);
     _natronSettingsExist->setName("existingSettings");
-    _natronSettingsExist->setSecret(true);
+    _natronSettingsExist->setSecretByDefault(true);
     _generalTab->addKnob(_natronSettingsExist);
     
 
@@ -320,14 +334,18 @@ Settings::initializeKnobs()
                               NATRON_ORGANIZATION_DOMAIN_TOPLEVEL "." NATRON_ORGANIZATION_DOMAIN_SUB "." NATRON_APPLICATION_NAME);
     _hostName->setAnimationEnabled(false);
     _generalTab->addKnob(_hostName);
-    
+}
+
+void
+Settings::initializeKnobsAppearance()
+{
     //////////////APPEARANCE TAB/////////////////
     _appearanceTab = Natron::createKnob<KnobPage>(this, "Appearance");
     
     _defaultAppearanceVersion = Natron::createKnob<KnobInt>(this, "Appearance version");
     _defaultAppearanceVersion->setName("appearanceVersion");
     _defaultAppearanceVersion->setAnimationEnabled(false);
-    _defaultAppearanceVersion->setSecret(true);
+    _defaultAppearanceVersion->setSecretByDefault(true);
     _appearanceTab->addKnob(_defaultAppearanceVersion);
     
     _systemFontChoice = Natron::createKnob<KnobChoice>(this, "Font");
@@ -550,7 +568,7 @@ Settings::initializeKnobs()
 
     _customOcioConfigFile = Natron::createKnob<KnobFile>(this, "Custom OpenColorIO config file");
     _customOcioConfigFile->setName("ocioCustomConfigFile");
-    _customOcioConfigFile->setAllDimensionsEnabled(false);
+    _customOcioConfigFile->setDefaultAllDimensionsEnabled(false);
     _customOcioConfigFile->setAnimationEnabled(false);
     _customOcioConfigFile->setHintToolTip("OpenColorIO configuration file (*.ocio) to use when \"" NATRON_CUSTOM_OCIO_CONFIG_NAME "\" "
                                                                                                                                   "is selected as the OpenColorIO config.");
@@ -566,7 +584,11 @@ Settings::initializeKnobs()
     _ocioStartupCheck->setName("startupCheckOCIO");
     _ocioStartupCheck->setAnimationEnabled(false);
     ocioTab->addKnob(_ocioStartupCheck);
+}
 
+void
+Settings::initializeKnobsViewers()
+{
     _viewersTab = Natron::createKnob<KnobPage>(this, "Viewers");
 
     _texturesMode = Natron::createKnob<KnobChoice>(this, "Viewer textures bit depth");
@@ -619,6 +641,12 @@ Settings::initializeKnobs()
     _checkerboardColor2->setHintToolTip("The second color used by the checkerboard.");
     _viewersTab->addKnob(_checkerboardColor2);
     
+    _autoWipe = Natron::createKnob<KnobBool>(this, "Automatically enable wipe");
+    _autoWipe->setName("autoWipeForViewer");
+    _autoWipe->setHintToolTip("When checked, the wipe tool of the viewer will be automatically enabled "
+                              "when the mouse is hovering the viewer and changing an input of a viewer." );
+    _autoWipe->setAnimationEnabled(false);
+    _viewersTab->addKnob(_autoWipe);
 
     
     _autoProxyWhenScrubbingTimeline = Natron::createKnob<KnobBool>(this, "Automatically enable proxy when scrubbing the timeline");
@@ -654,6 +682,11 @@ Settings::initializeKnobs()
                                           "is unchecked.");
     _viewersTab->addKnob(_enableProgressReport);
     
+}
+
+void
+Settings::initializeKnobsNodeGraph()
+{
     /////////// Nodegraph tab
     _nodegraphTab = Natron::createKnob<KnobPage>(this, "Nodegraph");
     
@@ -849,7 +882,11 @@ Settings::initializeKnobs()
     _defaultDeepGroupColor->setSimplified(true);
     _defaultDeepGroupColor->setHintToolTip("The color used for newly created Deep nodes.");
     _nodegraphTab->addKnob(_defaultDeepGroupColor);
+}
 
+void
+Settings::initializeKnobsCaching()
+{
     /////////// Caching tab
     _cachingTab = Natron::createKnob<KnobPage>(this, "Caching");
 
@@ -960,16 +997,33 @@ Settings::initializeKnobs()
     _diskCachePath->setHintToolTip(diskCacheTt + defaultLocation.toStdString());
     _cachingTab->addKnob(_diskCachePath);
     
+    _wipeDiskCache = Natron::createKnob<KnobButton>(this, "Wipe Disk Cache");
+    _wipeDiskCache->setHintToolTip("Cleans-up all caches, deleting all folders that may contain cached data. "
+                                   "This is provided in case " NATRON_APPLICATION_NAME " lost track of cached images "
+                                   "for some reason.");
+    _cachingTab->addKnob(_wipeDiskCache);
+}
+
+void
+Settings::initializeKnobsReaders()
+{
     ///readers & writers settings are created in a postponed manner because we don't know
     ///their dimension yet. See populateReaderPluginsAndFormats & populateWriterPluginsAndFormats
 
     _readersTab = Natron::createKnob<KnobPage>(this, PLUGIN_GROUP_IMAGE_READERS);
     _readersTab->setName("readersTab");
+}
 
+void
+Settings::initializeKnobsWriters()
+{
     _writersTab = Natron::createKnob<KnobPage>(this, PLUGIN_GROUP_IMAGE_WRITERS);
     _writersTab->setName("writersTab");
+}
 
-    
+void
+Settings::initializeKnobsPlugins()
+{
     _pluginsTab = Natron::createKnob<KnobPage>(this, "Plug-ins");
     _pluginsTab->setName("plugins");
     
@@ -1029,8 +1083,11 @@ Settings::initializeKnobs()
                                                                   "if they have the same internal ID.");
     _preferBundledPlugins->setAnimationEnabled(false);
     _pluginsTab->addKnob(_preferBundledPlugins);
-    
-    
+}
+
+void
+Settings::initializeKnobsPython()
+{
     _pythonPage = Natron::createKnob<KnobPage>(this, "Python");
     
     
@@ -1118,7 +1175,7 @@ Settings::setDefaultValues()
     _hostName->setDefaultValue(NATRON_ORGANIZATION_DOMAIN_TOPLEVEL "." NATRON_ORGANIZATION_DOMAIN_SUB "." NATRON_APPLICATION_NAME);
     _natronSettingsExist->setDefaultValue(false);
     _systemFontChoice->setDefaultValue(0);
-    _fontSize->setDefaultValue(NATRON_FONT_SIZE_10);
+    _fontSize->setDefaultValue(NATRON_FONT_SIZE_DEFAULT);
     _checkForUpdates->setDefaultValue(false);
     _notifyOnFileChange->setDefaultValue(true);
     _autoSaveDelay->setDefaultValue(5, 0);
@@ -1155,6 +1212,7 @@ Settings::setDefaultValues()
     _checkerboardColor2->setDefaultValue(0.,1);
     _checkerboardColor2->setDefaultValue(0.,2);
     _checkerboardColor2->setDefaultValue(0.,3);
+    _autoWipe->setDefaultValue(true);
     _autoProxyWhenScrubbingTimeline->setDefaultValue(true);
     _autoProxyLevel->setDefaultValue(1);
     _enableProgressReport->setDefaultValue(false);
@@ -1715,6 +1773,8 @@ Settings::onKnobValueChanged(KnobI* k,
         setCachingLabels();
     } else if ( k == _diskCachePath.get() ) {
         appPTR->setDiskCacheLocation(_diskCachePath->getValue().c_str());
+    } else if ( k == _wipeDiskCache.get() ) {
+        appPTR->wipeAndCreateDiskCacheStructure();
     } else if ( k == _numberOfThreads.get() ) {
         int nbThreads = getNumberOfThreads();
         appPTR->setNThreadsToRender(nbThreads);
@@ -2048,35 +2108,14 @@ static int filterDefaultRenderScaleSupportPlugin(const QString& ofxPluginID)
     return 0;
 }
 
-struct PerPluginKnobs
-{
-    boost::shared_ptr<KnobBool> enabled;
-    boost::shared_ptr<KnobChoice> renderScaleSupport;
-    
-    PerPluginKnobs(const boost::shared_ptr<KnobBool>& enabled,
-                   const boost::shared_ptr<KnobChoice>& renderScaleSupport)
-        : enabled(enabled)
-        , renderScaleSupport(renderScaleSupport)
-    {
-        
-    }
-    
-    PerPluginKnobs()
-        : enabled() , renderScaleSupport()
-    {
-        
-    }
-};
 
 void
-Settings::populatePluginsTab(std::vector<Natron::Plugin*>& pluginsToIgnore)
+Settings::populatePluginsTab()
 {
     
     const PluginsMap& plugins = appPTR->getPluginsList();
     
     std::vector<boost::shared_ptr<KnobI> > knobsToRestore;
-    
-    std::map<Natron::Plugin*,PerPluginKnobs> pluginsMap;
     
     std::map< std::string,std::string > groupNames;
     ///First pass to exctract all groups
@@ -2116,86 +2155,113 @@ Settings::populatePluginsTab(std::vector<Natron::Plugin*>& pluginsToIgnore)
         }
         assert(it->second.size() > 0);
         
-        Natron::Plugin* plugin  = *it->second.rbegin();
-        assert(plugin);
-        
-        if (plugin->getIsForInternalUseOnly()) {
-            continue;
-        }
-        
-        boost::shared_ptr<KnobGroup> group;
-        const QStringList& grouping = plugin->getGrouping();
-        if (grouping.size() > 0) {
+        for (PluginMajorsOrdered::const_iterator it2 = it->second.begin(); it2 != it->second.end(); ++it2) {
+            Natron::Plugin* plugin  = *it2;
+            assert(plugin);
             
-            std::string mainGroup = Natron::makeNameScriptFriendly(grouping[0].toStdString());
+            if (plugin->getIsForInternalUseOnly()) {
+                continue;
+            }
             
-            ///Find the corresponding group
-            for (std::list< boost::shared_ptr<KnobGroup> >::const_iterator it2 = groups.begin(); it2 != groups.end(); ++it2) {
-                if ((*it2)->getName() == mainGroup) {
-                    group  = *it2;
-                    break;
+            boost::shared_ptr<KnobGroup> group;
+            const QStringList& grouping = plugin->getGrouping();
+            if (grouping.size() > 0) {
+                
+                std::string mainGroup = Natron::makeNameScriptFriendly(grouping[0].toStdString());
+                
+                ///Find the corresponding group
+                for (std::list< boost::shared_ptr<KnobGroup> >::const_iterator it3 = groups.begin(); it3 != groups.end(); ++it3) {
+                    if ((*it3)->getName() == mainGroup) {
+                        group  = *it3;
+                        break;
+                    }
                 }
             }
-        }
-        
-        ///Create checkbox to activate/deactivate the plug-in
-        std::string pluginName = plugin->getPluginID().toStdString();
-        
-        boost::shared_ptr<KnobString> pluginLabel = Natron::createKnob<KnobString>(this, pluginName);
-        pluginLabel->setAsLabel();
-        pluginLabel->setName(it->first);
-        pluginLabel->setAnimationEnabled(false);
-        pluginLabel->setDefaultValue(pluginName);
-        pluginLabel->setAddNewLine(false);
-        pluginLabel->hideDescription();
-        pluginLabel->setIsPersistant(false);
-        if (group) {
-            group->addKnob(pluginLabel);
-        }
-        
-        
-        boost::shared_ptr<KnobBool> pluginActivation = Natron::createKnob<KnobBool>(this, "Enabled");
-        pluginActivation->setDefaultValue(filterDefaultActivatedPlugin(plugin->getPluginID()) && plugin->getIsUserCreatable());
-        pluginActivation->setName(it->first + ".enabled");
-        pluginActivation->setAnimationEnabled(false);
-        pluginActivation->setAddNewLine(false);
-        pluginActivation->setHintToolTip("When checked, " + pluginName + " will be activated and you can create a node using this plug-in in " NATRON_APPLICATION_NAME ". When unchecked, you'll be unable to create a node for this plug-in. Changing this parameter requires a restart of the application.");
-        if (group) {
-            group->addKnob(pluginActivation);
-        }
-        
-        knobsToRestore.push_back(pluginActivation);
-        
-        boost::shared_ptr<KnobChoice> zoomSupport = Natron::createKnob<KnobChoice>(this, "Zoom support");
-        zoomSupport->populateChoices(zoomSupportEntries);
-        zoomSupport->setName(it->first + ".zoomSupport");
-        zoomSupport->setDefaultValue(filterDefaultRenderScaleSupportPlugin(plugin->getPluginID()));
-        zoomSupport->setHintToolTip("Controls whether the plug-in should have its default zoom support or it should be activated. "
-                                    "This parameter is useful because some plug-ins flag that they can support different level of zoom "
-                                    "scale for rendering but in reality they don't. This enables you to explicitly turn-off that flag for a particular "
-                                    "plug-in, hence making it work at different zoom levels."
-                                    "Changes to this parameter will not be applied to existing instances of the plug-in (nodes) unless you "
-                                    "restart the application.");
-        zoomSupport->setAnimationEnabled(false);
-        if (group) {
-            group->addKnob(zoomSupport);
-        }
-        
-        knobsToRestore.push_back(zoomSupport);
+            
+            ///Create checkbox to activate/deactivate the plug-in
+            std::string pluginName = plugin->getPluginID().toStdString();
+            
+            boost::shared_ptr<KnobString> pluginLabel = Natron::createKnob<KnobString>(this, pluginName);
+            pluginLabel->setAsLabel();
+            pluginLabel->setName(it->first);
+            pluginLabel->setAnimationEnabled(false);
+            pluginLabel->setDefaultValue(pluginName);
+            pluginLabel->setAddNewLine(false);
+            pluginLabel->hideDescription();
+            pluginLabel->setIsPersistant(false);
+            if (group) {
+                group->addKnob(pluginLabel);
+            }
+            
+            
+            boost::shared_ptr<KnobBool> pluginActivation = Natron::createKnob<KnobBool>(this, "Enabled");
+            pluginActivation->setDefaultValue(filterDefaultActivatedPlugin(plugin->getPluginID()) && !plugin->getIsDeprecated());
+            pluginActivation->setName(it->first + ".enabled");
+            pluginActivation->setAnimationEnabled(false);
+            pluginActivation->setAddNewLine(false);
+            pluginActivation->setHintToolTip("When checked, " + pluginName + " will be activated and you can create a node using this plug-in in " NATRON_APPLICATION_NAME ". When unchecked, you'll be unable to create a node for this plug-in. Changing this parameter requires a restart of the application.");
+            if (group) {
+                group->addKnob(pluginActivation);
+            }
+            
+            knobsToRestore.push_back(pluginActivation);
+            
+            boost::shared_ptr<KnobChoice> zoomSupport = Natron::createKnob<KnobChoice>(this, "Zoom support");
+            zoomSupport->populateChoices(zoomSupportEntries);
+            zoomSupport->setName(it->first + ".zoomSupport");
+            zoomSupport->setDefaultValue(filterDefaultRenderScaleSupportPlugin(plugin->getPluginID()));
+            zoomSupport->setHintToolTip("Controls whether the plug-in should have its default zoom support or it should be deactivated. "
+                                        "This parameter is useful because some plug-ins flag that they can support different level of zoom "
+                                        "scale for rendering but in reality they don't. This enables you to explicitly turn-off that flag for a particular "
+                                        "plug-in, hence making it work at different zoom levels."
+                                        "Changes to this parameter will not be applied to existing instances of the plug-in (nodes) unless you "
+                                        "restart the application.");
+            zoomSupport->setAnimationEnabled(false);
+            if (group) {
+                group->addKnob(zoomSupport);
+            }
+            
+            knobsToRestore.push_back(zoomSupport);
+            
+            
+            _pluginsMap.insert(std::make_pair(plugin, PerPluginKnobs(pluginActivation,zoomSupport)));
 
+        }
         
-        pluginsMap.insert(std::make_pair(plugin, PerPluginKnobs(pluginActivation,zoomSupport)));
-
     }
     
-    for (std::map<Natron::Plugin*,PerPluginKnobs>::iterator it = pluginsMap.begin(); it != pluginsMap.end(); ++it) {
-        if (!it->second.enabled->getValue()) {
-            pluginsToIgnore.push_back(it->first);
-        } else {
-            _perPluginRenderScaleSupport.insert(std::make_pair(it->first->getPluginID().toStdString(), it->second.renderScaleSupport));
-        }
-    }
+    restoreKnobsFromSettings(knobsToRestore);
+    
 }
+
+bool
+Settings::isPluginDeactivated(const Natron::Plugin* p) const
+{
+    if (p->getIsForInternalUseOnly()) {
+        return false;
+    }
+    std::map<const Natron::Plugin*,PerPluginKnobs>::const_iterator found = _pluginsMap.find(p);
+    if (found == _pluginsMap.end()) {
+        qDebug() << "Settings::isPluginDeactivated: Plugin not found";
+        return false;
+    }
+    return !found->second.enabled->getValue();
+}
+
+int
+Settings::getRenderScaleSupportPreference(const Natron::Plugin* p) const
+{
+    if (p->getIsForInternalUseOnly()) {
+        return 0;
+    }
+    std::map<const Natron::Plugin*,PerPluginKnobs>::const_iterator found = _pluginsMap.find(p);
+    if (found == _pluginsMap.end()) {
+        qDebug() << "Settings::getRenderScaleSupportPreference: Plugin not found";
+        return -1;
+    }
+    return found->second.renderScaleSupport->getValue();
+}
+
 
 void
 Settings::populateSystemFonts(const QSettings& settings,const std::vector<std::string>& fonts)
@@ -2693,15 +2759,6 @@ Settings::didSettingsExistOnStartup() const
 }
 
 
-int
-Settings::getRenderScaleSupportPreference(const std::string& pluginID) const
-{
-    std::map<std::string,boost::shared_ptr<KnobChoice> >::const_iterator found = _perPluginRenderScaleSupport.find(pluginID);
-    if (found != _perPluginRenderScaleSupport.end()) {
-        return found->second->getValue();
-    }
-    return -1;
-}
 
 bool
 Settings::notifyOnFileChange() const
@@ -3059,4 +3116,10 @@ std::string
 Settings::getUserStyleSheetFilePath() const
 {
     return _qssFile->getValue();
+}
+
+bool
+Settings::isAutoWipeEnabled() const
+{
+    return _autoWipe->getValue();
 }

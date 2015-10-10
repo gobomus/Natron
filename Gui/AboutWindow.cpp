@@ -26,12 +26,16 @@
 
 #include "Global/Macros.h"
 CLANG_DIAG_OFF(deprecated)
+#include <QSplitter>
 #include <QTextBrowser>
 #include <QHBoxLayout>
 #include <QVBoxLayout>
 #include <QTabWidget>
 #include <QFile>
 #include <QTextCodec>
+#include <QItemSelectionModel>
+#include <QHeaderView>
+#include <QDir>
 CLANG_DIAG_ON(deprecated)
 
 #include "Global/GlobalDefines.h"
@@ -40,6 +44,9 @@ CLANG_DIAG_ON(deprecated)
 #include "Gui/Gui.h"
 #include "Gui/Label.h"
 #include "Gui/Utils.h"
+#include "Gui/TableModelView.h"
+
+#define THIRD_PARTY_LICENSE_DIR_PATH ":"
 
 AboutWindow::AboutWindow(Gui* gui,
                          QWidget* parent)
@@ -116,7 +123,7 @@ AboutWindow::AboutWindow(Gui* gui,
     QString endAbout = (QString("<p>See <a href=\"%2\"><font color=\"orange\">%1 's website </font></a>"
                                 "for more information on this software.</p>")
                         .arg(NATRON_APPLICATION_NAME) // %1
-                        .arg("https://natron.fr")); // %2
+                        .arg(NATRON_WEBSITE_URL)); // %2
     aboutText.append(endAbout);
     QString gitStr = (QString("<p>This version was generated from the source "
                               "code branch %1 at commit %2.</p>")
@@ -130,25 +137,25 @@ AboutWindow::AboutWindow(Gui* gui,
         QString toAppend = QString("<p>Note: This is a development version, which probably contains bugs. "
                                    "If you feel like reporting a bug, please do so "
                                    "on the <a href=\"%1\"><font color=\"orange\"> issue tracker.</font></a></p>")
-        .arg("https://github.com/MrKepzie/Natron/issues"); // %1
+        .arg(NATRON_ISSUE_TRACKER_URL); // %1
         ;
     } else if (status == NATRON_DEVELOPMENT_SNAPSHOT) {
         QString toAppend = QString("<p>Note: This is an official snapshot version, compiled on the Natron build "
                                    "farm, and it may still contain bugs. If you feel like reporting a bug, please do so "
                                    "on the <a href=\"%1\"><font color=\"orange\"> issue tracker.</font></a></p>")
-        .arg("https://github.com/MrKepzie/Natron/issues"); // %1
+        .arg(NATRON_ISSUE_TRACKER_URL); // %1
         ;
     } else if (status == NATRON_DEVELOPMENT_ALPHA) {
         QString toAppend = QString("<p>Note: This software is currently in alpha version, meaning there are missing features,"
                                    " bugs and untested stuffs. If you feel like reporting a bug, please do so "
                                    "on the <a href=\"%1\"><font color=\"orange\"> issue tracker.</font></a></p>")
-        .arg("https://github.com/MrKepzie/Natron/issues"); // %1
+        .arg(NATRON_ISSUE_TRACKER_URL); // %1
         ;
     } else if (status == NATRON_DEVELOPMENT_BETA) {
         QString toAppend = QString("<p>Note: This software is currently under beta testing, meaning there are "
                                    " bugs and untested stuffs. If you feel like reporting a bug, please do so "
                                    "on the <a href=\"%1\"><font color=\"orange\"> issue tracker.</font></a></p>")
-                           .arg("https://github.com/MrKepzie/Natron/issues"); // %1
+                           .arg(NATRON_ISSUE_TRACKER_URL); // %1
         ;
 
     } else if (status == NATRON_DEVELOPMENT_RELEASE_CANDIDATE) {
@@ -192,7 +199,105 @@ AboutWindow::AboutWindow(Gui* gui,
         _licenseText->setText( QTextCodec::codecForName("UTF-8")->toUnicode( license.readAll() ) );
     }
     _tabWidget->addTab( _licenseText, QObject::tr("License") );
+    
+    QWidget* thirdPartyContainer = new QWidget(_tabWidget);
+    QVBoxLayout* thidPartyLayout = new QVBoxLayout(thirdPartyContainer);
+    thidPartyLayout->setContentsMargins(0,0,0,0);
+    QSplitter *splitter = new QSplitter();
 
+    _view = new TableView(thirdPartyContainer);
+    _model = new TableModel(0,0,_view);
+    _view->setTableModel(_model);
+    
+    QItemSelectionModel *selectionModel = _view->selectionModel();
+    _view->setColumnCount(1);
+    
+    _view->setAttribute(Qt::WA_MacShowFocusRect,0);
+    _view->setUniformRowHeights(true);
+    _view->setSelectionMode(QAbstractItemView::SingleSelection);
+    _view->header()->close();
+#if QT_VERSION < 0x050000
+    _view->header()->setResizeMode(QHeaderView::ResizeToContents);
+#else
+    _view->header()->setSectionResizeMode(QHeaderView::ResizeToContents);
+#endif
+    _view->header()->setStretchLastSection(true);
+    splitter->addWidget(_view);
+    
+    _thirdPartyBrowser = new QTextBrowser(thirdPartyContainer);
+    _thirdPartyBrowser->setOpenExternalLinks(false);
+    splitter->addWidget(_thirdPartyBrowser);
+    splitter->setStretchFactor(0, 1);
+    splitter->setStretchFactor(1, 4);
+    thidPartyLayout->addWidget(splitter);
+
+    QString thirdPartyLicenseDir(THIRD_PARTY_LICENSE_DIR_PATH);
+    QDir thirdPartyDir(thirdPartyLicenseDir);
+
+    QStringList rowsTmp;
+    {
+        QStringList rows = thirdPartyDir.entryList(QDir::NoDotAndDotDot | QDir::Files);
+        for (int i = 0; i < rows.size(); ++i) {
+            if (!rows[i].startsWith("LICENSE-")) {
+                continue;
+            }
+            if (rows[i] == "LICENSE-README.md") {
+                rowsTmp.prepend(rows[i]);
+            } else {
+                rowsTmp.push_back(rows[i]);
+            }
+            
+        }
+    }
+    _view->setRowCount(rowsTmp.size());
+    
+    TableItem* readmeIndex = 0;
+    for (int i = 0; i < rowsTmp.size(); ++i) {
+        if (!rowsTmp[i].startsWith("LICENSE-")) {
+            continue;
+        }
+        TableItem* item = new TableItem;
+        item->setText(rowsTmp[i].remove("LICENSE-").remove(".txt").remove(".md"));
+        item->setFlags(Qt::ItemIsSelectable | Qt::ItemIsEnabled);
+        _view->setItem(i, 0, item);
+        if (rowsTmp[i] == "README") {
+            readmeIndex = item;
+        }
+    }
+
+    QObject::connect( selectionModel, SIGNAL( selectionChanged(QItemSelection,QItemSelection) ),this,
+                     SLOT( onSelectionChanged(QItemSelection,QItemSelection) ) );
+    if (readmeIndex) {
+        readmeIndex->setSelected(true);
+    }
+    _tabWidget->addTab(thirdPartyContainer, "Third-Party components");
+}
+
+void
+AboutWindow::onSelectionChanged(const QItemSelection & newSelection,
+                        const QItemSelection & /*oldSelection*/)
+{
+    QModelIndexList indexes = newSelection.indexes();
+    assert(indexes.size() <= 1);
+    if (indexes.empty()) {
+        _thirdPartyBrowser->clear();
+    } else {
+        TableItem* item = _view->item(indexes.front().row(), 0);
+        assert(item);
+        if (!item) {
+            return;
+        }
+        QString fileName(THIRD_PARTY_LICENSE_DIR_PATH);
+        fileName += '/';
+        fileName += "LICENSE-";
+        fileName += item->text();
+        fileName += (item->text() == "README") ? ".md" : ".txt";
+        QFile file(fileName);
+        if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            QString content = QTextCodec::codecForName("UTF-8")->toUnicode(file.readAll());
+            _thirdPartyBrowser->setText(content);
+        }
+    }
 }
 
 void

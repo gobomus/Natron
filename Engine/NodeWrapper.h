@@ -69,25 +69,13 @@ class UserParamHolder
     KnobHolder* _holder;
 public:
     
-    UserParamHolder()
-    : _holder(0)
-    {
-        
-    }
+    UserParamHolder();
     
-    UserParamHolder(KnobHolder* holder)
-    : _holder(holder)
-    {
-        
-    }
+    UserParamHolder(KnobHolder* holder);
     
     virtual ~UserParamHolder() {}
     
-    void setHolder(KnobHolder* holder)
-    {
-        assert(!_holder);
-        _holder = holder;
-    }
+    void setHolder(KnobHolder* holder);
     
     /////////////Functions to create custom parameters//////////////////////////
     ///////////////////////////////////////////////////////////////////////////
@@ -333,7 +321,7 @@ public:
      **/
     Roto* getRotoContext() const;
     
-    RectD getRegionOfDefinition(int time,int view) const;
+    RectD getRegionOfDefinition(double time,int view) const;
     
     static Param* createParamWrapperForKnob(const boost::shared_ptr<KnobI>& knob);
     

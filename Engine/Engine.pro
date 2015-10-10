@@ -20,24 +20,29 @@ TARGET = Engine
 TEMPLATE = lib
 CONFIG += staticlib
 CONFIG += moc
-CONFIG += boost qt expat cairo python shiboken pyside
+CONFIG += boost qt cairo python shiboken pyside
 QT += core network
 greaterThan(QT_MAJOR_VERSION, 4): QT += concurrent
+
+!noexpat: CONFIG += expat
 
 # Don't uncomment the following: pyside requires QtGui, because PySide/QtCore/pyside_qtcore_python.h includes qtextdocument.h
 #QT -= gui
 
+include(../global.pri)
+include(../config.pri)
+
+log {
+    DEFINES += NATRON_LOG
+}
 
 precompile_header {
+  #message("Using precompiled header")
   # Use Precompiled headers (PCH)
   # we specify PRECOMPILED_DIR, or qmake places precompiled headers in Natron/c++.pch, thus blocking the creation of the Unix executable
   PRECOMPILED_DIR = pch
   PRECOMPILED_HEADER = pch.h
 }
-
-include(../global.pri)
-include(../config.pri)
-
 
 #OpenFX C api includes and OpenFX c++ layer includes that are located in the submodule under /libs/OpenFX
 INCLUDEPATH += $$PWD/../libs/OpenFX/include
@@ -100,6 +105,8 @@ SOURCES += \
     DiskCacheNode.cpp \
     Dot.cpp \
     EffectInstance.cpp \
+    EffectInstancePrivate.cpp \
+    EffectInstanceRenderRoI.cpp \
     FileDownloader.cpp \
     FileSystemModel.cpp \
     FitCurve.cpp \
@@ -143,6 +150,7 @@ SOURCES += \
     OfxMemory.cpp \
     OfxOverlayInteract.cpp \
     OfxParamInstance.cpp \
+    OutputEffectInstance.cpp \
     OutputSchedulerThread.cpp \
     ParameterWrapper.cpp \
     ParallelRenderArgs.cpp \
@@ -231,6 +239,7 @@ HEADERS += \
     CLArgs.h \
     Cache.h \
     CacheEntry.h \
+    CacheEntryHolder.h \
     CacheSerialization.h \
     CoonsRegularization.h \
     Curve.h \
@@ -240,6 +249,7 @@ HEADERS += \
     Dot.h \
     DiskCacheNode.h \
     EffectInstance.h \
+    EffectInstancePrivate.h \
     FeatherPoint.h \
     FileDownloader.h \
     FileSystemModel.h \
@@ -297,6 +307,7 @@ HEADERS += \
     OfxMemory.h \
     OfxParamInstance.h \
     OpenGLViewerI.h \
+    OutputEffectInstance.h \
     OutputSchedulerThread.h \
     OverlaySupport.h \
     ParameterWrapper.h \

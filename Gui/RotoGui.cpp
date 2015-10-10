@@ -61,6 +61,7 @@ CLANG_DIAG_ON(uninitialized)
 #include "Engine/RotoStrokeItem.h"
 #include "Engine/TimeLine.h"
 #include "Engine/Transform.h"
+#include "Engine/ViewerInstance.h"
 
 #include "Gui/ActionShortcuts.h"
 #include "Gui/Button.h"
@@ -407,6 +408,8 @@ struct RotoGui::RotoGuiPrivate
     void toggleToolsSelection(QToolButton* selected);
     
     void makeStroke(bool prepareForLater,const RotoPoint& p);
+    
+    void checkViewersAreDirectlyConnected();
 };
 
 
@@ -746,7 +749,9 @@ RotoGui::RotoGui(NodeGui* node,
     }
     _imp->compositingOperatorButton->setCurrentIndex_no_emit((int)Natron::eMergeCopy);
     _imp->compositingOperatorButton->setToolTip(Natron::convertFromPlainText(tr("The blending mode of the next brush stroke."), Qt::WhiteSpaceNormal));
+    QObject::connect(_imp->compositingOperatorButton, SIGNAL(currentIndexChanged(int)), this, SLOT(onBreakMultiStrokeTriggered()));
     _imp->brushButtonsBarLayout->addWidget(_imp->compositingOperatorButton);
+    
     
     _imp->brushButtonsBarLayout->addSpacing(5);
     
@@ -757,6 +762,7 @@ RotoGui::RotoGui(NodeGui* node,
     _imp->brushButtonsBarLayout->addWidget(_imp->opacityLabel);
     
     _imp->opacitySpinbox = new SpinBox(_imp->brushButtonsBar,SpinBox::eSpinBoxTypeDouble);
+    QObject::connect(_imp->opacitySpinbox, SIGNAL(valueChanged(double)), this, SLOT(onBreakMultiStrokeTriggered()));
     _imp->opacitySpinbox->setToolTip(opacitytt);
     _imp->opacitySpinbox->setMinimum(0);
     _imp->opacitySpinbox->setMaximum(1);
@@ -794,6 +800,7 @@ RotoGui::RotoGui(NodeGui* node,
     _imp->brushButtonsBarLayout->addWidget(_imp->sizeLabel);
     
     _imp->sizeSpinbox = new SpinBox(_imp->brushButtonsBar, SpinBox::eSpinBoxTypeDouble);
+    QObject::connect(_imp->sizeSpinbox, SIGNAL(valueChanged(double)), this, SLOT(onBreakMultiStrokeTriggered()));
     _imp->sizeSpinbox->setMinimum(0);
     _imp->sizeSpinbox->setMaximum(1000);
     _imp->sizeSpinbox->setValue(25.);
@@ -820,6 +827,7 @@ RotoGui::RotoGui(NodeGui* node,
     _imp->brushButtonsBarLayout->addWidget(_imp->hardnessLabel);
     
     _imp->hardnessSpinBox = new SpinBox(_imp->brushButtonsBar,SpinBox::eSpinBoxTypeDouble);
+    QObject::connect(_imp->hardnessSpinBox, SIGNAL(valueChanged(double)), this, SLOT(onBreakMultiStrokeTriggered()));
     _imp->hardnessSpinBox->setMinimum(0);
     _imp->hardnessSpinBox->setMaximum(1);
     _imp->hardnessSpinBox->setValue(0.2);
@@ -873,6 +881,7 @@ RotoGui::RotoGui(NodeGui* node,
     _imp->brushButtonsBarLayout->addWidget(_imp->timeOffsetLabel);
     
     _imp->timeOffsetSpinbox = new SpinBox(_imp->brushButtonsBar, SpinBox::eSpinBoxTypeInt);
+    QObject::connect(_imp->timeOffsetSpinbox, SIGNAL(valueChanged(double)), this, SLOT(onBreakMultiStrokeTriggered()));
     _imp->timeOffsetSpinbox->setValue(0);
     _imp->timeOffsetSpinbox->setVisible(false);
     _imp->timeOffsetSpinbox->setToolTip(timeOfftt);
@@ -1064,6 +1073,8 @@ RotoGui::RotoGui(NodeGui* node,
     QObject::connect( _imp->context.get(), SIGNAL( selectionChanged(int) ), this, SLOT( onSelectionChanged(int) ) );
     QObject::connect( _imp->context.get(), SIGNAL( itemLockedChanged(int) ), this, SLOT( onCurveLockedChanged(int) ) );
     QObject::connect( _imp->context.get(), SIGNAL( breakMultiStroke() ), this, SLOT( onBreakMultiStrokeTriggered() ) );
+    QObject::connect (_imp->viewerTab->getGui()->getApp()->getTimeLine().get(), SIGNAL(frameChanged(SequenceTime,int)), this,
+                      SLOT(onTimelineTimeChanged()));;
     restoreSelectionFromContext();
 }
 
@@ -1649,7 +1660,9 @@ RotoGui::drawOverlays(double time,
                             prevCp = cps.begin();
                         }
                         assert(itF != featherPts.end()); // because cps.size() == featherPts.size()
-
+                        if (itF == featherPts.end()) {
+                            break;
+                        }
                         double x,y;
                         Transform::Point3D p,pF;
                         (*it2)->getPositionAtTime(true, time, &p.x, &p.y);
@@ -2731,6 +2744,12 @@ RotoGui::penDown(double time,
                 _imp->state = eEventStateDraggingBrushOpacity;
                 _imp->mouseCenterOnSizeChange = pos;
             } else {
+                
+                /*
+                 Check that all viewers downstream are connected directly to the RotoPaint to avoid glitches and bugs
+                 */
+                _imp->checkViewersAreDirectlyConnected();
+                
                 _imp->context->getNode()->getApp()->setUserIsPainting(_imp->context->getNode());
                 if (_imp->rotoData->strokeBeingPaint &&
                     _imp->rotoData->strokeBeingPaint->getParentLayer() && 
@@ -3172,11 +3191,13 @@ RotoGui::penMotion(double time,
     case eEventStateDraggingCloneOffset: {
         _imp->rotoData->cloneOffset.first -= dx;
         _imp->rotoData->cloneOffset.second -= dy;
+        onBreakMultiStrokeTriggered();
     }   break;
     case eEventStateDraggingBrushSize: {
         double size = _imp->sizeSpinbox->value();
         size += ((dx + dy) / 2.);
         _imp->sizeSpinbox->setValue(std::max(1.,size));
+        onBreakMultiStrokeTriggered();
         didSomething = true;
     }   break;
     case eEventStateDraggingBrushOpacity: {
@@ -3189,6 +3210,7 @@ RotoGui::penMotion(double time,
             newOpa = newOpa < 0 ? .0 : 0.05;
         }
         _imp->opacitySpinbox->setValue(newOpa);
+        onBreakMultiStrokeTriggered();
         didSomething = true;
     }   break;
     case eEventStateNone:
@@ -3306,9 +3328,82 @@ RotoGui::penUp(double /*time*/,
 }
 
 void
+RotoGui::onTimelineTimeChanged()
+{
+    if (_imp->selectedTool == eRotoToolBlur ||
+        _imp->selectedTool == eRotoToolBurn ||
+        _imp->selectedTool == eRotoToolDodge ||
+        _imp->selectedTool == eRotoToolClone ||
+        _imp->selectedTool == eRotoToolEraserBrush ||
+        _imp->selectedTool == eRotoToolSolidBrush ||
+        _imp->selectedTool == eRotoToolReveal ||
+        _imp->selectedTool == eRotoToolSmear ||
+        _imp->selectedTool == eRotoToolSharpen) {
+        _imp->makeStroke(true, RotoPoint());
+    }
+}
+
+void
 RotoGui::onBreakMultiStrokeTriggered()
 {
     _imp->makeStroke(true, RotoPoint());
+}
+
+static bool isBranchConnectedToRotoNodeRecursive(Node* node,
+                                                 const Node* rotoNode,
+                                                 int* recursion,
+                                                 std::list<Node*>& markedNodes)
+{
+    assert(recursion);
+    if (!node) {
+        return false;
+    }
+    if (rotoNode == node) {
+        return true;
+    }
+    markedNodes.push_back(node);
+    int maxInputs = node->getMaxInputCount();
+    *recursion = *recursion + 1;
+    for (int i = 0; i < maxInputs; ++i) {
+        NodePtr inp = node->getInput(i);
+        if (inp) {
+            if (isBranchConnectedToRotoNodeRecursive(inp.get(),rotoNode,recursion,markedNodes)) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+void
+RotoGui::RotoGuiPrivate::checkViewersAreDirectlyConnected()
+{
+    boost::shared_ptr<Node> rotoNode = context->getNode();
+    std::list<ViewerInstance*> viewers;
+    rotoNode->hasViewersConnected(&viewers);
+    for (std::list<ViewerInstance*>::iterator it = viewers.begin(); it!=viewers.end(); ++it) {
+        NodePtr viewerNode = (*it)->getNode();
+        int maxInputs = viewerNode->getMaxInputCount();
+        int hasBranchConnectedToRoto = -1;
+        for (int i = 0; i < maxInputs; ++i) {
+            NodePtr input = viewerNode->getInput(i);
+            if (input) {
+                std::list<Node*> markedNodes;
+                int recursion = 0;
+                if (isBranchConnectedToRotoNodeRecursive(input.get(), rotoNode.get(), &recursion, markedNodes)) {
+                    if (recursion == 0) {
+                        //This viewer is already connected to the Roto node directly.
+                        break;
+                    }
+                    viewerNode->disconnectInput(i);
+                    if (hasBranchConnectedToRoto == -1) {
+                        viewerNode->connectInput(rotoNode, i);
+                        hasBranchConnectedToRoto = i;
+                    }
+                }
+            }
+        }
+    }
 }
 
 void
@@ -3354,11 +3449,18 @@ RotoGui::RotoGuiPrivate::makeStroke(bool prepareForLater, const RotoPoint& p)
             itemName = kRotoPaintBurnBaseName;
             break;
         default:
-            assert(false);
             return;
     }
     
     if (prepareForLater || !rotoData->strokeBeingPaint) {
+        
+        if (rotoData->strokeBeingPaint &&
+            rotoData->strokeBeingPaint->getBrushType() == strokeType &&
+            rotoData->strokeBeingPaint->isEmpty()) {
+            ///We already have a fresh stroke prepared for that type
+            return;
+        }
+            
         std::string name = context->generateUniqueName(itemName);
         rotoData->strokeBeingPaint.reset(new RotoStrokeItem(strokeType, context, name, boost::shared_ptr<RotoLayer>()));
         rotoData->strokeBeingPaint->createNodes(false);
@@ -3372,11 +3474,8 @@ RotoGui::RotoGuiPrivate::makeStroke(bool prepareForLater, const RotoPoint& p)
         assert(layer);
         context->addItem(layer, 0, rotoData->strokeBeingPaint, RotoItem::eSelectionReasonOther);
         context->setStrokeBeingPainted(rotoData->strokeBeingPaint);
-    } else {
-        std::string name = context->generateUniqueName(itemName);
-        rotoData->strokeBeingPaint.reset(new RotoStrokeItem(strokeType, context, name, boost::shared_ptr<RotoLayer>()));
-        rotoData->strokeBeingPaint->createNodes(false);
     }
+    
     assert(rotoData->strokeBeingPaint);
     boost::shared_ptr<KnobColor> colorKnob = rotoData->strokeBeingPaint->getColorKnob();
     boost::shared_ptr<KnobChoice> operatorKnob = rotoData->strokeBeingPaint->getOperatorKnob();
@@ -3523,29 +3622,36 @@ RotoGui::keyDown(double /*time*/,
         didSomething = true;
     } else if ( _imp->state != eEventStateBuildingStroke && isKeybind(kShortcutGroupRoto, kShortcutIDActionRotoSelectionTool, modifiers, key) ) {
         _imp->selectTool->handleSelection();
+        didSomething = true;
     } else if ( _imp->state != eEventStateBuildingStroke && isKeybind(kShortcutGroupRoto, kShortcutIDActionRotoEditTool, modifiers, key) ) {
         if (_imp->bezierEditionTool) {
             _imp->bezierEditionTool->handleSelection();
+            didSomething = true;
         }
     } else if ( _imp->state != eEventStateBuildingStroke && isKeybind(kShortcutGroupRoto, kShortcutIDActionRotoAddTool, modifiers, key) ) {
         if (_imp->pointsEditionTool) {
             _imp->pointsEditionTool->handleSelection();
+            didSomething = true;
         }
     } else if ( _imp->state != eEventStateBuildingStroke && isKeybind(kShortcutGroupRoto, kShortcutIDActionRotoBrushTool, modifiers, key) ) {
         if (_imp->paintBrushTool) {
             _imp->paintBrushTool->handleSelection();
+            didSomething = true;
         }
     } else if ( _imp->state != eEventStateBuildingStroke && isKeybind(kShortcutGroupRoto, kShortcutIDActionRotoCloneTool, modifiers, key) ) {
         if (_imp->cloneBrushTool) {
             _imp->cloneBrushTool->handleSelection();
+            didSomething = true;
         }
     } else if ( _imp->state != eEventStateBuildingStroke && isKeybind(kShortcutGroupRoto, kShortcutIDActionRotoEffectTool, modifiers, key) ) {
         if (_imp->effectBrushTool) {
             _imp->effectBrushTool->handleSelection();
+            didSomething = true;
         }
     } else if ( _imp->state != eEventStateBuildingStroke && isKeybind(kShortcutGroupRoto, kShortcutIDActionRotoColorTool, modifiers, key) ) {
         if (_imp->mergeBrushTool) {
             _imp->mergeBrushTool->handleSelection();
+            didSomething = true;
         }
     } else if ( isKeybind(kShortcutGroupRoto, kShortcutIDActionRotoNudgeRight, modifiers, key) ) {
         moveSelectedCpsWithKeyArrows(1,0);
@@ -3573,6 +3679,7 @@ RotoGui::keyDown(double /*time*/,
         didSomething = true;
     } else if ( isKeybind(kShortcutGroupRoto, kShortcutIDActionRotoLockCurve, modifiers, key) ) {
         lockSelectedCurves();
+        didSomething = true;
     }
 
     return didSomething;
@@ -4020,6 +4127,9 @@ RotoGui::RotoGuiPrivate::isNearbyFeatherBar(double time,
                 nextF = fps.begin();
             }
             assert(itF != fps.end()); // because cps.size() == fps.size()
+            if (itF == fps.end()) {
+                itF = fps.begin();
+            }
 
             Transform::Point3D controlPoint,featherPoint;
             controlPoint.z = featherPoint.z = 1;
@@ -4747,6 +4857,7 @@ RotoGui::onColorWheelButtonClicked()
         _imp->colorPickerLabel->setColor(previousColor);
     } else {
         _imp->colorPickerLabel->setColor(dialog.currentColor());
+        onBreakMultiStrokeTriggered();
     }
 }
 
@@ -4761,25 +4872,33 @@ void
 RotoGui::onPressureOpacityClicked(bool isDown)
 {
     _imp->pressureOpacityButton->setDown(isDown);
+    _imp->pressureOpacityButton->setChecked(isDown);
+    onBreakMultiStrokeTriggered();
 }
 
 void
 RotoGui::onPressureSizeClicked(bool isDown)
 {
     _imp->pressureSizeButton->setDown(isDown);
+    _imp->pressureSizeButton->setChecked(isDown);
+    onBreakMultiStrokeTriggered();
 }
 
 void
 RotoGui::onPressureHardnessClicked(bool isDown)
 {
     _imp->pressureHardnessButton->setDown(isDown);
+    _imp->pressureHardnessButton->setChecked(isDown);
+    onBreakMultiStrokeTriggered();
 }
 
 void
 RotoGui::onBuildupClicked(bool isDown)
 {
     _imp->buildUpButton->setDown(isDown);
+    onBreakMultiStrokeTriggered();
 }
+
 
 void
 RotoGui::notifyGuiClosing()
@@ -4793,4 +4912,5 @@ void
 RotoGui::onResetCloneTransformClicked()
 {
     _imp->rotoData->cloneOffset.first = _imp->rotoData->cloneOffset.second = 0;
+    onBreakMultiStrokeTriggered();
 }

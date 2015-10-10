@@ -124,14 +124,14 @@ KnobGuiChoice::createWidget(QHBoxLayout* layout)
 void
 KnobGuiChoice::onCurrentIndexChanged(int i)
 {
-    pushUndoCommand( new KnobUndoCommand<int>(this,_knob.lock()->getGuiValue(0),i, 0, false, 0) );
+    pushUndoCommand( new KnobUndoCommand<int>(this,_knob.lock()->getValue(0),i, 0, false, 0) );
 }
 
 void
 KnobGuiChoice::onEntriesPopulated()
 {
     boost::shared_ptr<KnobChoice> knob = _knob.lock();
-    int activeIndex = knob->getGuiValue();
+    int activeIndex = knob->getValue();
 
     _comboBox->clear();
     _entries = knob->getEntries_mt_safe();
@@ -181,8 +181,8 @@ KnobGuiChoice::reflectExpressionState(int /*dimension*/,
                                        bool hasExpr)
 {
     _comboBox->setAnimation(3);
-    bool isSlaved = _knob.lock()->isSlave(0);
-    _comboBox->setReadOnly(hasExpr || isSlaved);
+    bool isEnabled = _knob.lock()->isEnabled(0);
+    _comboBox->setEnabled_natron(!hasExpr && isEnabled);
 }
 
 void
@@ -200,7 +200,7 @@ KnobGuiChoice::updateGUI(int /*dimension*/)
     ///change the internal value of the knob again...
     ///The slot connected to onCurrentIndexChanged is reserved to catch user interaction with the combobox.
     ///This function is called in response to an internal change.
-    _comboBox->setCurrentIndex_no_emit( _knob.lock()->getGuiValue(0) );
+    _comboBox->setCurrentIndex_no_emit( _knob.lock()->getValue(0) );
 }
 
 void
@@ -243,7 +243,7 @@ void
 KnobGuiChoice::setEnabled()
 {
     boost::shared_ptr<KnobChoice> knob = _knob.lock();
-    bool b = knob->isEnabled(0)  && !knob->isSlave(0) && knob->getExpression(0).empty();
+    bool b = knob->isEnabled(0) && knob->getExpression(0).empty();
 
     _comboBox->setEnabled_natron(b);
 }
@@ -252,7 +252,7 @@ void
 KnobGuiChoice::setReadOnly(bool readOnly,
                             int /*dimension*/)
 {
-    _comboBox->setReadOnly(readOnly);
+    _comboBox->setEnabled_natron(!readOnly);
 }
 
 void

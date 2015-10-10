@@ -25,6 +25,7 @@
 #include "RotoPaint.h"
 
 #include <sstream>
+#include <stdexcept>
 
 #include "Engine/AppInstance.h"
 #include "Engine/Image.h"
@@ -221,16 +222,6 @@ RotoPaint::getRegionOfDefinition(U64 hash,double time, const RenderScale & scale
 FramesNeededMap
 RotoPaint::getFramesNeeded(double time, int view)
 {
-    boost::shared_ptr<RotoContext> roto = getNode()->getRotoContext();
-    std::list<boost::shared_ptr<RotoDrawableItem> > items = roto->getCurvesByRenderOrder();
-    if (items.empty()) {
-        return FramesNeededMap();
-    }
-    
-    const boost::shared_ptr<RotoDrawableItem>& firstStrokeItem = items.back();
-    assert(firstStrokeItem);
-    boost::shared_ptr<Node> bottomMerge = firstStrokeItem->getMergeNode();
-    assert(bottomMerge);
 
     FramesNeededMap ret;
     std::map<int, std::vector<OfxRangeD> > views;
@@ -250,17 +241,10 @@ RotoPaint::getRegionsOfInterest(double /*time*/,
                           RoIMap* ret)
 {
     boost::shared_ptr<RotoContext> roto = getNode()->getRotoContext();
-    std::list<boost::shared_ptr<RotoDrawableItem> > items = roto->getCurvesByRenderOrder();
-    if (items.empty()) {
-        return;
+    boost::shared_ptr<Node> bottomMerge = roto->getRotoPaintBottomMergeNode();
+    if (bottomMerge) {
+        ret->insert(std::make_pair(bottomMerge->getLiveInstance(), renderWindow));
     }
-    
-    const boost::shared_ptr<RotoDrawableItem>& firstStrokeItem = items.back();
-    assert(firstStrokeItem);
-    boost::shared_ptr<Node> bottomMerge = firstStrokeItem->getMergeNode();
-    assert(bottomMerge);
-    
-    ret->insert(std::make_pair(bottomMerge->getLiveInstance(), renderWindow));
 }
 
 bool
@@ -339,7 +323,9 @@ RotoPaint::render(const RenderActionArgs& args)
         NodeList rotoPaintNodes;
         {
             bool ok = getThreadLocalRotoPaintTreeNodes(&rotoPaintNodes);
-            assert(ok);
+            if (!ok) {
+                throw std::logic_error("RotoPaint::render(): getThreadLocalRotoPaintTreeNodes() failed");
+            }
         }
         
         const boost::shared_ptr<RotoDrawableItem>& firstStrokeItem = items.back();
@@ -360,6 +346,7 @@ RotoPaint::render(const RenderActionArgs& args)
                                     RectD(),
                                     neededComps,
                                     bgDepth,
+                                    false,
                                     this);
         ImageList rotoPaintImages;
         RenderRoIRetCode code = bottomMerge->getLiveInstance()->renderRoI(rotoPaintArgs, &rotoPaintImages);

@@ -300,6 +300,8 @@ public Q_SLOTS:
     void onSelectionChanged(int reason);
 
     void onDisplayFeatherButtonClicked(bool toggled);
+    
+    void onTimelineTimeChanged();
 
     void onBreakMultiStrokeTriggered();
 
@@ -317,6 +319,7 @@ public Q_SLOTS:
     void onBuildupClicked(bool isDown);
     
     void onResetCloneTransformClicked();
+    
     
 private:
     

@@ -33,7 +33,7 @@
 #include <boost/shared_ptr.hpp>
 #endif
 
-#include "Engine/EffectInstance.h"
+#include "Engine/OutputEffectInstance.h"
 
 #define kNatronGroupInputIsMaskParamName "isMask"
 #define kNatronGroupInputIsOptionalParamName "optional"
@@ -48,7 +48,7 @@ typedef std::list<NodePtr> NodeList;
 
 namespace Natron {
 class Node;
-class OutputEffectInstance;
+class EffectInstance;
 }
 class TimeLine;
 class NodeGraphI;
@@ -229,6 +229,11 @@ public:
      * @brief Reset the total time spent rendering accumulated on all nodes.
      **/
     void resetTotalTimeSpentRenderingForAllNodes();
+    
+    /**
+     * @brief Checks if a node in the project already has this cacheID
+     **/
+    bool isCacheIDAlreadyTaken(const std::string& name) const;
 
 public:
     
@@ -262,7 +267,7 @@ public:
     void getParallelRenderArgs(std::map<boost::shared_ptr<Natron::Node>,ParallelRenderArgs >& argsMap) const;
     
     
-    void forceGetClipPreferencesOnAllTrees();
+    void forceComputeInputDependentDataOnAllTrees();
     
     /**
      * @brief Callback called when a node of the collection is being deactivated

@@ -16,8 +16,8 @@
  * along with Natron.  If not, see <http://www.gnu.org/licenses/gpl-2.0.html>
  * ***** END LICENSE BLOCK ***** */
 
-#ifndef _Engine_AppManagerPrivate_h_
-#define _Engine_AppManagerPrivate_h_
+#ifndef Engine_AppManagerPrivate_h
+#define Engine_AppManagerPrivate_h
 
 // ***** BEGIN PYTHON BLOCK *****
 // from <https://docs.python.org/3/c-api/intro.html#include-files>:
@@ -49,8 +49,6 @@ namespace Natron {
 }
 
 
-#define NATRON_CACHE_VERSION 2
-//#define NATRON_USE_BREAKPAD
 
 struct AppManagerPrivate
 {
@@ -74,8 +72,6 @@ struct AppManagerPrivate
     //if this app is background, see the ProcessInputChannel def
     bool _loaded; //< true when the first instance is completly loaded.
     QString _binaryPath; //< the path to the application's binary
-    mutable QMutex _wasAbortCalledMutex;
-    bool _wasAbortAnyProcessingCalled; // < has abortAnyProcessing() called at least once ?
     U64 _nodesGlobalMemoryUse; //< how much memory all the nodes are using (besides the cache)
     mutable QMutex _ofxLogMutex;
     QString _ofxLog;
@@ -172,5 +168,5 @@ struct AppManagerPrivate
 };
 
 
-#endif // _Engine_AppManagerPrivate_h_
+#endif // Engine_AppManagerPrivate_h
 

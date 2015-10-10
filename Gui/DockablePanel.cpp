@@ -66,6 +66,7 @@ GCC_DIAG_UNUSED_PRIVATE_FIELD_ON
 #include "Gui/NodeGraphUndoRedo.h" // RenameNodeUndoRedoCommand
 #include "Gui/NodeGui.h"
 #include "Gui/NodeSettingsPanel.h"
+#include "Gui/PropertiesBinWrapper.h"
 #include "Gui/RotoPanel.h"
 #include "Gui/TabGroup.h"
 #include "Gui/TabWidget.h"
@@ -75,8 +76,6 @@ GCC_DIAG_UNUSED_PRIVATE_FIELD_ON
 #include "Gui/ViewerTab.h"
 #include "Gui/TrackerPanel.h"
 
-
-#define NATRON_VERTICAL_BAR_WIDTH 4
 using std::make_pair;
 using namespace Natron;
 
@@ -415,7 +414,8 @@ DockablePanel::DockablePanel(Gui* gui ,
     
     _imp->_horizContainer = new QWidget(this);
     _imp->_horizLayout = new QHBoxLayout(_imp->_horizContainer);
-    _imp->_horizLayout->setContentsMargins(NATRON_VERTICAL_BAR_WIDTH, 3, 3, 0);
+    _imp->_horizLayout->setContentsMargins(0, 3, 3, 0);
+    _imp->_horizLayout->setSpacing(2);
     if (iseffect) {
         _imp->_verticalColorBar = new VerticalColorBar(_imp->_horizContainer);
         _imp->_verticalColorBar->setColor(currentColor);
@@ -424,17 +424,19 @@ DockablePanel::DockablePanel(Gui* gui ,
     
     if (useScrollAreasForTabs) {
         _imp->_tabWidget = new QTabWidget(_imp->_horizContainer);
+        _imp->_tabWidget->setSizePolicy(QSizePolicy::Preferred,QSizePolicy::Preferred);
     } else {
         DockablePanelTabWidget* tabWidget = new DockablePanelTabWidget(gui,this);
         _imp->_tabWidget = tabWidget;
         tabWidget->getTabBar()->setObjectName("DockablePanelTabWidget");
+        _imp->_tabWidget->setSizePolicy(QSizePolicy::Ignored,QSizePolicy::Preferred);
     }
+    QObject::connect(_imp->_tabWidget, SIGNAL(currentChanged(int)), this, SLOT(onPageIndexChanged(int)));
     _imp->_horizLayout->addWidget(_imp->_tabWidget);
-    _imp->_tabWidget->setSizePolicy(QSizePolicy::Ignored,QSizePolicy::Preferred);
     _imp->_mainLayout->addWidget(_imp->_horizContainer);
 
     if (createDefaultPage) {
-        _imp->addPage(NULL,defaultPageName);
+        _imp->getOrCreatePage(NULL);
     }
 }
 
@@ -459,6 +461,24 @@ DockablePanel::~DockablePanel()
 }
 
 void
+DockablePanel::onPageIndexChanged(int index)
+{
+    assert(_imp->_tabWidget);
+    QString name = _imp->_tabWidget->tabText(index);
+    PageMap::iterator found = _imp->_pages.find(name);
+    if (found == _imp->_pages.end()) {
+        return;
+    }
+        
+    _imp->refreshPagesSecretness();
+    
+    Natron::EffectInstance* isEffect = dynamic_cast<Natron::EffectInstance*>(_imp->_holder);
+    if (isEffect && isEffect->getNode()->hasOverlay()) {
+        isEffect->getApp()->redrawAllViewers();
+    }
+}
+
+void
 DockablePanel::turnOffPages()
 {
     _imp->_pagesEnabled = false;
@@ -467,7 +487,7 @@ DockablePanel::turnOffPages()
     setFrameShape(QFrame::NoFrame);
     
     boost::shared_ptr<KnobPage> userPage = _imp->_holder->getOrCreateUserPageKnob();
-    _imp->addPage(userPage.get(), userPage->getDescription().c_str());
+    _imp->getOrCreatePage(userPage.get());
     
 }
 
@@ -530,6 +550,7 @@ DockablePanel::setUserPageActiveIndex()
     for (int i = 0; i < _imp->_tabWidget->count(); ++i) {
         if (_imp->_tabWidget->tabText(i) == NATRON_USER_MANAGED_KNOBS_PAGE_LABEL) {
             _imp->_tabWidget->setCurrentIndex(i);
+            _imp->refreshPagesSecretness();
             break;
         }
     }
@@ -649,6 +670,18 @@ DockablePanel::initializeKnobsInternal()
     }
     
     initializeExtraGui(_imp->_mainLayout);
+    
+    NodeSettingsPanel* isNodePanel = dynamic_cast<NodeSettingsPanel*>(this);
+    if (isNodePanel) {
+        boost::shared_ptr<NodeCollection> collec = isNodePanel->getNode()->getNode()->getGroup();
+        NodeGroup* isGroup = dynamic_cast<NodeGroup*>(collec.get());
+        if (isGroup) {
+            if (!isGroup->getNode()->hasPyPlugBeenEdited()) {
+                setEnabled(false);
+            }
+        }
+    }
+    _imp->refreshPagesSecretness();
     
 }
 
@@ -805,6 +838,10 @@ DockablePanel::setClosedInternal(bool c)
     
     NodeSettingsPanel* nodePanel = dynamic_cast<NodeSettingsPanel*>(this);
     if (nodePanel) {
+        
+        nodePanel->getNode()->getNode()->getLiveInstance()->refreshAfterTimeChange(getGui()->getApp()->getTimeLine()->currentFrame());
+        
+        
         boost::shared_ptr<NodeGui> nodeGui = nodePanel->getNode();
         boost::shared_ptr<Natron::Node> internalNode = nodeGui->getNode();
         boost::shared_ptr<MultiInstancePanel> panel = getMultiInstancePanel();
@@ -930,10 +967,32 @@ DockablePanel::floatPanel()
     }
     if (_imp->_floating) {
         assert(!_imp->_floatingWidget);
+        //If the property bin is not the current tab, force it to be the current to force an update of the size of this panel.
+        //We might have never seen so far this property panel, hence it might not have a good size at all.
+        PropertiesBinWrapper* pw = getGui()->getPropertiesBin();
+        assert(pw);
+        TabWidget* propertiesPane = 0;
+        int propertiesPaneLastIndex = -1;
+        if (pw) {
+            propertiesPane = pw->getParentPane();
+            assert(propertiesPane);
+            if (propertiesPane) {
+                propertiesPaneLastIndex = propertiesPane->activeIndex();
+                propertiesPane->setCurrentWidget(pw);
+            }
+        }
+        
+        QSize curSize = size();
+        
+        if (propertiesPane && propertiesPaneLastIndex != -1) {
+            propertiesPane->makeCurrentTab(propertiesPaneLastIndex);
+        }
+        
         _imp->_floatingWidget = new FloatingWidget(_imp->_gui,_imp->_gui);
         QObject::connect( _imp->_floatingWidget,SIGNAL( closed() ),this,SLOT( closePanel() ) );
         _imp->_container->removeWidget(this);
         _imp->_floatingWidget->setWidget(this);
+        _imp->_floatingWidget->resize(curSize);
         _imp->_gui->registerFloatingWindow(_imp->_floatingWidget);
     } else {
         assert(_imp->_floatingWidget);
@@ -980,6 +1039,7 @@ DockablePanel::deleteKnobGui(const boost::shared_ptr<KnobI>& knob)
                 int index = _imp->_tabWidget->indexOf(found->second.tab);
                 if (index != -1) {
                     _imp->_tabWidget->removeTab(index);
+                    _imp->refreshPagesSecretness();
                 }
             }
             found->second.tab->deleteLater();
@@ -1428,9 +1488,9 @@ DockablePanel::onCenterButtonClicked()
 }
 
 void
-DockablePanel::onSubGraphEditionChanged(bool editable)
+DockablePanel::onSubGraphEditionChanged(bool /*editable*/)
 {
-    _imp->_enterInGroupButton->setVisible(editable);
+   // _imp->_enterInGroupButton->setVisible(editable);
 }
 
 void

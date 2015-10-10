@@ -129,12 +129,12 @@ GuiApplicationManager::loadBuiltinNodePlugins(std::map<std::string,std::vector< 
     {
         std::auto_ptr<QtReader> reader( dynamic_cast<QtReader*>( QtReader::BuildEffect( boost::shared_ptr<Natron::Node>() ) ) );
         assert(reader.get());
-        std::map<std::string,void*> readerFunctions;
-        readerFunctions.insert( std::make_pair("BuildEffect", (void*)&QtReader::BuildEffect) );
+        std::map<std::string,void(*)()> readerFunctions;
+        readerFunctions.insert( std::make_pair("BuildEffect", (void(*)())&QtReader::BuildEffect) );
         LibraryBinary *readerPlugin = new LibraryBinary(readerFunctions);
         assert(readerPlugin);
         
-        registerPlugin(grouping, reader->getPluginID().c_str(), reader->getPluginLabel().c_str(), "", "", false, false, readerPlugin, false, reader->getMajorVersion(), reader->getMinorVersion(), true);
+        registerPlugin(grouping, reader->getPluginID().c_str(), reader->getPluginLabel().c_str(), "", "", false, false, readerPlugin, false, reader->getMajorVersion(), reader->getMinorVersion(), false);
  
         std::vector<std::string> extensions = reader->supportedFileFormats();
         for (U32 k = 0; k < extensions.size(); ++k) {
@@ -154,12 +154,12 @@ GuiApplicationManager::loadBuiltinNodePlugins(std::map<std::string,std::vector< 
     {
         std::auto_ptr<QtWriter> writer( dynamic_cast<QtWriter*>( QtWriter::BuildEffect( boost::shared_ptr<Natron::Node>() ) ) );
         assert(writer.get());
-        std::map<std::string,void*> writerFunctions;
-        writerFunctions.insert( std::make_pair("BuildEffect", (void*)&QtWriter::BuildEffect) );
+        std::map<std::string,void(*)()> writerFunctions;
+        writerFunctions.insert( std::make_pair("BuildEffect", (void(*)())&QtWriter::BuildEffect) );
         LibraryBinary *writerPlugin = new LibraryBinary(writerFunctions);
         assert(writerPlugin);
         
-        registerPlugin(grouping, writer->getPluginID().c_str(), writer->getPluginLabel().c_str(),"", "", false, false, writerPlugin, false, writer->getMajorVersion(), writer->getMinorVersion(), true);
+        registerPlugin(grouping, writer->getPluginID().c_str(), writer->getPluginLabel().c_str(),"", "", false, false, writerPlugin, false, writer->getMajorVersion(), writer->getMinorVersion(), false);
         
 
 
@@ -185,12 +185,12 @@ GuiApplicationManager::loadBuiltinNodePlugins(std::map<std::string,std::vector< 
     {
         boost::shared_ptr<EffectInstance> viewer( ViewerInstance::BuildEffect( boost::shared_ptr<Natron::Node>() ) );
         assert(viewer);
-        std::map<std::string,void*> viewerFunctions;
-        viewerFunctions.insert( std::make_pair("BuildEffect", (void*)&ViewerInstance::BuildEffect) );
+        std::map<std::string,void(*)()> viewerFunctions;
+        viewerFunctions.insert( std::make_pair("BuildEffect", (void(*)())&ViewerInstance::BuildEffect) );
         LibraryBinary *viewerPlugin = new LibraryBinary(viewerFunctions);
         assert(viewerPlugin);
         
-        registerPlugin(grouping, viewer->getPluginID().c_str(), viewer->getPluginLabel().c_str(),NATRON_IMAGES_PATH "viewer_icon.png", "", false, false, viewerPlugin, false, viewer->getMajorVersion(), viewer->getMinorVersion(), true);
+        registerPlugin(grouping, viewer->getPluginID().c_str(), viewer->getPluginLabel().c_str(),NATRON_IMAGES_PATH "viewer_icon.png", "", false, false, viewerPlugin, false, viewer->getMajorVersion(), viewer->getMinorVersion(), false);
 
     }
 
@@ -350,8 +350,12 @@ GuiApplicationManager::handleOpenFileRequest()
     assert(guiApp);
     if (guiApp) {
         ///Called when double-clicking a file from desktop
-        (void)guiApp->getGui()->openProject(_imp->_openFileRequest.toStdString());
+        std::string filename = _imp->_openFileRequest.toStdString();
+        AppInstance* app = guiApp->getGui()->openProject(filename);
         _imp->_openFileRequest.clear();
+        if (!app) {
+            throw std::runtime_error(tr("Failed to open project").toStdString() + ' ' + filename);
+        }
     }
 }
 
@@ -781,6 +785,12 @@ GuiApplicationManager::populateShortcuts()
     
     registerKeybind(kShortcutGroupViewer, kShortcutIDNextLayer, kShortcutDescNextLayer, Qt::NoModifier, Qt::Key_PageDown);
     registerKeybind(kShortcutGroupViewer, kShortcutIDPrevLayer, kShortcutDescPrevLayer, Qt::NoModifier, Qt::Key_PageUp);
+    registerKeybind(kShortcutGroupViewer, kShortcutIDSwitchInputAAndB, kShortcutDescSwitchInputAAndB, Qt::NoModifier, Qt::Key_Return);
+    registerKeybindWithMask(kShortcutGroupViewer, kShortcutIDShowLeftView, kShortcutDescShowLeftView, Qt::ControlModifier, Qt::Key_1,
+                            Qt::ShiftModifier);
+    registerKeybindWithMask(kShortcutGroupViewer, kShortcutIDShowRightView, kShortcutDescShowRightView, Qt::ControlModifier, Qt::Key_2,
+                            Qt::ShiftModifier);
+
     
     registerMouseShortcut(kShortcutGroupViewer, kShortcutIDMousePickColor, kShortcutDescMousePickColor, Qt::ControlModifier, Qt::LeftButton);
     registerMouseShortcut(kShortcutGroupViewer, kShortcutIDMouseRectanglePick, kShortcutDescMouseRectanglePick, Qt::ShiftModifier | Qt::ControlModifier, Qt::LeftButton);
@@ -902,6 +912,16 @@ GuiApplicationManager::populateShortcuts()
 
     registerKeybind(kShortcutGroupDopeSheetEditor, kShortcutIDActionDopeSheetEditorCopySelectedKeyframes, kShortcutDescActionDopeSheetEditorCopySelectedKeyframes, Qt::ControlModifier, Qt::Key_C);
     registerKeybind(kShortcutGroupDopeSheetEditor, kShortcutIDActionDopeSheetEditorPasteKeyframes, kShortcutDescActionDopeSheetEditorPasteKeyframes, Qt::ControlModifier, Qt::Key_V);
+    
+    //Script editor
+    registerKeybindWithMask(kShortcutGroupScriptEditor, kShortcutIDActionScriptEditorPrevScript, kShortcutDescActionScriptEditorPrevScript, Qt::ControlModifier, Qt::Key_BracketLeft, Qt::ShiftModifier | Qt::AltModifier);
+    registerKeybindWithMask(kShortcutGroupScriptEditor, kShortcutIDActionScriptEditorNextScript, kShortcutDescActionScriptEditorNextScript, Qt::ControlModifier, Qt::Key_BracketRight, Qt::ShiftModifier | Qt::AltModifier);
+    registerKeybind(kShortcutGroupScriptEditor, kShortcutIDActionScriptEditorClearHistory, kShortcutDescActionScriptEditorClearHistory, Qt::NoModifier, (Qt::Key)0);
+    registerKeybind(kShortcutGroupScriptEditor, kShortcutIDActionScriptExecScript, kShortcutDescActionScriptExecScript, Qt::ControlModifier, Qt::Key_Return);
+    registerKeybind(kShortcutGroupScriptEditor, kShortcutIDActionScriptClearOutput, kShortcutDescActionScriptClearOutput, Qt::ControlModifier, Qt::Key_Backspace);
+    registerKeybind(kShortcutGroupScriptEditor, kShortcutIDActionScriptShowOutput, kShortcutDescActionScriptShowOutput, Qt::NoModifier, (Qt::Key)0);
+    
+    
 } // populateShortcuts
 
 

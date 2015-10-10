@@ -16,8 +16,8 @@
  * along with Natron.  If not, see <http://www.gnu.org/licenses/gpl-2.0.html>
  * ***** END LICENSE BLOCK ***** */
 
-#ifndef _Engine_AppManager_h_
-#define _Engine_AppManager_h_
+#ifndef Engine_AppManager_h
+#define Engine_AppManager_h
 
 // ***** BEGIN PYTHON BLOCK *****
 // from <https://docs.python.org/3/c-api/intro.html#include-files>:
@@ -50,6 +50,7 @@ CLANG_DIAG_ON(deprecated)
 class QMutex;
 class QChar;
 
+class CacheEntryHolder;
 class AppInstance;
 class Format;
 class Settings;
@@ -165,7 +166,8 @@ public:
                                             const NodeSerialization* serialization,
                                             const std::list<boost::shared_ptr<KnobSerialization> >& paramValues,
                                             bool allowFileDialogs,
-                                            bool disableRenderScaleSupport) const;
+                                            bool disableRenderScaleSupport,
+                                                              bool *hasUsedFileDialog) const;
 
     void registerAppInstance(AppInstance* app);
 
@@ -235,9 +237,11 @@ public:
      * @brief Given the following tree version, removes all images from the node cache with a matching
      * tree version. This is useful to wipe the cache for one particular node.
      **/
-    void  removeAllImagesFromCacheWithMatchingKey(bool useTreeVersion, U64 treeVersion);
-    void  removeAllImagesFromDiskCacheWithMatchingKey(bool useTreeVersion, U64 treeVersion);
-    void  removeAllTexturesFromCacheWithMatchingKey(bool useTreeVersion, U64 treeVersion);
+    void  removeAllImagesFromCacheWithMatchingIDAndDifferentKey(const CacheEntryHolder* holder, U64 treeVersion);
+    void  removeAllImagesFromDiskCacheWithMatchingIDAndDifferentKey(const CacheEntryHolder* holder, U64 treeVersion);
+    void  removeAllTexturesFromCacheWithMatchingIDAndDifferentKey(const CacheEntryHolder* holder, U64 treeVersion);
+    
+    void removeAllCacheEntriesForHolder(const CacheEntryHolder* holder);
 
     boost::shared_ptr<Settings> getCurrentSettings() const WARN_UNUSED_RETURN;
     const KnobFactory & getKnobFactory() const WARN_UNUSED_RETURN;
@@ -249,8 +253,6 @@ public:
     bool writeToOutputPipe(const QString & longMessage,const QString & shortMessage);
 
     void abortAnyProcessing();
-
-    bool hasAbortAnyProcessingBeenCalled() const;
 
     virtual void setLoadingStatus(const QString & str);
 
@@ -304,7 +306,7 @@ public:
                                    bool mustCreateMutex,
                                    int major,
                                    int minor,
-                                   bool canBeUserCreated);
+                                   bool isDeprecated);
 
     bool isNCacheFilesOpenedCapped() const;
     size_t getNCacheFilesOpened() const;
@@ -416,6 +418,10 @@ public:
     static QString qt_tildeExpansion(const QString &path, bool *expanded = 0);
 #endif
     
+    void getMemoryStatsForCacheEntryHolder(const CacheEntryHolder* holder,
+                                           std::size_t* ramOccupied,
+                                           std::size_t* diskOccupied) const;
+    
 public Q_SLOTS:
     
     void onNewCrashReporterConnectionPending();
@@ -438,6 +444,8 @@ public Q_SLOTS:
     void clearPluginsLoadedCache();
 
     void clearAllCaches();
+    
+    void wipeAndCreateDiskCacheStructure();
 
     void onNodeMemoryRegistered(qint64 mem);
 
@@ -469,18 +477,18 @@ public Q_SLOTS:
     
     GlobalOFXTLS& getCurrentThreadTLS();
     
-    void requestOFXDIalogOnMainThread(void* user_data);
+    void requestOFXDIalogOnMainThread(Natron::OfxImageEffectInstance* instance, void* instanceData);
     
 public Q_SLOTS:
     
-    void onOFXDialogOnMainThreadReceived(void* user_data);
+    void onOFXDialogOnMainThreadReceived(Natron::OfxImageEffectInstance* instance, void* instanceData);
     
 Q_SIGNALS:
 
 
     void checkerboardSettingsChanged();
     
-    void s_requestOFXDialogOnMainThread(void* user_data);
+    void s_requestOFXDialogOnMainThread(Natron::OfxImageEffectInstance* instance, void* instanceData);
     
 protected:
 
@@ -681,5 +689,5 @@ public:
 } // namespace Natron
 
 
-#endif // _Engine_AppManager_h_
+#endif // Engine_AppManager_h
 

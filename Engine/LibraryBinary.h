@@ -16,8 +16,8 @@
  * along with Natron.  If not, see <http://www.gnu.org/licenses/gpl-2.0.html>
  * ***** END LICENSE BLOCK ***** */
 
-#ifndef NATRON_GLOBAL_LIBRARYBINARY_H_
-#define NATRON_GLOBAL_LIBRARYBINARY_H_
+#ifndef NATRON_GLOBAL_LIBRARYBINARY_H
+#define NATRON_GLOBAL_LIBRARYBINARY_H
 
 // ***** BEGIN PYTHON BLOCK *****
 // from <https://docs.python.org/3/c-api/intro.html#include-files>:
@@ -46,7 +46,7 @@ class LibraryBinary
 #ifdef __NATRON_WIN32__
     typedef HINSTANCE value_type;
 #elif defined(__NATRON_UNIX__)
-    typedef void* value_type;
+    typedef void(*value_type)();
 #endif
 
 public:
@@ -59,7 +59,7 @@ public:
 
     LibraryBinary(LibraryBinary::LibraryTypeEnum type);
 
-    LibraryBinary(const std::map<std::string,void*> & functions);
+    LibraryBinary(const std::map<std::string,void(*)()> & functions);
 
     LibraryBinary(const std::string & binaryPath);
 
@@ -111,4 +111,4 @@ private:
     std::map<std::string,value_type> _functions; // <function name, pointer>
 };
 } // namespace Natron
-#endif // ifndef NATRON_GLOBAL_LIBRARYBINARY_H_
+#endif // ifndef NATRON_GLOBAL_LIBRARYBINARY_H

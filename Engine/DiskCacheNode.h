@@ -25,7 +25,7 @@
 #include <Python.h>
 // ***** END PYTHON BLOCK *****
 
-#include "Engine/EffectInstance.h"
+#include "Engine/OutputEffectInstance.h"
 
 struct DiskCacheNodePrivate;
 class DiskCacheNode : public Natron::OutputEffectInstance
@@ -135,7 +135,7 @@ private:
 
     virtual Natron::StatusEnum render(const RenderActionArgs& args) OVERRIDE WARN_UNUSED_RETURN;
 
-    virtual bool shouldCacheOutput(bool isFrameVaryingOrAnimated) const OVERRIDE FINAL WARN_UNUSED_RETURN;
+    virtual bool shouldCacheOutput(bool isFrameVaryingOrAnimated, double time, int view) const OVERRIDE FINAL WARN_UNUSED_RETURN;
 
     boost::scoped_ptr<DiskCacheNodePrivate> _imp;
 };

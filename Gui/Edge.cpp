@@ -47,6 +47,10 @@
 #endif
 
 #define EDGE_LENGTH_MIN 0.1
+#define ARROW_OFFSET 3 // offset of the arrow tip from the object border
+#define ARROW_SIZE_CONNECTED 14
+#define ARROW_SIZE_DISCONNECTED 10
+#define ARROW_HEAD_ANGLE ((2*M_PI)/15) // 24 degrees opening angle is a nice thin arrow
 
 // number of offset pixels from the arrow that determine if a click is contained in the arrow or not
 #define kGraphicalContainerOffset 10
@@ -77,7 +81,7 @@ Edge::Edge(int inputNb_,
 , _isMask(false)
 , _middlePoint()
 {
-    setPen( QPen(Qt::black, 2, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin) );
+    setPen( QPen(Qt::black, 2, Qt::SolidLine, Qt::SquareCap, Qt::BevelJoin) );
     if ( (_inputNb != -1) && dest_ ) {
         _label = new QGraphicsTextItem(QString( dest_->getNode()->getInputLabel(_inputNb).c_str() ),this);
         _label->setDefaultTextColor( QColor(200,200,200) );
@@ -194,7 +198,13 @@ Edge::setSourceAndDestination(const boost::shared_ptr<NodeGui> & src,
     }
     
     if (!_label) {
-        _label = new QGraphicsTextItem(QString( dst->getNode()->getInputLabel(_inputNb).c_str() ),this);
+        QString label;
+        try {
+            label = QString( dst->getNode()->getInputLabel(_inputNb).c_str() );
+        } catch (...) {
+            
+        }
+        _label = new QGraphicsTextItem(label,this);
         _label->setDefaultTextColor( QColor(200,200,200) );
     } else {
         _label->setPlainText( QString( dst->getNode()->getInputLabel(_inputNb).c_str() ) );
@@ -439,23 +449,29 @@ Edge::initLine()
     ///This is the angle the edge forms with the X axis
     qreal a = std::acos(line().dx() / length);
 
-    if (line().dy() >= 0) {
+    if (line().dy() < 0) {
         a = 2 * M_PI - a;
     }
-    
-    QPointF arrowIntersect = foundDstIntersection ? dstIntersection : dst;
+
+    QPointF arrowIntersect;
+    if (foundDstIntersection) {
+        arrowIntersect = dstIntersection + QPointF(std::cos(a) * ARROW_OFFSET * sc,
+                                                   std::sin(a) * ARROW_OFFSET * sc);
+    } else {
+        arrowIntersect = dst;
+    }
 
     qreal arrowSize;
     if (source && dest) {
-        arrowSize = 10. * sc;
+        arrowSize = ARROW_SIZE_CONNECTED * sc;
     } else {
-        arrowSize = 7. * sc;
+        arrowSize = ARROW_SIZE_DISCONNECTED * sc;
     }
-    double headAngle = 3. * M_PI_4;
-    QPointF arrowP1 = arrowIntersect + QPointF(std::sin(a + headAngle) * arrowSize,
-                                            std::cos(a + headAngle) * arrowSize);
-    QPointF arrowP2 = arrowIntersect + QPointF(std::sin(a + M_PI - headAngle) * arrowSize,
-                                            std::cos(a + M_PI - headAngle) * arrowSize);
+    QPointF arrowP1 = arrowIntersect + QPointF(std::cos(a + ARROW_HEAD_ANGLE/2) * arrowSize,
+                                               std::sin(a + ARROW_HEAD_ANGLE/2) * arrowSize);
+    QPointF arrowP2 = arrowIntersect + QPointF(std::cos(a - ARROW_HEAD_ANGLE/2) * arrowSize,
+                                               std::sin(a - ARROW_HEAD_ANGLE/2) * arrowSize);
+    //_drawLine = QLineF((arrowP1+arrowP2)/2, line().p2());
 
     _arrowHead.clear();
     _arrowHead << arrowIntersect << arrowP1 << arrowP2;
@@ -525,15 +541,15 @@ Edge::dragSource(const QPointF & src)
     setLine( QLineF(line().p1(),src) );
 
     double a = std::acos( line().dx() / std::max(EDGE_LENGTH_MIN, line().length()) );
-    if (line().dy() >= 0) {
+    if (line().dy() < 0) {
         a = 2 * M_PI - a;
     }
 
-    double arrowSize = 5;
-    QPointF arrowP1 = line().p1() + QPointF(std::sin(a + M_PI / 3) * arrowSize,
-                                            std::cos(a + M_PI / 3) * arrowSize);
-    QPointF arrowP2 = line().p1() + QPointF(std::sin(a + 2 * M_PI / 3) * arrowSize,
-                                            std::cos(a + 2 * M_PI / 3) * arrowSize);
+    double arrowSize = ARROW_SIZE_DISCONNECTED;
+    QPointF arrowP1 = line().p1() + QPointF(std::cos(a + ARROW_HEAD_ANGLE/2) * arrowSize,
+                                            std::sin(a + ARROW_HEAD_ANGLE/2) * arrowSize);
+    QPointF arrowP2 = line().p1() + QPointF(std::cos(a - ARROW_HEAD_ANGLE/2) * arrowSize,
+                                            std::sin(a - ARROW_HEAD_ANGLE/2) * arrowSize);
     _arrowHead.clear();
     _arrowHead << line().p1() << arrowP1 << arrowP2;
 
@@ -549,15 +565,15 @@ Edge::dragDest(const QPointF & dst)
     setLine( QLineF( dst,line().p2() ) );
 
     double a = std::acos( line().dx() / std::max(EDGE_LENGTH_MIN, line().length()) );
-    if (line().dy() >= 0) {
+    if (line().dy() < 0) {
         a = 2 * M_PI - a;
     }
 
-    double arrowSize = 5;
-    QPointF arrowP1 = line().p1() + QPointF(std::sin(a + M_PI / 3) * arrowSize,
-                                            std::cos(a + M_PI / 3) * arrowSize);
-    QPointF arrowP2 = line().p1() + QPointF(std::sin(a + 2 * M_PI / 3) * arrowSize,
-                                            std::cos(a + 2 * M_PI / 3) * arrowSize);
+    double arrowSize = ARROW_SIZE_DISCONNECTED;
+    QPointF arrowP1 = line().p1() + QPointF(std::cos(a + ARROW_HEAD_ANGLE/2) * arrowSize,
+                                            std::sin(a + ARROW_HEAD_ANGLE/2) * arrowSize);
+    QPointF arrowP2 = line().p1() + QPointF(std::cos(a - ARROW_HEAD_ANGLE/2) * arrowSize,
+                                            std::sin(a - ARROW_HEAD_ANGLE/2) * arrowSize);
     _arrowHead.clear();
     _arrowHead << line().p1() << arrowP1 << arrowP2;
 }
@@ -613,13 +629,13 @@ Edge::paint(QPainter *painter,
         myPen.setStyle(Qt::SolidLine);
     }
 
-    QColor color;
+    QColor color, arrowColor;
     if (_useHighlight) {
-        color = Qt::green;
+        color = arrowColor = Qt::green;
     } else if (_useRenderingColor) {
-        color = _renderingColor;
+        color = arrowColor = _renderingColor;
     } else {
-        color = _defaultColor;
+        color = arrowColor = _defaultColor;
         if (_optional && !_paintWithDash) {
             color.setAlphaF(0.4);
         }
@@ -636,7 +652,10 @@ Edge::paint(QPainter *painter,
     QPainterPath headPath;
     headPath.addPolygon(_arrowHead);
     headPath.closeSubpath();
+    myPen.setColor(arrowColor);
+    myPen.setJoinStyle(Qt::MiterJoin);
     painter->fillPath(headPath, color);
+    painter->strokePath(headPath, myPen); // also draw the outline, or arrows are too small
 
     if (_paintBendPoint) {
         QRectF arcRect(_middlePoint.x() - 5,_middlePoint.y() - 5,10,10);
@@ -746,15 +765,15 @@ LinkArrow::refreshPosition()
     ///This is the angle the edge forms with the X axis
     qreal a = std::acos(line().dx() / length);
 
-    if (line().dy() >= 0) {
+    if (line().dy() < 0) {
         a = 2 * M_PI - a;
     }
 
     qreal arrowSize = 10. * scale();
-    QPointF arrowP1 = middle + QPointF(std::sin(a + M_PI / 3) * arrowSize,
-                                       std::cos(a + M_PI / 3) * arrowSize);
-    QPointF arrowP2 = middle + QPointF(std::sin(a + 2 * M_PI / 3) * arrowSize,
-                                       std::cos(a + 2 * M_PI / 3) * arrowSize);
+    QPointF arrowP1 = middle + QPointF(std::cos(a + ARROW_HEAD_ANGLE/2) * arrowSize,
+                                       std::sin(a + ARROW_HEAD_ANGLE/2) * arrowSize);
+    QPointF arrowP2 = middle + QPointF(std::cos(a - ARROW_HEAD_ANGLE/2) * arrowSize,
+                                       std::sin(a - ARROW_HEAD_ANGLE/2) * arrowSize);
 
     _arrowHead.clear();
     _arrowHead << middle << arrowP1 << arrowP2;

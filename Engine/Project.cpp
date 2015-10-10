@@ -42,25 +42,6 @@
 #include <pwd.h> //for getpwuid
 #endif
 
-#if 1 // defined(__NATRON_OSX__) && BOOST_VERSION <= 105900
-// Required on OS X 10.6 Snow Leopard w/ boost 1.59.0, or else undefined symbols show up at run time.
-// dyld: lazy symbol binding failed: Symbol not found: __ZN5boost7archive21basic_text_oprimitiveISoED2Ev
-// dyld: Symbol not found: __ZN5boost7archive17xml_oarchive_implINS0_12xml_oarchiveEEC2ERSoj
-// These templates are explicitely instantiated in boost from libs/serialization/src/basic_text_oprimitive.cpp and basic_text_iprimitive.cpp,
-// but don't seem to be exported from boost, and are thus stripped by the -dead_strip linker option
-#include <boost/archive/impl/basic_text_iprimitive.ipp>
-#include <boost/archive/impl/basic_text_oprimitive.ipp>
-
-#include <boost/archive/xml_iarchive.hpp>
-#include <boost/archive/xml_oarchive.hpp>
-#include <boost/archive/detail/archive_serializer_map.hpp>
-// explicitly instantiate for this type of xml stream
-#include <boost/archive/impl/archive_serializer_map.ipp>
-#include <boost/archive/impl/basic_xml_iarchive.ipp>
-#include <boost/archive/impl/xml_iarchive_impl.ipp>
-#include <boost/archive/impl/basic_xml_oarchive.ipp>
-#include <boost/archive/impl/xml_oarchive_impl.ipp>
-#endif
 
 #include <QtConcurrentRun>
 #include <QCoreApplication>
@@ -75,6 +56,7 @@
 #ifdef __NATRON_WIN32__
 #include <ofxhUtilities.h> // for wideStringToString
 #endif
+#include <ofxhXml.h> // OFX::XML::escape
 
 #include "Engine/AppInstance.h"
 #include "Engine/AppManager.h"
@@ -646,7 +628,7 @@ Project::triggerAutoSave()
     ///Should only be called in the main-thread, that is upon user interaction.
     assert( QThread::currentThread() == qApp->thread() );
 
-    if ( appPTR->isBackground() || !appPTR->isLoaded() || _imp->projectClosing ) {
+    if ( appPTR->isBackground() || !appPTR->isLoaded() || isProjectClosing() ) {
         return;
     }
     {
@@ -796,7 +778,6 @@ Project::initializeKnobs()
     _imp->mainView->disableSlider();
     _imp->mainView->setDefaultValue(0);
     _imp->mainView->setMinimum(0);
-    _imp->mainView->setMaximum(0);
     _imp->mainView->setAnimationEnabled(false);
     page->addKnob(_imp->mainView);
 
@@ -841,7 +822,7 @@ Project::initializeKnobs()
     
     _imp->frameRange = Natron::createKnob<KnobInt>(this, "Frame Range",2);
     _imp->frameRange->setDefaultValue(1,0);
-    _imp->frameRange->setDefaultValue(1,1);
+    _imp->frameRange->setDefaultValue(250,1);
     _imp->frameRange->setDimensionName(0, "first");
     _imp->frameRange->setDimensionName(1, "last");
     _imp->frameRange->setEvaluateOnChange(false);
@@ -1253,7 +1234,7 @@ Project::onKnobValueChanged(KnobI* knob,
                 }
                 
                 ///Format change, hence probably the PAR so run getClipPreferences again
-                forceGetClipPreferencesOnAllTrees();
+                forceComputeInputDependentDataOnAllTrees();
             }
             Q_EMIT formatChanged(frmt);
         }
@@ -1262,7 +1243,7 @@ Project::onKnobValueChanged(KnobI* knob,
     } else if ( knob == _imp->previewMode.get() ) {
         Q_EMIT autoPreviewChanged( _imp->previewMode->getValue() );
     }  else if ( knob == _imp->frameRate.get() ) {
-        forceGetClipPreferencesOnAllTrees();
+        forceComputeInputDependentDataOnAllTrees();
     } else if (knob == _imp->frameRange.get()) {
         int first = _imp->frameRange->getValue(0);
         int last = _imp->frameRange->getValue(1);
@@ -1455,8 +1436,10 @@ void
 Project::reset(bool aboutToQuit)
 {
     assert(QThread::currentThread() == qApp->thread());
-    
-    _imp->projectClosing = true;
+    {
+        QMutexLocker k(&_imp->projectClosingMutex);
+        _imp->projectClosing = true;
+    }
 
     _imp->runOnProjectCloseCallback();
     
@@ -1473,23 +1456,24 @@ Project::reset(bool aboutToQuit)
             }
         }
     }
-    clearNodes(true);
-
-    {
-        QMutexLocker l(&_imp->projectLock);
-        _imp->autoSetProjectFormat = appPTR->getCurrentSettings()->isAutoProjectFormatEnabled();
-        _imp->hasProjectBeenSavedByUser = false;
-        _imp->projectCreationTime = QDateTime::currentDateTime();
-        _imp->setProjectFilename(NATRON_PROJECT_UNTITLED);
-        _imp->setProjectPath("");
-        _imp->autoSaveTimer->stop();
-        _imp->additionalFormats.clear();
-    }
-    _imp->timeline->removeAllKeyframesIndicators();
-    
-    Q_EMIT projectNameChanged(NATRON_PROJECT_UNTITLED);
+    clearNodes(!aboutToQuit);
     
     if (!aboutToQuit) {
+        
+        {
+            QMutexLocker l(&_imp->projectLock);
+            _imp->autoSetProjectFormat = appPTR->getCurrentSettings()->isAutoProjectFormatEnabled();
+            _imp->hasProjectBeenSavedByUser = false;
+            _imp->projectCreationTime = QDateTime::currentDateTime();
+            _imp->setProjectFilename(NATRON_PROJECT_UNTITLED);
+            _imp->setProjectPath("");
+            _imp->autoSaveTimer->stop();
+            _imp->additionalFormats.clear();
+        }
+        _imp->timeline->removeAllKeyframesIndicators();
+        
+        Q_EMIT projectNameChanged(NATRON_PROJECT_UNTITLED);
+        
         const std::vector<boost::shared_ptr<KnobI> > & knobs = getKnobs();
         
         beginChanges();
@@ -1505,7 +1489,10 @@ Project::reset(bool aboutToQuit)
         endChanges(true);
     }
     
-    _imp->projectClosing = false;
+    {
+        QMutexLocker k(&_imp->projectClosingMutex);
+        _imp->projectClosing = false;
+    }
 }
     
     bool
@@ -1629,9 +1616,6 @@ Project::escapeXML(const std::string &istr)
                 i += 5;
                 break;
             default: {
-                // Escape even the whitespace characters '\n' '\r' '\t', although they are valid
-                // XML, because they would be converted to space when re-read.
-                // See http://www.w3.org/TR/xml/#AVNormalize
                 unsigned char c = (unsigned char)(str[i]);
                 // Escape even the whitespace characters '\n' '\r' '\t', although they are valid
                 // XML, because they would be converted to space when re-read.
@@ -1653,6 +1637,7 @@ Project::escapeXML(const std::string &istr)
             }   break;
         }
     }
+    assert(str == OFX::XML::escape(istr)); // check that this escaped string is consistent with the one in HostSupport
     return str;
 }
 
@@ -1715,7 +1700,9 @@ Project::makeEnvMap(const std::string& encoded,std::map<std::string,std::string>
         assert(i < encoded.size());
         size_t endNamePos = encoded.find(endNameTag,i);
         assert(endNamePos != std::string::npos && endNamePos < encoded.size());
-        
+        if (endNamePos == std::string::npos || endNamePos >= encoded.size()) {
+            throw std::logic_error("Project::makeEnvMap()");
+        }
         std::string name,value;
         while (i < endNamePos) {
             name.push_back(encoded[i]);
@@ -1728,8 +1715,8 @@ Project::makeEnvMap(const std::string& encoded,std::map<std::string,std::string>
         
         size_t endValuePos = encoded.find(endValueTag,i);
         assert(endValuePos != std::string::npos && endValuePos < encoded.size());
-        
-        while (i < endValuePos) {
+
+        while (endValuePos != std::string::npos && endValuePos < encoded.size() && i < endValuePos) {
             value.push_back(encoded.at(i));
             ++i;
         }
@@ -2025,7 +2012,7 @@ Project::getOnNodeDeleteCB() const
 bool
 Project::isProjectClosing() const
 {
-    assert(QThread::currentThread() == qApp->thread());
+    QMutexLocker k(&_imp->projectClosingMutex);
     return _imp->projectClosing;
 }
     
@@ -2047,7 +2034,7 @@ Project::unionFrameRangeWith(int first,int last)
 {
     
     int curFirst,curLast;
-    bool mustSet = !_imp->frameRange->hasModifications();
+    bool mustSet = !_imp->frameRange->hasModifications() && first != last;
     curFirst = _imp->frameRange->getValue(0);
     curLast = _imp->frameRange->getValue(1);
     curFirst = !mustSet ? std::min(first, curFirst) : first;

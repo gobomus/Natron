@@ -3,14 +3,14 @@
 # Build Natron Plugins for Windows
 #
 
-source $(pwd)/common.sh || exit 1
+source `pwd`/common.sh || exit 1
 
 
-if [ "$1" == "32" ]; then
+if [ "$1" = "32" ]; then
   INSTALL_PATH=$INSTALL32_PATH
   PKG_PREFIX=$PKG_PREFIX32
   BIT=32
-elif [ "$1" == "64" ]; then
+elif [ "$1" = "64" ]; then
   INSTALL_PATH=$INSTALL64_PATH
   PKG_PREFIX=$PKG_PREFIX64
   BIT=64
@@ -19,19 +19,8 @@ else
     exit 1
 fi
 
+TMP_BUILD_DIR=$TMP_PATH$BIT
 
-PID=$$
-if [ -f $TMP_DIR/natron-build-plugins.pid ]; then
-  OLDPID=$(cat $TMP_DIR/natron-build-plugins.pid)
-  PIDS=$(ps aux|awk '{print $2}')
-  for i in $PIDS;do
-    if [ "$i" == "$OLDPID" ]; then
-      echo "already running ..."
-      exit 1
-    fi
-  done
-fi
-echo $PID > $TMP_DIR/natron-build-plugins.pid || exit 1
 
 #If "workshop" is passed, use master branch for all plug-ins otherwise use the git tags in common.sh
 IO_BRANCH=master
@@ -52,14 +41,14 @@ if [ "$NATRON_LICENSE" != "GPL" ] && [ "$NATRON_LICENSE" != "COMMERCIAL" ]; then
 fi
 
 
-if [ -d $TMP_PATH ]; then
-  rm -rf $TMP_PATH || exit 1
+if [ -d $TMP_BUILD_DIR ]; then
+  rm -rf $TMP_BUILD_DIR || exit 1
 fi
-mkdir -p $TMP_PATH || exit 1
+mkdir -p $TMP_BUILD_DIR || exit 1
 
-if [ "$NATRON_LICENSE" == "GPL" ]; then
+if [ "$NATRON_LICENSE" = "GPL" ]; then
     FFMPEG_PATH=$INSTALL_PATH/ffmpeg-GPL
-elif [ "$NATRON_LICENSE" == "COMMERCIAL" ]; then
+elif [ "$NATRON_LICENSE" = "COMMERCIAL" ]; then
     FFMPEG_PATH=$INSTALL_PATH/ffmpeg-LGPL
 fi
 
@@ -92,19 +81,23 @@ if [ -z "$BUILD_CV" ]; then
 fi
 
 # MISC
-if [ "$BUILD_MISC" == "1" ]; then
+if [ "$BUILD_MISC" = "1" ]; then
 
-cd $TMP_PATH || exit 1
+cd $TMP_BUILD_DIR || exit 1
 
 git clone $GIT_MISC || exit 1
 cd openfx-misc || exit 1
 git checkout ${MISC_BRANCH} || exit 1
 git submodule update -i --recursive || exit 1
+if [ "$MISC_BRANCH" = "master" ]; then
+    # the snapshots are always built with the latest version of submodules
+    git submodule foreach git pull origin master
+fi
 
-MISC_GIT_VERSION=$(git log|head -1|awk '{print $2}')
+MISC_GIT_VERSION=`git log|head -1|awk '{print $2}'`
 
 # mksrc
-if [ "$MKSRC" == "1" ]; then
+if [ "$MKSRC" = "1" ]; then
   cd .. || exit 1
   cp -a openfx-misc openfx-misc-$MISC_GIT_VERSION || exit 1
   (cd openfx-misc-$MISC_GIT_VERSION;find . -type d -name .git -exec rm -rf {} \;)
@@ -130,19 +123,23 @@ echo $MISC_GIT_VERSION > $INSTALL_PATH/docs/openfx-misc/VERSION || exit 1
 fi
 
 # IO
-if [ "$BUILD_IO" == "1" ]; then
+if [ "$BUILD_IO" = "1" ]; then
 
-cd $TMP_PATH || exit 1
+cd $TMP_BUILD_DIR || exit 1
 
 git clone $GIT_IO || exit 1
 cd openfx-io || exit 1
-git checkout ${IO_RANCH} || exit 1
+git checkout ${IO_BRANCH} || exit 1
 git submodule update -i --recursive || exit 1
+if [ "$IO_BRANCH" = "master" ]; then
+    # the snapshots are always built with the latest version of submodules
+    git submodule foreach git pull origin master
+fi
 
-IO_GIT_VERSION=$(git log|head -1|awk '{print $2}')
+IO_GIT_VERSION=`git log|head -1|awk '{print $2}'`
 
 # mksrc
-if [ "$MKSRC" == "1" ]; then
+if [ "$MKSRC" = "1" ]; then
   cd .. || exit 1
   cp -a openfx-io openfx-io-$IO_GIT_VERSION || exit 1
   (cd openfx-io-$IO_GIT_VERSION;find . -type d -name .git -exec rm -rf {} \;)
@@ -167,19 +164,23 @@ echo $IO_GIT_VERSION > $INSTALL_PATH/docs/openfx-io/VERSION || exit 1
 fi
 
 # ARENA
-if [ "$BUILD_ARENA" == "1" ]; then
+if [ "$BUILD_ARENA" = "1" ]; then
 
-cd $TMP_PATH || exit 1
+cd $TMP_BUILD_DIR || exit 1
 
 git clone $GIT_ARENA || exit 1
 cd openfx-arena || exit 1
 git checkout ${ARENA_BRANCH} || exit 1
 git submodule update -i --recursive || exit 1
+if [ "$ARENA_BRANCH" = "master" ]; then
+    # the snapshots are always built with the latest version of submodules
+    git submodule foreach git pull origin master
+fi
 
-ARENA_GIT_VERSION=$(git log|head -1|awk '{print $2}')
+ARENA_GIT_VERSION=`git log|head -1|awk '{print $2}'`
 
 # mksrc
-if [ "$MKSRC" == "1" ]; then
+if [ "$MKSRC" = "1" ]; then
   cd .. || exit 1
   cp -a openfx-arena openfx-arena-$ARENA_GIT_VERSION || exit 1
   (cd openfx-arena-$ARENA_GIT_VERSION;find . -type d -name .git -exec rm -rf {} \;)
@@ -204,19 +205,23 @@ echo $ARENA_V > $INSTALL_PATH/docs/openfx-arena/VERSION || exit 1
 fi
 
 # OPENCV
-if [ "$BUILD_CV" == "1" ]; then
+if [ "$BUILD_CV" = "1" ]; then
 
-cd $TMP_PATH || exit 1
+cd $TMP_BUILD_DIR || exit 1
 
 git clone $GIT_OPENCV || exit 1
 cd openfx-opencv || exit 1
 git checkout ${CV_BRANCH} || exit 1
 git submodule update -i --recursive || exit 1
+if [ "$CV_BRANCH" = "master" ]; then
+    # the snapshots are always built with the latest version of submodules
+    git submodule foreach git pull origin master
+fi
 
-CV_GIT_VERSION=$(git log|head -1|awk '{print $2}')
+CV_GIT_VERSION=`git log|head -1|awk '{print $2}'`
 
 # mksrc
-if [ "$MKSRC" == "1" ]; then
+if [ "$MKSRC" = "1" ]; then
   cd .. || exit 1
   cp -a openfx-opencv openfx-opencv-$CV_GIT_VERSION || exit 1
   (cd openfx-opencv-$CV_GIT_VERSION;find . -type d -name .git -exec rm -rf {} \;)

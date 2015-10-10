@@ -123,6 +123,21 @@ RotoContext::getStrokeBeingPainted() const
     return _imp->strokeBeingPainted;
 }
 
+boost::shared_ptr<Natron::Node>
+RotoContext::getRotoPaintBottomMergeNode() const
+{
+    std::list<boost::shared_ptr<RotoDrawableItem> > items = getCurvesByRenderOrder();
+    if (items.empty()) {
+        return boost::shared_ptr<Natron::Node>();
+    }
+    
+    const boost::shared_ptr<RotoDrawableItem>& firstStrokeItem = items.back();
+    assert(firstStrokeItem);
+    boost::shared_ptr<Node> bottomMerge = firstStrokeItem->getMergeNode();
+    assert(bottomMerge);
+    return bottomMerge;
+}
+
 void
 RotoContext::getRotoPaintTreeNodes(std::list<boost::shared_ptr<Natron::Node> >* nodes) const
 {
@@ -824,7 +839,7 @@ RotoContext::load(const RotoContextSerialization & obj)
     _imp->rippleEdit = obj._rippleEdit;
 
     for (std::list<boost::weak_ptr<KnobI> >::iterator it = _imp->knobs.begin(); it != _imp->knobs.end(); ++it) {
-        it->lock()->setAllDimensionsEnabled(false);
+        it->lock()->setDefaultAllDimensionsEnabled(false);
     }
 
     assert(_imp->layers.size() == 1);
@@ -1499,7 +1514,7 @@ RotoContext::getCurvesByRenderOrder(bool onlyActivated) const
     std::list< boost::shared_ptr<RotoDrawableItem> > ret;
     
     ///Note this might not be the timeline's current frame if this is a render thread.
-    double time = getNode()->getLiveInstance()->getThreadLocalRenderTime();
+    double time = getNode()->getLiveInstance()->getCurrentTime();
     {
         QMutexLocker l(&_imp->rotoContextMutex);
         if ( !_imp->layers.empty() ) {
@@ -2335,8 +2350,6 @@ RotoContext::renderSingleStroke(const boost::shared_ptr<RotoStrokeItem>& stroke,
 boost::shared_ptr<Natron::Image>
 RotoContext::renderMaskFromStroke(const boost::shared_ptr<RotoDrawableItem>& stroke,
                                   const RectI& /*roi*/,
-                                  U64 rotoAge,
-                                  U64 nodeHash,
                                   const Natron::ImageComponents& components,
                                   SequenceTime time,
                                   int view,
@@ -2349,14 +2362,13 @@ RotoContext::renderMaskFromStroke(const boost::shared_ptr<RotoDrawableItem>& str
     
     ImagePtr image;// = stroke->getStrokeTimePreview();
 
-    ///compute an enhanced hash different from the one of the node in order to differentiate within the cache
-    ///the output image of the roto node and the mask image.
+    ///compute an enhanced hash different from the one of the merge node of the item in order to differentiate within the cache
+    ///the output image of the node and the mask image.
     Hash64 hash;
-    hash.append(nodeHash);
-    hash.append(rotoAge);
+    hash.append(stroke->getMergeNode()->getLiveInstance()->getRenderHash());
     hash.computeHash();
     
-    Natron::ImageKey key = Natron::Image::makeKey(hash.value(), true ,time, view, false);
+    Natron::ImageKey key = Natron::Image::makeKey(stroke.get(),hash.value(), true ,time, view, false, false);
     
     {
         QMutexLocker k(&_imp->cacheAccessMutex);
@@ -2735,7 +2747,7 @@ RotoContextPrivate::renderStroke(cairo_t* cr,
             std::vector<std::pair<double,double> > opacityStops;
             getRenderDotParams(alpha, brushSizePixel, brushHardness, brushSpacing, it->second, pressureAffectsOpacity, pressureAffectsSize, pressureAffectsHardness, &internalDotRadius, &externalDotRadius, &spacing, &opacityStops);
             renderDot(cr, dotPatterns, it->first, internalDotRadius, externalDotRadius, it->second, doBuildup, opacityStops, alpha);
-            return 0;
+            continue;
         }
         
         std::list<std::pair<Point,double> >::iterator next = it;
@@ -3228,6 +3240,9 @@ RotoContextPrivate::renderInternalShape(double time,
     
     BezierCPs::const_iterator point = cps.begin();
     assert(point != cps.end());
+    if (point == cps.end()) {
+        return;
+    }
     BezierCPs::const_iterator nextPoint = point;
     if (nextPoint != cps.end()) {
         ++nextPoint;

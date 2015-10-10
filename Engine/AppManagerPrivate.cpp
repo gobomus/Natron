@@ -62,17 +62,6 @@ GCC_DIAG_ON(unused-parameter)
 BOOST_CLASS_EXPORT(Natron::FrameParams)
 BOOST_CLASS_EXPORT(Natron::ImageParams)
 
-#if 1 // defined(__NATRON_OSX__) && BOOST_VERSION <= 105900
-// Required on OS X 10.6 Snow Leopard w/ boost 1.59.0, or else undefined symbols show up at run time.
-// dyld: lazy symbol binding failed: Symbol not found: __ZN5boost7archive23basic_binary_oprimitiveINS0_15binary_oarchiveEcSt11char_traitsIcEEC2ERSt15basic_streambufIcS4_Eb
-// These templates are explicitely instantiated in boost from libs/serialization/src/binary_iarchive.cpp and binary_oarchive.cpp,
-// but don't seem to be exported from boost, and are thus stripped by the -dead_strip linker option
-#include <boost/archive/impl/basic_binary_iprimitive.ipp>
-#include <boost/archive/impl/basic_binary_oprimitive.ipp>
-#endif
-
-#define NATRON_CACHE_VERSION 2
-
 using namespace Natron;
 
 AppManagerPrivate::AppManagerPrivate()
@@ -93,7 +82,6 @@ AppManagerPrivate::AppManagerPrivate()
 ,_backgroundIPC(0)
 ,_loaded(false)
 ,_binaryPath()
-,_wasAbortAnyProcessingCalled(false)
 ,_nodesGlobalMemoryUse(0)
 ,_ofxLogMutex()
 ,_ofxLog()
@@ -372,45 +360,7 @@ void restoreCache(AppManagerPrivate* p,Natron::Cache<T>* cache)
 void
 AppManagerPrivate::restoreCaches()
 {
-    //    {
-    //        if ( checkForCacheDiskStructure( _nodeCache->getCachePath() ) ) {
-    //            std::ifstream ifile;
-    //            std::string settingsFilePath = _nodeCache->getRestoreFilePath();
-    //            try {
-    //                ifile.exceptions(std::ifstream::failbit | std::ifstream::badbit);
-    //                ifile.open(settingsFilePath.c_str(),std::ifstream::in);
-    //            } catch (const std::ifstream::failure & e) {
-    //                qDebug() << "Failed to open the cache restoration file:" << e.what();
-    //
-    //                return;
-    //            }
-    //
-    //            if ( !ifile.good() ) {
-    //                qDebug() << "Failed to cache file for restoration:" <<  settingsFilePath.c_str();
-    //                ifile.close();
-    //
-    //                return;
-    //            }
-    //
-    //            Natron::Cache<Image>::CacheTOC tableOfContents;
-    //            try {
-    //                boost::archive::binary_iarchive iArchive(ifile);
-    //                iArchive >> tableOfContents;
-    //            } catch (const std::exception & e) {
-    //                qDebug() << e.what();
-    //                ifile.close();
-    //
-    //                return;
-    //            }
-    //
-    //            ifile.close();
-    //
-    //            QFile restoreFile( settingsFilePath.c_str() );
-    //            restoreFile.remove();
-    //
-    //            _nodeCache->restore(tableOfContents);
-    //        }
-    //    }
+    
     if (!appPTR->isBackground()) {
         restoreCache<FrameEntry>(this, _viewerCache.get());
         restoreCache<Image>(this, _diskCache.get());
@@ -423,7 +373,6 @@ AppManagerPrivate::checkForCacheDiskStructure(const QString & cachePath)
     QString settingsFilePath(cachePath + QDir::separator() + "restoreFile." NATRON_CACHE_FILE_EXT);
 
     if ( !QFile::exists(settingsFilePath) ) {
-        qDebug() << "Disk cache empty.";
         cleanUpCacheDiskStructure(cachePath);
 
         return false;

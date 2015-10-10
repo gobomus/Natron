@@ -12,6 +12,7 @@
 - Nodes group to have cleaner graphs with hidden sub-nodegraphs
 - PyPlug: You can export a  group as a Python plug-in and it be re-used in any other project as a single node as you would use any other plug-in
 - SeExpr integration within a node: http://www.disneyanimation.com/technology/seexpr.html
+- New SeNoise and SeGrain nodes based on SeExpr 
 - RotoPaint node with Wacom tablets support
 - DopeSheet editor: This is where you can control easily keyframes and clips in time for motion graphics purposes
 - Render statistics: Available in the Render menu, use this to debug complex compositions
@@ -29,6 +30,9 @@
 - New merge operators: grain-extract, grain-merge, color, hue, luminosity
 - New gamma and gain controllers on the viewer
 - Multiple viewers can now have their projection synchronised to enhance image comparison
+- Support for multi-layered workflows for cleaner graphs
+- Better support for multi-view workflows
+- Various performance and stability enhancements across the board 
 
 ## Version 1.2.1
 

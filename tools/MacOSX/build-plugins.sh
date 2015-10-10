@@ -24,7 +24,7 @@ source `pwd`/common.sh || exit 1
 cd $CWD/build || exit 1
 
 #If "workshop" is passed, use master branch for all plug-ins otherwise use the git tags in common.sh
-if [ "$BRANCH" == "workshop" ]; then
+if [ "$BRANCH" = "workshop" ]; then
     IO_BRANCH=master
     MISC_BRANCH=master
     ARENA_BRANCH=master
@@ -46,6 +46,10 @@ git clone $GIT_IO
 cd openfx-io || exit 1
 git checkout "$IO_BRANCH" || exit 1
 git submodule update -i --recursive || exit 1
+if [ "$IO_BRANCH" = "master" ]; then
+    # the snapshots are always built with the latest version of submodules
+    git submodule foreach git pull origin master
+fi
 
 #Always bump git commit, it is only used to version-stamp binaries
 IO_GIT_VERSION=`git log|head -1|awk '{print $2}'`
@@ -60,6 +64,10 @@ git clone $GIT_MISC
 cd openfx-misc || exit 1
 git checkout "$MISC_BRANCH" || exit 1
 git submodule update -i --recursive || exit 1
+if [ "$MISC_BRANCH" = "master" ]; then
+    # the snapshots are always built with the latest version of submodules
+    git submodule foreach git pull origin master
+fi
 
 #Always bump git commit, it is only used to version-stamp binaries
 MISC_GIT_VERSION=`git log|head -1|awk '{print $2}'`
@@ -80,6 +88,10 @@ git clone $GIT_ARENA
 cd openfx-arena || exit 1
 git checkout "$ARENA_BRANCH" || exit 1
 git submodule update -i --recursive || exit 1
+if [ "$ARENA_BRANCH" = "master" ]; then
+    # the snapshots are always built with the latest version of submodules
+    git submodule foreach git pull origin master
+fi
 
 #Always bump git commit, it is only used to version-stamp binaries
 ARENA_GIT_VERSION=`git log|head -1|awk '{print $2}'`
@@ -93,20 +105,20 @@ cd ..
 for plugin in "$PLUGINDIR"/*.ofx.bundle; do
     cd "$plugin/Contents/Libraries"
     for lib in lib*.dylib; do
-	if [ -f "../../../../Frameworks/$lib" ]; then
-	    rm "$lib"
-	else
-	    mv "$lib" "../../../../Frameworks/$lib"
-	fi
-	ln -sf "../../../../Frameworks/$lib" "$lib"
+        if [ -f "../../../../Frameworks/$lib" ]; then
+            rm "$lib"
+        else
+            mv "$lib" "../../../../Frameworks/$lib"
+        fi
+        ln -sf "../../../../Frameworks/$lib" "$lib"
     done
     if [ "$COMPILER" = "gcc" ]; then # use gcc's libraries everywhere
-	for l in gcc_s.1 gomp.1 stdc++.6; do
-	    lib=lib${l}.dylib
-	    for deplib in "$plugin"/Contents/MacOS/*.ofx "$plugin"/Contents/Libraries/lib*dylib ; do
-		install_name_tool -change /usr/lib/$lib @executable_path/../Frameworks/$lib $deplib
-	    done
-	done
+        for l in gcc_s.1 gomp.1 stdc++.6; do
+            lib=lib${l}.dylib
+            for deplib in "$plugin"/Contents/MacOS/*.ofx "$plugin"/Contents/Libraries/lib*dylib ; do
+                install_name_tool -change /usr/lib/$lib @executable_path/../Frameworks/$lib $deplib
+            done
+        done
     fi
 done
 
@@ -115,6 +127,10 @@ done
 #cd openfx-opencv || exit 1
 #git checkout "$CV_BRANCH" || exit 1
 #git submodule update -i --recursive || exit 1
+#if [ "$CV_BRANCH" = "master" ]; then
+#    # the snapshots are always built with the latest version of submodules
+#    git submodule foreach git pull origin master
+#fi
 
 #Always bump git commit, it is only used to version-stamp binaries
 #CV_GIT_VERSION=`git log|head -1|awk '{print $2}'`

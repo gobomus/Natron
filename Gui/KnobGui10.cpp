@@ -42,7 +42,9 @@ KnobGui::onCreateMasterOnGroupActionTriggered()
     boost::shared_ptr<NodeCollection> collec = isEffect->getNode()->getGroup();
     NodeGroup* isCollecGroup = dynamic_cast<NodeGroup*>(collec.get());
     assert(isCollecGroup);
-    createDuplicateOnNode(isCollecGroup,true);
+    if (isCollecGroup) {
+        createDuplicateOnNode(isCollecGroup, true);
+    }
 }
 
 void
@@ -679,7 +681,7 @@ KnobGui::setEnabledSlot()
     }
     boost::shared_ptr<KnobI> knob = getKnob();
     if (_imp->descriptionLabel) {
-        _imp->descriptionLabel->setEnabled( knob->isEnabled(0) );
+        _imp->descriptionLabel->setReadOnly( !knob->isEnabled(0) );
     }
     if ( knob->getHolder()->getApp() ) {
         for (int i = 0; i < knob->getDimension(); ++i) {

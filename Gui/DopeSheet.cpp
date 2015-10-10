@@ -390,7 +390,10 @@ boost::shared_ptr<DSKnob> DopeSheet::mapNameItemToDSKnob(QTreeWidgetItem *knobTr
 {
     boost::shared_ptr<DSKnob> ret;
 
-    boost::shared_ptr<DSNode>dsNode = findParentDSNode(knobTreeItem);
+    boost::shared_ptr<DSNode> dsNode = findParentDSNode(knobTreeItem);
+    if (!dsNode) {
+        return ret;
+    }
     const DSTreeItemKnobMap& knobRows = dsNode->getItemKnobMap();
 
     DSTreeItemKnobMap::const_iterator clickedDSKnob = knobRows.find(knobTreeItem);
@@ -551,7 +554,11 @@ DopeSheetSelectionModel *DopeSheet::getSelectionModel() const
     return _imp->selectionModel;
 }
 
-
+DopeSheetEditor*
+DopeSheet::getEditor() const
+{
+    return _imp->editor;
+}
 
 void DopeSheet::deleteSelectedKeyframes()
 {
@@ -665,9 +672,9 @@ void DopeSheet::trimReaderLeft(const boost::shared_ptr<DSNode> &reader, double n
     assert(originalFrameRangeKnob);
 
     
-    int firstFrame = firstFrameKnob->getGuiValue();
-    int lastFrame = lastFrameKnob->getGuiValue();
-    int originalFirstFrame = originalFrameRangeKnob->getGuiValue();
+    int firstFrame = firstFrameKnob->getValue();
+    int lastFrame = lastFrameKnob->getValue();
+    int originalFirstFrame = originalFrameRangeKnob->getValue();
     
     newFirstFrame = std::max((double)newFirstFrame, (double)originalFirstFrame);
     newFirstFrame = std::min((double)lastFrame, newFirstFrame);
@@ -690,9 +697,9 @@ void DopeSheet::trimReaderRight(const boost::shared_ptr<DSNode> &reader, double 
     Knob<int> *originalFrameRangeKnob = dynamic_cast<Knob<int> *>(node->getKnobByName(kReaderParamNameOriginalFrameRange).get());
     assert(originalFrameRangeKnob);
 
-    int firstFrame = firstFrameKnob->getGuiValue();
-    int lastFrame = lastFrameKnob->getGuiValue();
-    int originalLastFrame = originalFrameRangeKnob->getGuiValue(1);
+    int firstFrame = firstFrameKnob->getValue();
+    int lastFrame = lastFrameKnob->getValue();
+    int originalLastFrame = originalFrameRangeKnob->getValue(1);
     
     newLastFrame = std::min((double)newLastFrame, (double)originalLastFrame);
     newLastFrame = std::max((double)firstFrame, newLastFrame);
@@ -719,10 +726,10 @@ DopeSheet::canSlipReader(const boost::shared_ptr<DSNode> &reader) const
     ///Slipping means moving the timeOffset parameter by dt and moving firstFrame and lastFrame by -dt
     ///dt is clamped (firstFrame-originalFirstFrame) and (originalLastFrame-lastFrame)
     
-    int currentFirstFrame = firstFrameKnob->getGuiValue();
-    int currentLastFrame = lastFrameKnob->getGuiValue();
-    int originalFirstFrame = originalFrameRangeKnob->getGuiValue(0);
-    int originalLastFrame = originalFrameRangeKnob->getGuiValue(1);
+    int currentFirstFrame = firstFrameKnob->getValue();
+    int currentLastFrame = lastFrameKnob->getValue();
+    int originalFirstFrame = originalFrameRangeKnob->getValue(0);
+    int originalLastFrame = originalFrameRangeKnob->getValue(1);
     
     if ((currentFirstFrame - originalFirstFrame) == 0 && (currentLastFrame - originalLastFrame) == 0) {
         return false;
@@ -744,10 +751,10 @@ void DopeSheet::slipReader(const boost::shared_ptr<DSNode> &reader, double dt)
     ///Slipping means moving the timeOffset parameter by dt and moving firstFrame and lastFrame by -dt
     ///dt is clamped (firstFrame-originalFirstFrame) and (originalLastFrame-lastFrame)
 
-    int currentFirstFrame = firstFrameKnob->getGuiValue();
-    int currentLastFrame = lastFrameKnob->getGuiValue();
-    int originalFirstFrame = originalFrameRangeKnob->getGuiValue(0);
-    int originalLastFrame = originalFrameRangeKnob->getGuiValue(1);
+    int currentFirstFrame = firstFrameKnob->getValue();
+    int currentLastFrame = lastFrameKnob->getValue();
+    int originalFirstFrame = originalFrameRangeKnob->getValue(0);
+    int originalLastFrame = originalFrameRangeKnob->getValue(1);
     
     dt = std::min(dt, (double)(currentFirstFrame - originalFirstFrame));
     dt = std::max(dt, (double)(currentLastFrame - originalLastFrame));
@@ -1379,7 +1386,7 @@ DSNodePrivate::~DSNodePrivate()
 
 void DSNodePrivate::initGroupNode()
 {
-    boost::shared_ptr<NodeGui> node = nodeGui.lock();
+   /* boost::shared_ptr<NodeGui> node = nodeGui.lock();
     if (!node) {
         return;
     }
@@ -1396,10 +1403,10 @@ void DSNodePrivate::initGroupNode()
         NodePtr subNode = (*it);
         boost::shared_ptr<NodeGui> subNodeGui = boost::dynamic_pointer_cast<NodeGui>(subNode->getNodeGui());
 
-        if (!subNodeGui->getSettingPanel() || !subNodeGui->isSettingsPanelVisible()) {
+        if (!subNodeGui || !subNodeGui->getSettingPanel() || !subNodeGui->isSettingsPanelVisible()) {
             continue;
         }
-    }
+    }*/
 }
 
 DSNode::DSNode(DopeSheet *model,

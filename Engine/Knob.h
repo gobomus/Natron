@@ -16,8 +16,8 @@
  * along with Natron.  If not, see <http://www.gnu.org/licenses/gpl-2.0.html>
  * ***** END LICENSE BLOCK ***** */
 
-#ifndef NATRON_ENGINE_KNOB_H_
-#define NATRON_ENGINE_KNOB_H_
+#ifndef NATRON_ENGINE_KNOB_H
+#define NATRON_ENGINE_KNOB_H
 
 // ***** BEGIN PYTHON BLOCK *****
 // from <https://docs.python.org/3/c-api/intro.html#include-files>:
@@ -217,6 +217,11 @@ public:
         Q_EMIT descriptionChanged();
     }
     
+    void s_evaluateOnChangeChanged(bool value)
+    {
+        Q_EMIT evaluateOnChangeChanged(value);
+    }
+    
 public Q_SLOTS:
 
     /**
@@ -241,6 +246,8 @@ public Q_SLOTS:
 
     
 Q_SIGNALS:
+    
+    void evaluateOnChangeChanged(bool value);
     
     ///emitted whenever setAnimationLevel is called. It is meant to notify
     ///openfx params whether it is auto-keying or not.
@@ -397,6 +404,7 @@ public:
      **/
     virtual bool hasModifications() const = 0;
     virtual bool hasModifications(int dimension) const = 0;
+    virtual bool hasModificationsForSerialization() const = 0;
     virtual void computeHasModifications() = 0;
 
     /**
@@ -426,7 +434,7 @@ public:
      * @brief Called by setValue to refresh the GUI, call the instanceChanged action on the plugin and
      * evaluate the new value (cause a render).
      **/
-    virtual void evaluateValueChange(int dimension,Natron::ValueChangedReasonEnum reason) = 0;
+    virtual void evaluateValueChange(int dimension, int time, Natron::ValueChangedReasonEnum reason) = 0;
 
     /**
      * @brief Copies all the values, animations and extra data the other knob might have
@@ -477,7 +485,7 @@ public:
     /**
      * @brief Must return the curve used by the GUI of the parameter
      **/
-    virtual boost::shared_ptr<Curve> getGuiCurve(int dimension) const = 0;
+    virtual boost::shared_ptr<Curve> getGuiCurve(int dimension,bool byPassMaster = false) const = 0;
 
     virtual double random(double time, unsigned int seed) const = 0;
     virtual double random(double min = 0.,double max = 1.) const = 0;
@@ -628,6 +636,7 @@ public:
      **/
     virtual bool onKeyFrameSet(SequenceTime time,int dimension) = 0;
     virtual bool onKeyFrameSet(SequenceTime time,const KeyFrame& key,int dimension) = 0;
+    virtual bool setKeyFrame(const KeyFrame& key,int dimension,Natron::ValueChangedReasonEnum reason) = 0;
 
     /**
      * @brief Called when the current time of the timeline changes.
@@ -760,26 +769,36 @@ public:
      * @brief Enables/disables user interaction with the given dimension.
      **/
     virtual void setEnabled(int dimension,bool b) = 0;
+    virtual void setDefaultEnabled(int dimension,bool b) = 0;
 
     /**
      * @brief Is the dimension enabled ?
      **/
     virtual bool isEnabled(int dimension) const = 0;
+    virtual bool isDefaultEnabled(int dimension) const = 0;
 
     /**
      * @brief Convenience function, same as calling setEnabled(int,bool) for all dimensions.
      **/
     virtual void setAllDimensionsEnabled(bool b) = 0;
+    virtual void setDefaultAllDimensionsEnabled(bool b) = 0;
 
     /**
      * @brief Set the knob visible/invisible on the GUI representing it.
      **/
     virtual void setSecret(bool b) = 0;
+    virtual void setSecretByDefault(bool b) = 0;
 
     /**
      * @brief Is the knob visible to the user ?
      **/
     virtual bool getIsSecret() const = 0;
+    virtual bool getDefaultIsSecret() const = 0;
+    
+    /**
+     * @brief Returns true if a knob is secret because it is either itself secret or one of its parent, recursively
+     **/
+    virtual bool getIsSecretRecursive() const = 0;
 
     /**
      * @biref This is called to notify the gui that the knob shouldn't be editable.
@@ -939,7 +958,10 @@ public:
      * is listening to the values/keyframes of "this". It could be call addSlave but it will also be use for expressions.
      **/
     virtual void addListener(bool isExpression,int fromExprDimension, int thisDimension, const boost::shared_ptr<KnobI>& knob) = 0;
+    
+private:
     virtual void removeListener(KnobI* knob) = 0;
+public:
 
     virtual bool useNativeOverlayHandle() const { return false; }
 
@@ -1110,7 +1132,7 @@ public:
     virtual void blockValueChanges() OVERRIDE FINAL;
     virtual void unblockValueChanges() OVERRIDE FINAL;
     virtual bool isValueChangesBlocked() const OVERRIDE FINAL WARN_UNUSED_RETURN;
-    virtual void evaluateValueChange(int dimension,Natron::ValueChangedReasonEnum reason) OVERRIDE FINAL;
+    virtual void evaluateValueChange(int dimension,int time, Natron::ValueChangedReasonEnum reason) OVERRIDE FINAL;
     
     virtual double random(double time,unsigned int seed) const OVERRIDE FINAL WARN_UNUSED_RETURN;
     virtual double random(double min = 0., double max = 1.) const OVERRIDE FINAL WARN_UNUSED_RETURN;
@@ -1178,10 +1200,16 @@ public:
     virtual bool isSeparatorActivated() const OVERRIDE FINAL WARN_UNUSED_RETURN;
     virtual void setSpacingBetweenItems(int spacing) OVERRIDE FINAL;
     virtual void setEnabled(int dimension,bool b) OVERRIDE FINAL;
+    virtual void setDefaultEnabled(int dimension,bool b) OVERRIDE FINAL;
     virtual bool isEnabled(int dimension) const OVERRIDE FINAL;
+    virtual bool isDefaultEnabled(int dimension) const OVERRIDE FINAL WARN_UNUSED_RETURN;
     virtual void setAllDimensionsEnabled(bool b) OVERRIDE FINAL;
+    virtual void setDefaultAllDimensionsEnabled(bool b) OVERRIDE FINAL;
     virtual void setSecret(bool b) OVERRIDE FINAL;
+    virtual void setSecretByDefault(bool b) OVERRIDE FINAL;
     virtual bool getIsSecret() const OVERRIDE FINAL WARN_UNUSED_RETURN;
+    virtual bool getIsSecretRecursive() const OVERRIDE FINAL WARN_UNUSED_RETURN;
+    virtual bool getDefaultIsSecret() const OVERRIDE FINAL WARN_UNUSED_RETURN;
     virtual void setIsFrozen(bool frozen) OVERRIDE FINAL;
     virtual void setDirty(bool d) OVERRIDE FINAL;
     virtual void setName(const std::string & name) OVERRIDE FINAL;
@@ -1218,7 +1246,7 @@ public:
     
     virtual bool hasModifications() const OVERRIDE FINAL WARN_UNUSED_RETURN;
     virtual bool hasModifications(int dimension) const OVERRIDE FINAL WARN_UNUSED_RETURN;
-    
+    virtual bool hasModificationsForSerialization() const OVERRIDE FINAL WARN_UNUSED_RETURN;
 private:
     
 
@@ -1342,7 +1370,7 @@ protected:
     
     void guiCurveCloneInternalCurve(Natron::CurveChangeReason curveChangeReason,int dimension, Natron::ValueChangedReasonEnum reason);
     
-    virtual boost::shared_ptr<Curve> getGuiCurve(int dimension) const OVERRIDE FINAL;
+    virtual boost::shared_ptr<Curve> getGuiCurve(int dimension,bool byPassMaster = false) const OVERRIDE FINAL;
     
     void setGuiCurveHasChanged(int dimension,bool changed);
 
@@ -1412,12 +1440,6 @@ public:
      **/
     T getValue(int dimension = 0,bool clampToMinMax = true) const WARN_UNUSED_RETURN;
     
-    /**
-     * @brief Same as getValue() except that this value will return always the value that is displayed on the Gui. 
-     * whereas the actual value returned by getValue() might not have taken into account the recent modifications
-     * due to the node being rendering.
-     **/
-    T getGuiValue(int dimension = 0) const WARN_UNUSED_RETURN;
 
     /**
      * @brief Returns the value of the knob at the given time and for the given dimension.
@@ -1439,8 +1461,8 @@ private:
                          bool copyState) OVERRIDE FINAL;
 
 public:
-  
-       /**
+    
+    /**
      * @brief Set the value of the knob at the given time and for the given dimension with the given reason.
      * @param newKey[out] The keyframe that was added if the return value is true.
      * @returns True if a keyframe was successfully added, false otherwise.
@@ -1451,7 +1473,8 @@ public:
                         Natron::ValueChangedReasonEnum reason,
                         KeyFrame* newKey);
 
-
+    virtual bool setKeyFrame(const KeyFrame& key,int dimension,Natron::ValueChangedReasonEnum reason) OVERRIDE FINAL;
+    
     /**
      * @brief Set the value of the knob in the given dimension with the given reason.
      * @param newKey If not NULL and the animation level of the knob is Natron::eAnimationLevelInterpolatedValue
@@ -1643,7 +1666,7 @@ public:
     T getValueFromMasterAt(double time, int dimension, KnobI* master) const;
     T getValueFromMaster(int dimension, KnobI* master, bool clamp) const;
     
-    bool getValueFromCurve(double time,int dimension, bool byPassMaster, bool clamp, T* ret) const;
+    bool getValueFromCurve(double time,int dimension, bool useGuiCurve, bool byPassMaster, bool clamp, T* ret) const;
     
 protected:
     
@@ -1973,7 +1996,7 @@ public:
     
     bool isEvaluationBlocked() const;
 
-    void appendValueChange(KnobI* knob,Natron::ValueChangedReasonEnum reason);
+    void appendValueChange(KnobI* knob,int time, Natron::ValueChangedReasonEnum reason);
     
     bool isSetValueCurrentlyPossible() const;
     
@@ -2053,6 +2076,8 @@ public:
      **/
     void beginChanges();
     void endChanges(bool discardEverything = false);
+    
+    ChangesList getKnobChanges() const;
 
     /**
      * @brief The virtual portion of notifyProjectBeginValuesChanged(). This is called by the project
@@ -2269,4 +2294,4 @@ boost::shared_ptr<K> KnobHolder::createKnob(const std::string &description,
     return Natron::createKnob<K>(this, description,dimension);
 }
 
-#endif // NATRON_ENGINE_KNOB_H_
+#endif // NATRON_ENGINE_KNOB_H

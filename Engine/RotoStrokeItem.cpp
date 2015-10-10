@@ -244,8 +244,9 @@ evaluateStrokeInternal(const KeyFrameSet& xCurve,
         
         pressure = std::max(pressure,pressureAffectsSize ? std::max(press1, press2) : 1.);
         
-        for (double t = 0.; t <= 1.; t += incr) {
-            
+
+        for (int i = 0; i < nbPointsPerSegment; ++i) {
+            double t = incr * i;
             Point p;
             p.x = Bezier::bezierEval(x1, x1pr, x2pl, x2, t);
             p.y = Bezier::bezierEval(y1, y1pr, y2pl, y2, t);
@@ -262,13 +263,22 @@ evaluateStrokeInternal(const KeyFrameSet& xCurve,
             p.y /= pot;
             points->push_back(std::make_pair(p, pi));
         }
+       
     } // for (; xNext != xCurve.end() ;++xNext, ++yNext, ++pNext) {
     if (bbox) {
-        bbox->x1 -= halfBrushSize * pressure;
-        bbox->x2 += halfBrushSize * pressure;
-        bbox->y1 -= halfBrushSize * pressure;
-        bbox->y2 += halfBrushSize * pressure;
+        double padding = std::max(0.5,halfBrushSize) * pressure;
+        bbox->x1 -= padding;
+        bbox->x2 += padding;
+        bbox->y1 -= padding;
+        bbox->y2 += padding;
     }
+}
+
+bool
+RotoStrokeItem::isEmpty() const
+{
+    QMutexLocker k(&itemMutex);
+    return _imp->strokes.empty();
 }
 
 void
@@ -374,9 +384,11 @@ RotoStrokeItem::appendPoint(bool newStroke, const RotoPoint& p)
         QMutexLocker k(&itemMutex);
         if (_imp->finished) {
             _imp->finished = false;
-            if (newStroke) {
-                setNodesThreadSafetyForRotopainting();
-            }
+            
+        }
+        
+        if (newStroke) {
+            setNodesThreadSafetyForRotopainting();
         }
         
         if (_imp->strokeDotPatterns.empty()) {
@@ -597,7 +609,8 @@ RotoStrokeItem::getMostRecentStrokeChangesSinceAge(int time,int lastAge,
                                                    std::list<std::pair<Natron::Point,double> >* points,
                                                    RectD* pointsBbox,
                                                    RectD* wholeStrokeBbox,
-                                                   int* newAge)
+                                                   int* newAge,
+                                                   int* strokeIndex)
 {
     
     Transform::Matrix3x3 transform;
@@ -614,6 +627,7 @@ RotoStrokeItem::getMostRecentStrokeChangesSinceAge(int time,int lastAge,
     QMutexLocker k(&itemMutex);
     assert(!_imp->strokes.empty());
     RotoStrokeItemPrivate::StrokeCurves& stroke = _imp->strokes.back();
+    *strokeIndex = (int)_imp->strokes.size() - 1;
     assert(stroke.xCurve->getKeyFramesCount() == stroke.yCurve->getKeyFramesCount() && stroke.xCurve->getKeyFramesCount() == stroke.pressureCurve->getKeyFramesCount());
     
   
@@ -638,13 +652,14 @@ RotoStrokeItem::getMostRecentStrokeChangesSinceAge(int time,int lastAge,
     std::advance(xIt, lastAge);
     std::advance(yIt, lastAge);
     std::advance(pIt, lastAge);
-    
     *newAge = (int)xCurve.size() - 1;
-    
-    for (; xIt != xCurve.end(); ++xIt,++yIt,++pIt) {
-        realX.insert(*xIt);
-        realY.insert(*yIt);
-        realP.insert(*pIt);
+
+    if (lastAge != (int)(xCurve.size() -1)) {
+        for (; xIt != xCurve.end(); ++xIt,++yIt,++pIt) {
+            realX.insert(*xIt);
+            realY.insert(*yIt);
+            realP.insert(*pIt);
+        }
     }
     
     if (realX.empty()) {

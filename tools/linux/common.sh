@@ -24,11 +24,11 @@
 
 #THE FOLLOWING CAN BE MODIFIED TO CONFIGURE RELEASE BUILDS
 #----------------------------------------------------------
-NATRON_GIT_TAG=tags/2.0.0
-IOPLUG_GIT_TAG=tags/2.0.0
-MISCPLUG_GIT_TAG=tags/2.0.0
-ARENAPLUG_GIT_TAG=tags/2.0.0
-CVPLUG_GIT_TAG=tags/2.0.0
+NATRON_GIT_TAG=tags/2.0.0-RC1
+IOPLUG_GIT_TAG=tags/2.0.0-RC1
+MISCPLUG_GIT_TAG=tags/2.0.0-RC1
+ARENAPLUG_GIT_TAG=tags/2.0.0-RC1
+CVPLUG_GIT_TAG=tags/2.0.0-RC1
 #----------------------------------------------------------
 
 
@@ -49,13 +49,12 @@ PACKAGES=$NATRON_PKG,$CORELIBS_PKG,$PROFILES_PKG,$IOPLUG_PKG,$MISCPLUG_PKG,$AREN
 GIT_OCIO_CONFIG_TAR=https://github.com/MrKepzie/OpenColorIO-Configs/archive/Natron-v2.0.tar.gz
 COLOR_PROFILES_VERSION=2.0.0
 
-# bump number on bugfixes
-CORELIBS_VERSION=2.0.0
+# bump timestamp on SDK changes, important!
+CORELIBS_VERSION=20151006
 
 # SDK
 #
 
-SDK_LIC=GPL #enable gpl features (ffmpeg)
 SDK_VERSION=CY2015
 SDK_PATH=/opt
 PYV=2 # Python 2 or 3
@@ -72,7 +71,7 @@ INC_PATH=$CWD/include
 
 # Keep existing tag, else make a new one
 if [ -z "$TAG" ]; then
-  TAG=`date +%Y%m%d%H%M`
+    TAG=`date +%Y%m%d%H%M`
 fi
 
 OS=`uname -o`
@@ -82,10 +81,10 @@ REPO_DIR_PREFIX=$CWD/build_
 # Repo settings
 #
 if [ -f $CWD/repo.sh ]; then
-  source $CWD/repo.sh
+    source $CWD/repo.sh
 else
-  REPO_DEST=localhost
-  REPO_URL=http://localhost
+    REPO_DEST=localhost
+    REPO_URL=http://localhost
 fi
 
 #Dist repo is expected to be layout as such:
@@ -137,8 +136,8 @@ OCIO_TAR=OpenColorIO-1.0.9.tar.gz
 OIIO_TAR=oiio-Release-1.5.18.tar.gz
 PYSIDE_TAR=pyside-qt4.8+1.2.2.tar.bz2
 SHIBOK_TAR=shiboken-1.2.2.tar.bz2
-#LIBXML_TAR=libxml2-2.9.2.tar.gz (#25)
-#LIBXSL_TAR=libxslt-1.1.28.tar.gz (#25)
+LIBXML_TAR=libxml2-2.9.2.tar.gz
+LIBXSLT_TAR=libxslt-1.1.28.tar.gz
 SEE_TAR=SeExpr-rel-1.0.1.tar.gz
 LIBRAW_TAR=LibRaw-0.16.0.tar.gz
 PIX_TAR=pixman-0.32.6.tar.gz
@@ -159,31 +158,47 @@ DIRAC_TAR=schroedinger-1.0.11.tar.gz
 ORC_TAR=orc-0.4.23.tar.xz
 X264_TAR=x264-snapshot-20150725-2245.tar.bz2 #GPL-only
 XVID_TAR=xvidcore-1.3.4.tar.gz #GPL-only
+ICU_TAR=icu4c-55_1-src.tgz
+ZLIB_TAR=zlib-1.2.8.tar.gz
+EXPAT_TAR=expat-2.1.0.tar.gz
+FCONFIG_TAR=fontconfig-2.10.2.tar.gz
+FTYPE_TAR=freetype-2.4.11.tar.gz
+FFI_TAR=libffi-3.2.1.tar.gz
+GLIB_TAR=glib-2.42.2.tar.xz
+BUZZ_TAR=harfbuzz-0.9.40.tar.bz2
+PANGO_TAR=pango-1.37.0.tar.xz
+BZIP_TAR=bzip2-1.0.6.tar.gz
+CROCO_TAR=libcroco-0.6.8.tar.xz
+SVG_TAR=librsvg-2.40.10.tar.xz
+GDK_TAR=gdk-pixbuf-2.32.1.tar.xz
 
-# GCC version
-#
-# Check for minimal required GCC version (4.9)
-
-GCC_V=`gcc --version | awk '/gcc /{print $0;exit 0;}' | awk '{print $3}' | sed 's#\.# #g' | awk '{print $2}'`
-if [ "$GCC_V" -lt "9" ]; then
-  echo "Wrong GCC version. Run ${INC_PATH}/scripts/setup-gcc.sh"
-  exit 1
-fi
+TC_GCC=4.8.5
+TC_MPC=1.0.1
+TC_MPFR=3.1.3
+TC_GMP=5.1.3
+TC_ISL=0.11.1
+TC_CLOOG=0.18.0
+GCC_TAR=gcc-$TC_GCC.tar.bz2
+MPC_TAR=mpc-$TC_MPC.tar.gz
+MPFR_TAR=mpfr-$TC_MPFR.tar.bz2
+GMP_TAR=gmp-$TC_GMP.tar.bz2
+ISL_TAR=isl-$TC_ISL.tar.bz2
+CLOOG_TAR=cloog-$TC_CLOOG.tar.gz
 
 # Linux version
 #
 # Check distro and version. CentOS/RHEL 6.4 only!
 
 if [ ! -f /etc/redhat-release ]; then
-  echo "Wrong distro, stupid :P"
-  exit 1
-else
-  RHEL_MAJOR=`cat /etc/redhat-release | cut -d" " -f3 | cut -d "." -f1`
-  RHEL_MINOR=`cat /etc/redhat-release | cut -d" " -f3 | cut -d "." -f2`
-  if [ "$RHEL_MAJOR" != "6" ] || [ "$RHEL_MINOR" != "4" ]; then
-    echo "Wrong distro version, 6.4 only at the moment!"
+    echo "Wrong distro, stupid :P"
     exit 1
-  fi
+else
+    RHEL_MAJOR=`cat /etc/redhat-release | cut -d" " -f3 | cut -d "." -f1`
+    RHEL_MINOR=`cat /etc/redhat-release | cut -d" " -f3 | cut -d "." -f2`
+    if [ "$RHEL_MAJOR" != "6" ] || [ "$RHEL_MINOR" != "4" ]; then
+        echo "Wrong distro version, 6.4 only at the moment!"
+        exit 1
+    fi
 fi
 
 # Arch
@@ -191,19 +206,19 @@ fi
 # Default build flags
 
 if [ -z "$ARCH" ]; then
-  case `uname -m` in
-    i?86) export ARCH=i686 ;;
-       *) export ARCH=`uname -m` ;;
-  esac
+    case `uname -m` in
+        i?86) export ARCH=i686 ;;
+        *) export ARCH=`uname -m` ;;
+    esac
 fi
 if [ "$ARCH" = "i686" ]; then
-  BF="-O2 -march=i686 -mtune=i686"
-  BIT=32
+    BF="-O2 -march=i686 -mtune=i686"
+    BIT=32
 elif [ "$ARCH" = "x86_64" ]; then
-  BF="-O2 -fPIC"
-  BIT=64
+    BF="-O2 -fPIC"
+    BIT=64
 else
-  BF="-O2"
+    BF="-O2"
 fi
 
 # Threads
@@ -214,3 +229,10 @@ if [ -z "$MKJOBS" ]; then
     MKJOBS=$DEFAULT_MKJOBS
 fi
 
+# License
+#
+#
+if [ "$NATRON_LICENSE" != "GPL" ] && [ "$NATRON_LICENSE" != "COMMERCIAL" ]; then
+    echo "Please select a License with NATRON_LICENSE=(GPL,COMMERCIAL)"
+    exit 1
+fi

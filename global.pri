@@ -19,24 +19,7 @@
 CONFIG += warn_on no_keywords
 DEFINES += OFX_EXTENSIONS_NUKE OFX_EXTENSIONS_TUTTLE OFX_EXTENSIONS_VEGAS OFX_SUPPORTS_PARAMETRIC OFX_EXTENSIONS_TUTTLE OFX_EXTENSIONS_NATRON OFX_SUPPORTS_OPENGLRENDER
 DEFINES += OFX_SUPPORTS_MULTITHREAD
-#DEFINES += OFX_SUPPORTS_DIALOG
-
-contains(CONFIG,trace_ofx_actions) {
-    DEFINES += OFX_DEBUG_ACTIONS
-}
-
-contains(CONFIG,trace_ofx_params) {
-    DEFINES += OFX_DEBUG_PARAMETERS
-}
-
-contains(CONFIG,trace_ofx_properties) {
-    DEFINES += OFX_DEBUG_PROPERTIES
-}
-
-log{
-    DEFINES += NATRON_LOG
-}
-
+DEFINES += OFX_SUPPORTS_DIALOG
 
 *g++* | *clang* {
 #See https://bugreports.qt.io/browse/QTBUG-35776 we cannot use
@@ -70,12 +53,50 @@ CONFIG(debug, debug|release){
 
 
 CONFIG(noassertions) {
-   DEFINES *= NDEBUG QT_NO_DEBUG
+#See http://doc.qt.io/qt-4.8/debug.html
+   DEFINES *= NDEBUG QT_NO_DEBUG QT_NO_DEBUG_OUTPUT QT_NO_WARNING_OUTPUT
 }
 
 CONFIG(snapshot) {
-   #message("Compiling an official snapshot (should only be done on the Natron build farm)")
-   DEFINES += NATRON_SNAPSHOT
+   message("Compiling an official snapshot (should only be done on the Natron build farm).")
+   DEFINES += NATRON_CONFIG_SNAPSHOT
+   CONFIG_SET=1
+}
+CONFIG(alpha) {
+	message("Compiling Natron in alpha version (should only be done on the Natron build farm).")
+	DEFINES += NATRON_CONFIG_ALPHA
+	CONFIG_SET=1
+}
+CONFIG(beta) {
+	message("Compiling Natron in beta version (should only be done on the Natron build farm).")
+	DEFINES += NATRON_CONFIG_BETA
+	CONFIG_SET=1
+}
+CONFIG(RC) {
+	message("Compiling Natron in release candidate version (should only be done on the Natron build farm).")
+	DEFINES += NATRON_CONFIG_RC
+	CONFIG_SET=1
+}
+CONFIG(stable) {
+	message("Compiling Natron in stable version (should only be done on the Natron build farm).")
+	DEFINES += NATRON_CONFIG_STABLE
+	CONFIG_SET=1
+}
+CONFIG(custombuild) {
+	message("Compiling Natron with a custom version for $$BUILD_USER_NAME")
+	#BUILD_USER_NAME should be defined reflecting the user name that should appear in Natron.
+        DEFINES += NATRON_CUSTOM_BUILD_USER_TOKEN=\"$$BUILD_USER_NAME\"
+	CONFIG_SET=1
+}
+
+isEmpty(CONFIG_SET) {
+        message("You did not select a config option for the build. Defaulting to Devel. You can choose among  (snapshot | alpha | beta | RC | stable | custombuild). For custombuild you need to define the environment variable BUILD_USER_NAME. Also you can give a revision number to the version of Natron with the environment variable BUILD_NUMBER (e.g: RC1, RC2 etc...)")
+}
+
+isEmpty(BUILD_NUMBER) {
+	DEFINES += NATRON_BUILD_NUMBER=0
+} else {
+	DEFINES += NATRON_BUILD_NUMBER=$$BUILD_NUMBER
 }
 
 # https://qt.gitorious.org/qt-creator/qt-creator/commit/b48ba2c25da4d785160df4fd0d69420b99b85152
@@ -179,7 +200,8 @@ macx {
   LIBS += -framework CoreServices
 }
 
-!macx|!universal {
+# CONFIG+=nopch disables precompiled headers
+!nopch:!macx|!universal {
   # precompiled headers don't work with multiple archs
   CONFIG += precompile_header
 }
@@ -260,6 +282,7 @@ unix {
              LIBS +=  $$system(pkg-config --variable=libdir cairo)/libcairo.a
          }
          LIBS += -ldl
+         QMAKE_LFLAGS += '-Wl,-rpath,\'\$$ORIGIN/../lib\',-z,origin'
      } else {
          cairo:     PKGCONFIG += cairo
      }
@@ -286,6 +309,7 @@ unix {
      pyside:   PKGCONFIG += pyside
      # The following hack also works with Homebrew if pyside is installed with option --with-python3
      macx {
+       QMAKE_LFLAGS += '-Wl,-rpath,\'@loader_path/../Frameworks\''
        shiboken {
          PKGCONFIG -= shiboken
          PYSIDE_PKG_CONFIG_PATH = $$system($$PYTHON_CONFIG --prefix)/lib/pkgconfig

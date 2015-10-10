@@ -25,6 +25,7 @@
 #include "ProjectGui.h"
 
 #include <fstream>
+#include <stdexcept>
 
 CLANG_DIAG_OFF(deprecated)
 CLANG_DIAG_OFF(uninitialized)
@@ -507,8 +508,12 @@ ProjectGui::load<boost::archive::xml_iarchive>(boost::archive::xml_iarchive & ar
     if (!pythonPanels.empty()) {
         std::string appID = _gui->getApp()->getAppIDString();
         std::string err;
-        bool ok = Natron::interpretPythonScript("app = " + appID + "\n", &err, 0);
+        std::string script = "app = " + appID + '\n';
+        bool ok = Natron::interpretPythonScript(script, &err, 0);
         assert(ok);
+        if (!ok) {
+            throw std::runtime_error("ProjectGui::load(): interpretPythonScript("+script+") failed!");
+        }
     }
     for (std::list<boost::shared_ptr<PythonPanelSerialization> >::const_iterator it = pythonPanels.begin(); it != pythonPanels.end(); ++it) {
         std::string script = (*it)->pythonFunction + "()\n";
@@ -566,13 +571,19 @@ std::list<boost::shared_ptr<NodeGui> > ProjectGui::getVisibleNodes() const
 }
 
 void
-ProjectGui::registerNewColorPicker(boost::shared_ptr<KnobColor> knob)
+ProjectGui::clearColorPickers()
 {
     while (!_colorPickersEnabled.empty()) {
         _colorPickersEnabled.front()->setPickingEnabled(false);
     }
-        
+    
     _colorPickersEnabled.clear();
+}
+
+void
+ProjectGui::registerNewColorPicker(boost::shared_ptr<KnobColor> knob)
+{
+    clearColorPickers();
     _colorPickersEnabled.push_back(knob);
 }
 

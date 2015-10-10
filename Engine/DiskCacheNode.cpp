@@ -69,7 +69,7 @@ DiskCacheNode::addSupportedBitDepth(std::list<Natron::ImageBitDepthEnum>* depths
 }
 
 bool
-DiskCacheNode::shouldCacheOutput(bool /*isFrameVaryingOrAnimated*/) const
+DiskCacheNode::shouldCacheOutput(bool /*isFrameVaryingOrAnimated*/,double /*time*/, int /*view*/) const
 {
     return true;
 }
@@ -99,7 +99,7 @@ DiskCacheNode::initializeKnobs()
     firstFrame->setEvaluateOnChange(false);
     firstFrame->setAddNewLine(false);
     firstFrame->setDefaultValue(1);
-    firstFrame->setSecret(true);
+    firstFrame->setSecretByDefault(true);
     page->addKnob(firstFrame);
     _imp->firstFrame = firstFrame;
     
@@ -109,7 +109,7 @@ DiskCacheNode::initializeKnobs()
     lastFrame->disableSlider();
     lastFrame->setEvaluateOnChange(false);
     lastFrame->setDefaultValue(100);
-    lastFrame->setSecret(true);
+    lastFrame->setSecretByDefault(true);
     page->addKnob(lastFrame);
     _imp->lastFrame = lastFrame;
     
@@ -235,7 +235,9 @@ DiskCacheNode::render(const RenderActionArgs& args)
         RectI roiPixel;
         
         ImagePtr srcImg = getImage(0, args.time, args.originalScale, args.view, NULL, *it, bitdepth, par, false, &roiPixel);
-        
+        if (!srcImg) {
+            return eStatusFailed;
+        }
         if (srcImg->getMipMapLevel() != output.second->getMipMapLevel()) {
             throw std::runtime_error("Host gave image with wrong scale");
         }

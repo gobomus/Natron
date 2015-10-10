@@ -32,6 +32,25 @@
 #include "Engine/NodeGroup.h"
 #include "Engine/RotoWrapper.h"
 
+UserParamHolder::UserParamHolder()
+: _holder(0)
+{
+    
+}
+
+UserParamHolder::UserParamHolder(KnobHolder* holder)
+: _holder(holder)
+{
+    
+}
+
+void
+UserParamHolder::setHolder(KnobHolder* holder)
+{
+    assert(!_holder);
+    _holder = holder;
+}
+
 Effect::Effect(const boost::shared_ptr<Natron::Node>& node)
 : Group()
 , UserParamHolder(node ? node->getLiveInstance() : 0)
@@ -106,7 +125,7 @@ Effect::disconnectInput(int inputNumber)
 Effect*
 Effect::getInput(int inputNumber) const
 {
-    boost::shared_ptr<Natron::Node> node = _node->getInput(inputNumber);
+    boost::shared_ptr<Natron::Node> node = _node->getRealInput(inputNumber);
     if (node) {
         return new Effect(node);
     }
@@ -144,7 +163,7 @@ Effect::getInputLabel(int inputNumber)
     try {
         return _node->getInputLabel(inputNumber);
     } catch (const std::exception& e) {
-        std::cout << e.what() << std::endl;
+        _node->getApp()->appendToScriptEditor(e.what());
     }
     return std::string();
 }
@@ -298,12 +317,14 @@ void
 Effect::beginChanges()
 {
     _node->getLiveInstance()->beginChanges();
+    _node->beginInputEdition();
 }
 
 void
 Effect::endChanges()
 {
     _node->getLiveInstance()->endChanges();
+    _node->endInputEdition(true);
 }
 
 IntParam*
@@ -563,7 +584,7 @@ Effect::getRotoContext() const
 }
 
 RectD
-Effect::getRegionOfDefinition(int time,int view) const
+Effect::getRegionOfDefinition(double time,int view) const
 {
     RectD rod;
     if (!_node || !_node->getLiveInstance()) {

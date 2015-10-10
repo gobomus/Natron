@@ -16,8 +16,8 @@
  * along with Natron.  If not, see <http://www.gnu.org/licenses/gpl-2.0.html>
  * ***** END LICENSE BLOCK ***** */
 
-#ifndef NATRON_ENGINE_FRAMEENTRY_H_
-#define NATRON_ENGINE_FRAMEENTRY_H_
+#ifndef NATRON_ENGINE_FRAMEENTRY_H
+#define NATRON_ENGINE_FRAMEENTRY_H
 
 // ***** BEGIN PYTHON BLOCK *****
 // from <https://docs.python.org/3/c-api/intro.html#include-files>:
@@ -98,13 +98,13 @@ public:
 
     void getOriginalTiles(std::list<boost::shared_ptr<Natron::Image> >* ret) const
     {
-        QMutexLocker k(&_entryLock);
+        QReadLocker k(&_entryLock);
         _params->getOriginalTiles(ret);
     }
 
     void addOriginalTile(const boost::shared_ptr<Natron::Image>& image)
     {
-        QMutexLocker k(&_entryLock);
+        QWriteLocker k(&_entryLock);
         _params->addOriginalTile(image);
     }
 
@@ -119,4 +119,4 @@ private:
 }
 
 
-#endif // NATRON_ENGINE_FRAMEENTRY_H_
+#endif // NATRON_ENGINE_FRAMEENTRY_H

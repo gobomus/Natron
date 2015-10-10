@@ -130,12 +130,8 @@ AppInstance::AppInstance(int appID)
 
 AppInstance::~AppInstance()
 {
-    appPTR->removeInstance(_imp->_appID);
 
-    ///Clear nodes now, not in the destructor of the project as
-    ///deleting nodes might reference the project.
-    _imp->_currentProject->clearNodes(false);
-    _imp->_currentProject->discardAppPointer();
+    appPTR->removeInstance(_imp->_appID);
 }
 
 void
@@ -155,7 +151,7 @@ AppInstance::isCreatingNode() const
 void
 AppInstance::checkForNewVersion() const
 {
-    FileDownloader* downloader = new FileDownloader( QUrl(NATRON_LAST_VERSION_URL) );
+    FileDownloader* downloader = new FileDownloader( QUrl(NATRON_LAST_VERSION_URL), false );
     QObject::connect( downloader, SIGNAL( downloaded() ), this, SLOT( newVersionCheckDownloaded() ) );
     QObject::connect( downloader, SIGNAL( error() ), this, SLOT( newVersionCheckError() ) );
 
@@ -464,12 +460,9 @@ AppInstance::load(const CLArgs& cl)
             }
         }
         
-        try {
-            startWritersRendering(cl.areRenderStatsEnabled(),writersWork);
-        } catch (const std::exception& e) {
-            getProject()->removeLockFile();
-            throw e;
-        }
+       
+        startWritersRendering(cl.areRenderStatsEnabled(),writersWork);
+       
         
         
         
@@ -635,25 +628,38 @@ AppInstance::createNodeFromPythonModule(Natron::Plugin* plugin,
     {
         FlagSetter fs(true,&_imp->_creatingGroup,&_imp->creatingGroupMutex);
         
-        CreateNodeArgs groupArgs(PLUGINID_NATRON_GROUP,
-                                 "",
-                                 -1,-1,
-                                 true, //< autoconnect
-                                 INT_MIN,INT_MIN,
-                                 true, //< push undo/redo command
-                                 true, // add to project
-                                 true,
-                                 QString(),
-                                 CreateNodeArgs::DefaultValuesList(),
-                                 group);
-        NodePtr containerNode = createNode(groupArgs);
+        NodePtr containerNode;
+        if (!requestedByLoad) {
+            CreateNodeArgs groupArgs(PLUGINID_NATRON_GROUP,
+                                     "",
+                                     -1,-1,
+                                     true, //< autoconnect
+                                     INT_MIN,INT_MIN,
+                                     true, //< push undo/redo command
+                                     true, // add to project
+                                     true,
+                                     QString(),
+                                     CreateNodeArgs::DefaultValuesList(),
+                                     group);
+            containerNode = createNode(groupArgs);
+            std::string containerName;
+            group->initNodeName(plugin->getLabelWithoutSuffix().toStdString(),&containerName);
+            containerNode->setScriptName(containerName);
+            
+            
+        } else {
+            
+            LoadNodeArgs groupArgs(PLUGINID_NATRON_GROUP,
+                                   "",
+                                   -1,-1,
+                                   &serialization,
+                                   false,
+                                   group);
+            containerNode = loadNode(groupArgs);
+        }
         if (!containerNode) {
             return containerNode;
         }
-        std::string containerName;
-        group->initNodeName(plugin->getLabelWithoutSuffix().toStdString(),&containerName);
-        containerNode->setScriptName(containerName);
-        
         
         
         std::string containerFullySpecifiedName = containerNode->getFullyQualifiedName();
@@ -677,22 +683,16 @@ AppInstance::createNodeFromPythonModule(Natron::Plugin* plugin,
             }
             node = containerNode;
         }
-        if (requestedByLoad) {
-            containerNode->loadKnobs(serialization);
-            if (!serialization.isNull() && !serialization.getUserPages().empty()) {
-                containerNode->getLiveInstance()->refreshKnobs();
-            }
-            node = containerNode;
-        }
         
         if (!moduleName.isEmpty()) {
             setGroupLabelIDAndVersion(node,modulePath, moduleName);
         }
+     
         
     } //FlagSetter fs(true,&_imp->_creatingGroup,&_imp->creatingGroupMutex);
     
     ///Now that the group is created and all nodes loaded, autoconnect the group like other nodes.
-    onGroupCreationFinished(node);
+    onGroupCreationFinished(node, requestedByLoad);
     
     return node;
 }
@@ -733,16 +733,19 @@ static int isEntitledForInspector(Natron::Plugin* plugin,OFX::Host::ImageEffect:
         return 0;
     }
     
-    const std::map<std::string,OFX::Host::ImageEffect::ClipDescriptor*>& clips = ofxDesc->getClips();
+    const std::vector<OFX::Host::ImageEffect::ClipDescriptor*>& clips = ofxDesc->getClipsByOrder();
     int nInputs = 0;
-    for (std::map<std::string,OFX::Host::ImageEffect::ClipDescriptor*>::const_iterator it = clips.begin(); it != clips.end(); ++it) {
-        if (!it->second->isOutput()) {
-            
-            if (!it->second->isOptional()) {
-                return 0;
+    bool firstInput = true;
+    for (std::vector<OFX::Host::ImageEffect::ClipDescriptor*>::const_iterator it = clips.begin(); it != clips.end(); ++it) {
+        if (!(*it)->isOutput()) {
+            if (!(*it)->isOptional()) {
+                if (!firstInput) {                    // allow one non-optional input
+                    return 0;
+                }
             } else {
                 ++nInputs;
             }
+            firstInput = false;
         }
     }
     if (nInputs > 4) {
@@ -773,16 +776,17 @@ AppInstance::createNodeInternal(const QString & pluginID,
     
     boost::shared_ptr<Node> node;
     Natron::Plugin* plugin = 0;
-
     QString findId;
     //Roto has moved to a built-in plugin
-    if (userEdited && pluginID == PLUGINID_OFX_ROTO) {
+    if ((userEdited || requestedByLoad) &&
+        ((!_imp->_projectCreatedWithLowerCaseIDs && pluginID == PLUGINID_OFX_ROTO) || (_imp->_projectCreatedWithLowerCaseIDs && pluginID == QString(PLUGINID_OFX_ROTO).toLower()))) {
         findId = PLUGINID_NATRON_ROTO;
     } else {
         findId = pluginID;
     }
+    
     try {
-        plugin = appPTR->getPluginBinary(findId,majorVersion,minorVersion,_imp->_projectCreatedWithLowerCaseIDs);
+        plugin = appPTR->getPluginBinary(findId,majorVersion,minorVersion,_imp->_projectCreatedWithLowerCaseIDs && requestedByLoad);
     } catch (const std::exception & e1) {
         
         ///Ok try with the old Ids we had in Natron prior to 1.0
@@ -956,7 +960,7 @@ AppInstance::createNodeInternal(const QString & pluginID,
             }
             
             ///Now that the group is created and all nodes loaded, autoconnect the group like other nodes.
-            onGroupCreationFinished(node);
+            onGroupCreationFinished(node, false);
         }
     }
     
@@ -996,7 +1000,7 @@ AppInstance::loadNode(const LoadNodeArgs & args)
                               INT_MIN,INT_MIN,
                               false,
                               true,
-                              true,
+                              false,
                               true,
                               QString(),
                               CreateNodeArgs::DefaultValuesList(),
@@ -1111,7 +1115,7 @@ AppInstance::startWritersRendering(bool enableRenderStats,const std::list<Render
            
             if (!node) {
                 std::string exc(writerName);
-                exc.append(tr(" does not belong to the project file. Please enter a valid writer name.").toStdString());
+                exc.append(tr(" does not belong to the project file. Please enter a valid Write node script-name.").toStdString());
                 throw std::invalid_argument(exc);
             } else {
                 if ( !node->isOutputNode() ) {
@@ -1230,7 +1234,15 @@ AppInstance::clearAllLastRenderedImages()
     }
 }
 
-
+void
+AppInstance::aboutToQuit()
+{
+    ///Clear nodes now, not in the destructor of the project as
+    ///deleting nodes might reference the project.
+    _imp->_currentProject->closeProject(true);
+    _imp->_currentProject->discardAppPointer();
+    
+}
 
 void
 AppInstance::quit()
@@ -1332,7 +1344,13 @@ AppInstance::execOnProjectCreatedCallback()
     
     std::vector<std::string> args;
     std::string error;
-    Natron::getFunctionArguments(cb, &error, &args);
+    try {
+        Natron::getFunctionArguments(cb, &error, &args);
+    } catch (const std::exception& e) {
+        appendToScriptEditor(std::string("Failed to run onProjectCreated callback: ")
+                                                         + e.what());
+        return;
+    }
     if (!error.empty()) {
         appendToScriptEditor("Failed to run onProjectCreated callback: " + error);
         return;
@@ -1378,17 +1396,17 @@ AppInstance::getAppIDString() const
 }
 
 void
-AppInstance::onGroupCreationFinished(const boost::shared_ptr<Natron::Node>& /*node*/)
+AppInstance::onGroupCreationFinished(const boost::shared_ptr<Natron::Node>& node,bool requestedByLoad)
 {
-//    assert(node);
-//    if (!_imp->_currentProject->isLoadingProject()) {
-//        NodeGroup* isGrp = dynamic_cast<NodeGroup*>(node->getLiveInstance());
-//        assert(isGrp);
-//        if (!isGrp) {
-//            return;
-//        }
-//        isGrp->forceGetClipPreferencesOnAllTrees();
-//    }
+    assert(node);
+    if (!_imp->_currentProject->isLoadingProject() && !requestedByLoad) {
+        NodeGroup* isGrp = dynamic_cast<NodeGroup*>(node->getLiveInstance());
+        assert(isGrp);
+        if (!isGrp) {
+            return;
+        }
+        isGrp->forceComputeInputDependentDataOnAllTrees();
+    }
 }
 
 bool

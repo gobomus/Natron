@@ -27,6 +27,7 @@
 
 #include <cassert>
 #include <cmath>
+#include <stdexcept>
 
 #include <QtCore/QDebug>
 
@@ -288,16 +289,12 @@ ViewerTab::discardInternalNodePointer()
     _imp->viewerNode = 0;
 }
 
-Gui*
-ViewerTab::getGui() const
-{
-    return _imp->gui;
-}
-
 
 void
 ViewerTab::onAutoContrastChanged(bool b)
 {
+    _imp->autoContrast->setDown(b);
+    _imp->autoContrast->setChecked(b);
     _imp->gainSlider->setEnabled(!b);
     _imp->gainBox->setEnabled(!b);
     _imp->toggleGainButton->setEnabled(!b);
@@ -437,7 +434,7 @@ ViewerTab::removeTrackerInterface(NodeGui* n,
     std::map<NodeGui*,TrackerGui*>::iterator it = _imp->trackerNodes.find(n);
 
     if ( it != _imp->trackerNodes.end() ) {
-        if (!_imp->gui) {
+        if (!getGui()) {
             if (permanently) {
                 delete it->second;
             }
@@ -488,7 +485,7 @@ void
 ViewerTab::createRotoInterface(NodeGui* n)
 {
     RotoGui* roto = new RotoGui( n,this,getRotoGuiSharedData(n) );
-    QObject::connect( roto,SIGNAL( selectedToolChanged(int) ),_imp->gui,SLOT( onRotoSelectedToolChanged(int) ) );
+    QObject::connect( roto,SIGNAL( selectedToolChanged(int) ),getGui(),SLOT( onRotoSelectedToolChanged(int) ) );
     std::pair<std::map<NodeGui*,RotoGui*>::iterator,bool> ret = _imp->rotoNodes.insert( std::make_pair(n,roto) );
 
     assert(ret.second);
@@ -691,7 +688,7 @@ ViewerTab::getRotoGuiSharedData(NodeGui* node) const
 void
 ViewerTab::onRotoEvaluatedForThisViewer()
 {
-    _imp->gui->onViewerRotoEvaluated(this);
+    getGui()->onViewerRotoEvaluated(this);
 }
 
 void
@@ -727,12 +724,9 @@ ViewerTab::onTrackerNodeGuiSettingsPanelClosed(bool closed)
 }
 
 void
-ViewerTab::notifyAppClosing()
+ViewerTab::notifyGuiClosing()
 {
-    _imp->gui = 0;
     _imp->timeLineGui->discardGuiPointer();
-    _imp->app = 0;
-    
     for (std::map<NodeGui*,RotoGui*>::iterator it = _imp->rotoNodes.begin() ; it!=_imp->rotoNodes.end(); ++it) {
         it->second->notifyGuiClosing();
     }
@@ -759,7 +753,7 @@ ViewerTab::onCompositingOperatorChangedInternal(Natron::ViewerCompositingOperato
         _imp->infoWidget[1]->show();
     }
     
-    _imp->viewer->updateGL();
+    _imp->viewer->update();
 }
 
 void
@@ -819,6 +813,7 @@ ViewerTab::setCompositingOperator(Natron::ViewerCompositingOperatorEnum op)
         comboIndex = 4;
         break;
     default:
+        throw std::logic_error("ViewerTab::setCompositingOperator(): unknown operator");
         break;
     }
     Natron::ViewerCompositingOperatorEnum oldOp;
@@ -875,6 +870,27 @@ ViewerTab::setInputB(int index)
     }
     _imp->secondInputImage->setCurrentIndex(comboboxIndex);
     _imp->viewerNode->setInputB(index);
+    _imp->viewerNode->renderCurrentFrame(true);
+}
+
+void
+ViewerTab::switchInputAAndB()
+{
+    QString aIndex = _imp->firstInputImage->getCurrentIndexText();
+    QString bIndex = _imp->secondInputImage->getCurrentIndexText();
+    _imp->firstInputImage->setCurrentText_no_emit(bIndex);
+    _imp->secondInputImage->setCurrentText_no_emit(aIndex);
+    
+    int inputAIndex = -1,inputBIndex = -1;
+    for (ViewerTabPrivate::InputNamesMap::iterator it = _imp->inputNamesMap.begin(); it != _imp->inputNamesMap.end(); ++it) {
+        if (it->second.name == aIndex) {
+            inputAIndex = it->first;
+        } else if (it->second.name == bIndex) {
+            inputBIndex = it->first;
+        }
+    }
+    _imp->viewerNode->setInputA(inputBIndex);
+    _imp->viewerNode->setInputB(inputAIndex);
     _imp->viewerNode->renderCurrentFrame(true);
 }
 
@@ -986,9 +1002,41 @@ ViewerTab::connectToInput(int inputNb)
 {
     InspectorNode* node = dynamic_cast<InspectorNode*>(getInternalNode()->getNode().get());
     assert(node);
-    getInternalNode()->setActivateInputChangeRequestedFromViewer(true);
+    bool isAutoWipeEnabled = appPTR->getCurrentSettings()->isAutoWipeEnabled();
+    if (isAutoWipeEnabled) {
+        getInternalNode()->setActivateInputChangeRequestedFromViewer(true);
+    }
     node->setActiveInputAndRefresh(inputNb, true);
-    getInternalNode()->setActivateInputChangeRequestedFromViewer(false);
+    if (isAutoWipeEnabled) {
+        getInternalNode()->setActivateInputChangeRequestedFromViewer(false);
+    }
+}
+
+void
+ViewerTab::onAvailableComponentsChanged()
+{
+    refreshLayerAndAlphaChannelComboBox();
+
+}
+
+void
+ViewerTab::refreshFPSBoxFromClipPreferences()
+{
+    int activeInputs[2];
+    
+    _imp->viewerNode->getActiveInputs(activeInputs[0], activeInputs[1]);
+    EffectInstance* input0 = activeInputs[0] != - 1 ? _imp->viewerNode->getInput(activeInputs[0]) : 0;
+    if (input0) {
+        _imp->fpsBox->setValue(input0->getPreferredFrameRate());
+    } else {
+        EffectInstance* input1 = activeInputs[1] != - 1 ? _imp->viewerNode->getInput(activeInputs[1]) : 0;
+        if (input1) {
+            _imp->fpsBox->setValue(input1->getPreferredFrameRate());
+        } else {
+            _imp->fpsBox->setValue(getGui()->getApp()->getProjectFrameRate());
+        }
+    }
+    onSpinboxFpsChangedInternal(_imp->fpsBox->value());
 }
 
 void
@@ -996,22 +1044,6 @@ ViewerTab::onClipPreferencesChanged()
 {
     //Try to set auto-fps if it is enabled
     if (_imp->fpsLocked) {
-        
-        int activeInputs[2];
-        
-        _imp->viewerNode->getActiveInputs(activeInputs[0], activeInputs[1]);
-        EffectInstance* input0 = activeInputs[0] != - 1 ? _imp->viewerNode->getInput(activeInputs[0]) : 0;
-        if (input0) {
-            _imp->fpsBox->setValue(input0->getPreferredFrameRate());
-        } else {
-            EffectInstance* input1 = activeInputs[1] != - 1 ? _imp->viewerNode->getInput(activeInputs[1]) : 0;
-            if (input1) {
-                _imp->fpsBox->setValue(input1->getPreferredFrameRate());
-            } else {
-                _imp->fpsBox->setValue(getGui()->getApp()->getProjectFrameRate());
-            }
-        }
-        onSpinboxFpsChanged(_imp->fpsBox->value());
+        refreshFPSBoxFromClipPreferences();
     }
-    refreshLayerAndAlphaChannelComboBox();
 }

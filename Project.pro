@@ -30,9 +30,7 @@ SUBDIRS += \
     Tests \
     App
 
-gbreakpad {
-    SUBDIRS += BreakpadClient CrashReporter CrashReporterCLI
-}
+gbreakpad: SUBDIRS += BreakpadClient CrashReporter CrashReporterCLI
 
 OTHER_FILES += \
     Global/Enums.h \

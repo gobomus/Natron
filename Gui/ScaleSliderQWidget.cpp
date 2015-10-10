@@ -33,12 +33,14 @@ GCC_DIAG_UNUSED_PRIVATE_FIELD_OFF
 GCC_DIAG_UNUSED_PRIVATE_FIELD_ON
 #include <QtGui/QMouseEvent>
 #include <QtGui/QPainter>
+#include <QApplication>
 #include <QStyleOption>
 
 #include "Engine/Settings.h"
 #include "Engine/Image.h"
 #include "Engine/KnobTypes.h"
 
+#include "Gui/GuiMacros.h"
 #include "Gui/ticks.h"
 #include "Gui/GuiApplicationManager.h"
 #include "Gui/GuiDefines.h"
@@ -212,23 +214,75 @@ ScaleSliderQWidget::mouseReleaseEvent(QMouseEvent* e)
 }
 
 void
+ScaleSliderQWidget::focusInEvent(QFocusEvent* e)
+{
+    Qt::KeyboardModifiers mod = qApp->keyboardModifiers();
+    if (mod.testFlag(Qt::ControlModifier)) {
+        _imp->ctrlDown = true;
+    }
+    if (mod.testFlag(Qt::ShiftModifier)) {
+        _imp->shiftDown = true;
+    }
+    zoomRange();
+    QWidget::focusInEvent(e);
+}
+
+void
+ScaleSliderQWidget::focusOutEvent(QFocusEvent* e)
+{
+    _imp->ctrlDown = false;
+    _imp->shiftDown = false;
+    zoomRange();
+    QWidget::focusOutEvent(e);
+}
+
+void
+ScaleSliderQWidget::zoomRange()
+{
+    if (_imp->ctrlDown) {
+        double scale = _imp->shiftDown ? 100. : 10.;
+        assert(_imp->currentZoom != 0);
+        double effectiveZoom = scale / _imp->currentZoom;
+        _imp->currentZoom = scale;
+        _imp->zoomCtx.zoomx(_imp->value, 0, effectiveZoom);
+    } else {
+        _imp->zoomCtx.zoomx(_imp->value, 0, 1. / _imp->currentZoom);
+        _imp->currentZoom = 1.;
+        centerOn(_imp->minimum, _imp->maximum);
+    }
+    update();
+}
+
+void
+ScaleSliderQWidget::enterEvent(QEvent* e)
+{
+    if (Gui::isFocusStealingPossible()) {
+        setFocus();
+    }
+    QWidget::enterEvent(e);
+}
+
+void
+ScaleSliderQWidget::leaveEvent(QEvent* e)
+{
+    if (hasFocus()) {
+        clearFocus();
+    }
+    QWidget::leaveEvent(e);
+}
+
+void
 ScaleSliderQWidget::keyPressEvent(QKeyEvent* e)
 {
     if (e->key() == Qt::Key_Control) {
         _imp->ctrlDown = true;
-        double scale = _imp->shiftDown ? 100. : 10.;
-        _imp->currentZoom = scale;
-        _imp->zoomCtx.zoomx(_imp->value, 0, scale);
-        update();
+        zoomRange();
     } else if (e->key() == Qt::Key_Shift) {
         _imp->shiftDown = true;
-        if (_imp->ctrlDown) {
-            _imp->zoomCtx.zoomx(_imp->value, 0, 10.);
-            _imp->currentZoom = 100.;
-        }
-        update();
+        zoomRange();
+    } else {
+        QWidget::keyPressEvent(e);
     }
-    QWidget::keyPressEvent(e);
 }
 
 double
@@ -241,7 +295,7 @@ void
 ScaleSliderQWidget::setAltered(bool b)
 {
     _imp->altered = b;
-    repaint();
+    update();
 }
 
 bool
@@ -255,24 +309,13 @@ ScaleSliderQWidget::keyReleaseEvent(QKeyEvent* e)
 {
     if (e->key() == Qt::Key_Control) {
         _imp->ctrlDown = false;
-        _imp->zoomCtx.zoomx(_imp->value, 0, 1. / _imp->currentZoom);
-        _imp->currentZoom = 1.;
-        centerOn(_imp->minimum, _imp->maximum);
-        return;
+        zoomRange();
     } else if (e->key() == Qt::Key_Shift) {
         _imp->shiftDown = false;
-        if (_imp->ctrlDown) {
-            _imp->zoomCtx.zoomx(_imp->value, 0, 1. / 10.);
-            _imp->currentZoom = 10.;
-        } else {
-            _imp->zoomCtx.zoomx(_imp->value, 0, 1. / _imp->currentZoom);
-            centerOn(_imp->minimum, _imp->maximum);
-            _imp->currentZoom = 1.;
-            return;
-        }
-        update();
+        zoomRange();
+    } else {
+        QWidget::keyReleaseEvent(e);
     }
-    QWidget::keyReleaseEvent(e);
 }
 
 
@@ -364,6 +407,7 @@ ScaleSliderQWidget::paintEvent(QPaintEvent* /*e*/)
     QStyleOption opt;
     opt.init(this);
     QPainter p(this);
+    p.setOpacity(1);
     style()->drawPrimitive(QStyle::PE_Widget, &opt, &p, this);
 
     double txtR,txtG,txtB;
@@ -416,6 +460,10 @@ ScaleSliderQWidget::paintEvent(QPaintEvent* /*e*/)
     double smallTickSize;
     bool half_tick;
     ticks_size(range_min, range_max, rangePixel, smallestTickSizePixel, &smallTickSize, &half_tick);
+    if (_imp->dataType == eDataTypeInt && smallTickSize < 1.) {
+        smallTickSize = 1.;
+        half_tick = false;
+    }
     int m1, m2;
     const int ticks_max = 1000;
     double offset;
@@ -436,13 +484,19 @@ ScaleSliderQWidget::paintEvent(QPaintEvent* /*e*/)
         pen.setWidthF(1.9);
         p.setPen(pen);
 
-        QPointF tickBottomPos = _imp->zoomCtx.toWidgetCoordinates(value, tickBottom);
-        QPointF tickTopPos = _imp->zoomCtx.toWidgetCoordinates(value, tickTop);
+        // for Int slider, because smallTickSize is at least 1, isFloating can never be true
+        bool isFloating = std::abs(std::floor(0.5 + value) - value) != 0.;
+        assert(!(_imp->dataType == eDataTypeInt && isFloating));
+        bool renderFloating = _imp->dataType == eDataTypeDouble || !isFloating;
 
-        p.drawLine(tickBottomPos,tickTopPos);
+        if (renderFloating) {
+            QPointF tickBottomPos = _imp->zoomCtx.toWidgetCoordinates(value, tickBottom);
+            QPointF tickTopPos = _imp->zoomCtx.toWidgetCoordinates(value, tickTop);
 
-        bool renderText = _imp->dataType == eDataTypeDouble || std::abs(std::floor(0.5 + value) - value) == 0.;
-        if (renderText && tickSize > minTickSizeText) {
+            p.drawLine(tickBottomPos,tickTopPos);
+        }
+
+        if (renderFloating && tickSize > minTickSizeText) {
             const int tickSizePixel = rangePixel * tickSize / range;
             const QString s = QString::number(value);
             const int sSizePixel =  fontM.width(s);
@@ -473,8 +527,19 @@ ScaleSliderQWidget::paintEvent(QPaintEvent* /*e*/)
     p.setPen(_imp->sliderColor);
     p.fillRect(sliderBottomLeft.x(), sliderBottomLeft.y(), sliderTopRight.x() - sliderBottomLeft.x(), sliderTopRight.y() - sliderBottomLeft.y(),_imp->sliderColor);
 
-    /*draw a black rect around the slider for contrast*/
-    p.setPen(Qt::black);
+    /*draw a black rect around the slider for contrast or orange when focused*/
+	if (!hasFocus()) {
+		p.setPen(Qt::black);
+	} else {
+        QPen pen = p.pen();
+        pen.setColor(QColor(243,137,0));
+        QVector<qreal> dashStyle;
+        qreal space = 2;
+        dashStyle << 1 << space;
+        pen.setDashPattern(dashStyle);
+        p.setOpacity(0.8);
+        p.setPen(pen);
+	}
 
     p.drawLine( sliderBottomLeft.x(),sliderBottomLeft.y(),sliderBottomLeft.x(),sliderTopRight.y() );
     p.drawLine( sliderBottomLeft.x(),sliderTopRight.y(),sliderTopRight.x(),sliderTopRight.y() );
@@ -494,6 +559,6 @@ ScaleSliderQWidget::setUseLineColor(bool use, const QColor& color)
 {
     _imp->useLineColor = use;
     _imp->lineColor = color;
-    repaint();
+    update();
 }
 

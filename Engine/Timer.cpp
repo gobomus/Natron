@@ -156,6 +156,9 @@ Timer::waitUntilNextFrameIsDue ()
 
     double timeSinceLastFrame =  now.tv_sec  - _lastFrameTime.tv_sec +
                                (now.tv_usec - _lastFrameTime.tv_usec) * 1e-6f;
+    if (timeSinceLastFrame < 0) {
+        timeSinceLastFrame = 0;
+    }
     double timeToSleep = spf - timeSinceLastFrame - _timingError;
 
     #ifdef _WIN32
@@ -277,7 +280,8 @@ TimeLapse::getTimeSinceCreation() const
 
 }
 
-TimeLapseReporter::TimeLapseReporter()
+TimeLapseReporter::TimeLapseReporter(const std::string& message)
+: message(message)
 {
     gettimeofday(&prev, 0);
 }
@@ -289,5 +293,5 @@ TimeLapseReporter::~TimeLapseReporter()
     
     double dt =  now.tv_sec  - prev.tv_sec +
     (now.tv_usec - prev.tv_usec) * 1e-6f;
-    std::cout << dt << std::endl;
+    std::cout << message << ' ' << dt << std::endl;
 }

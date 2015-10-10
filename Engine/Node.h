@@ -16,8 +16,8 @@
  * along with Natron.  If not, see <http://www.gnu.org/licenses/gpl-2.0.html>
  * ***** END LICENSE BLOCK ***** */
 
-#ifndef NATRON_ENGINE_NODE_H_
-#define NATRON_ENGINE_NODE_H_
+#ifndef NATRON_ENGINE_NODE_H
+#define NATRON_ENGINE_NODE_H
 
 // ***** BEGIN PYTHON BLOCK *****
 // from <https://docs.python.org/3/c-api/intro.html#include-files>:
@@ -44,6 +44,8 @@ CLANG_DIAG_ON(deprecated)
 #include "Engine/AppManager.h"
 #include "Global/KeySymbols.h"
 #include "Engine/ImageComponents.h"
+#include "Engine/CacheEntryHolder.h"
+
 
 #define NATRON_PARAMETER_PAGE_NAME_EXTRA "Node"
 #define NATRON_PARAMETER_PAGE_NAME_INFO "Info"
@@ -58,6 +60,9 @@ CLANG_DIAG_ON(deprecated)
 #define kEnablePreviewKnobName "enablePreview"
 #define kOutputChannelsKnobName "channels"
 
+#define kOfxMaskInvertParamName "maskInvert"
+#define kOfxMixParamName "mix"
+
 class AppInstance;
 class NodeSettingsPanel;
 class KnobI;
@@ -68,6 +73,7 @@ class NodeSerialization;
 class KnobSerialization;
 class KnobHolder;
 class OverlaySupport;
+class KnobChoice;
 class KnobDouble;
 class NodeGuiI;
 class RotoContext;
@@ -85,8 +91,11 @@ class LibraryBinary;
 
 class Node
     : public QObject, public boost::enable_shared_from_this<Natron::Node>
+    , public CacheEntryHolder
 {
+GCC_DIAG_SUGGEST_OVERRIDE_OFF
     Q_OBJECT
+GCC_DIAG_SUGGEST_OVERRIDE_ON
 
 public:
 
@@ -126,6 +135,8 @@ public:
               bool isPartOfProject,
               const QString& fixedName,
               const std::list<boost::shared_ptr<KnobSerialization> >& paramValues);
+    
+
 
     ///called by load() and OfxEffectInstance, do not call this!
     void loadKnobs(const NodeSerialization & serialization,bool updateKnobGui = false);
@@ -204,6 +215,7 @@ public:
      **/
     U64 getHashValue() const;
 
+    virtual std::string getCacheID() const OVERRIDE FINAL;
 
     /**
      * @brief Forwarded to the live effect instance
@@ -225,8 +237,7 @@ public:
     /*Returns in viewers the list of all the viewers connected to this node*/
     void hasViewersConnected(std::list<ViewerInstance* >* viewers) const;
 
-    /*Returns in writers the list of all the writers connected to this node*/
-    void hasWritersConnected(std::list<Natron::OutputEffectInstance* >* writers) const;
+    void hasOutputNodesConnected(std::list<Natron::OutputEffectInstance* >* writers) const;
 
     /**
      * @brief Forwarded to the live effect instance
@@ -345,6 +356,8 @@ public:
      **/
     boost::shared_ptr<Node> getRealInput(int index) const;
     
+    boost::shared_ptr<Node> getRealGuiInput(int index) const;
+    
 private:
     
     boost::shared_ptr<Node> getInputInternal(bool useGuiInput, bool useGroupRedirections, int index) const;
@@ -422,7 +435,8 @@ public:
     /////////////////////ROTO-PAINT related functionnalities//////////////////////
     //////////////////////////////////////////////////////////////////////////////
     void updateLastPaintStrokeData(int newAge,const std::list<std::pair<Natron::Point,double> >& points,
-                                   const RectD& lastPointsBbox);
+                                   const RectD& lastPointsBbox,
+                                   int strokeIndex);
     
     //Used by nodes below the rotopaint tree to optimize the RoI
     void setLastPaintStrokeDataNoRotopaint(const RectD& lastStrokeBbox);
@@ -437,7 +451,7 @@ public:
     void getLastPaintStrokeRoD(RectD* pointsBbox) ;
     bool isLastPaintStrokeBitmapCleared() const;
     void clearLastPaintStrokeRoD();
-    void getLastPaintStrokePoints(int time,std::list<std::list<std::pair<Natron::Point,double> > >* strokes) const;
+    void getLastPaintStrokePoints(int time,std::list<std::list<std::pair<Natron::Point,double> > >* strokes, int* strokeIndex) const;
     boost::shared_ptr<Natron::Image> getOrRenderLastStrokeImage(unsigned int mipMapLevel,
                                                                 const RectI& roi,
                                                                 double par,
@@ -540,7 +554,7 @@ public:
     
     bool isUserSelected() const;
     
-    bool shouldCacheOutput(bool isFrameVaryingOrAnimated) const;
+    bool shouldCacheOutput(bool isFrameVaryingOrAnimated, double time, int view) const;
 
     /**
      * @brief If the session is a GUI session, then this function sets the position of the node on the nodegraph.
@@ -790,6 +804,10 @@ public:
      * do not respect the OpenFX specification.
      **/
     boost::shared_ptr<Natron::Image> getImageBeingRendered(int time,unsigned int mipMapLevel,int view);
+    
+    void beginInputEdition();
+    
+    void endInputEdition(bool triggerRender);
 
     void onInputChanged(int inputNb);
 
@@ -916,7 +934,6 @@ public:
 
     bool isForceCachingEnabled() const;
     
-    void restoreClipPreferencesRecursive(std::list<Natron::Node*>& markedNodes);
     
     /**
      * @brief Declares to Python all parameters as attribute of the variable representing this node.
@@ -1005,13 +1022,19 @@ public:
     
     void setPluginPythonModule(const std::string& pythonModule, unsigned int version);
     
+    bool hasPyPlugBeenEdited() const;
+    void setPyPlugEdited(bool edited);
+    
     std::string getPluginPythonModule() const;
     
     unsigned int getPluginPythonModuleVersion() const;
   
-    void refreshChannelSelectors(bool setValues);
+    //Returns true if changed
+    bool refreshChannelSelectors(bool setValues);
     
     bool getProcessChannel(int channelIndex) const;
+    
+    boost::shared_ptr<KnobChoice> getChannelSelectorKnob(int inputNb) const;
     
     bool getUserComponents(int inputNb,bool* processChannels,bool* isAll,Natron::ImageComponents *layer) const;
     
@@ -1025,9 +1048,43 @@ public:
 
     double getHostMixingValue(int time) const;
     
+    void removeAllImagesFromCacheWithMatchingIDAndDifferentKey(U64 nodeHashKey);
+    void removeAllImagesFromCache();
+    
+    bool isDraftModeUsed() const;
+    bool isInputRelatedDataDirty() const;
+    
+    void forceRefreshAllInputRelatedData();
+    
+    void markAllInputRelatedDataDirty();
+    
+    bool getSelectedLayer(int inputNb,std::string& layer) const;
+    
 private:
     
+    void refreshInputRelatedDataRecursiveInternal(std::list<Natron::Node*>& markedNodes);
+    
+    void refreshInputRelatedDataRecursive();
+    
+    void refreshAllInputRelatedData(bool canChangeValues);
+    
+    bool refreshMaskEnabledNess(int inpubNb);
+    
+    bool refreshLayersChoiceSecretness(int inpubNb);
+    
+    void markInputRelatedDataDirtyRecursive();
+    
+    void markInputRelatedDataDirtyRecursiveInternal(std::list<Natron::Node*>& markedNodes,bool recurse);
+    
+    bool refreshAllInputRelatedData(bool hasSerializationData,const std::vector<boost::shared_ptr<Natron::Node> >& inputs);
+    
+    bool refreshInputRelatedDataInternal(std::list<Natron::Node*>& markedNodes);
+    
+    bool refreshDraftFlagInternal(const std::vector<boost::shared_ptr<Natron::Node> >& inputs);
+    
     void setNameInternal(const std::string& name);
+    
+    void s_outputLayerChanged() { Q_EMIT outputLayerChanged(); }
 
 public Q_SLOTS:
 
@@ -1069,6 +1126,8 @@ public Q_SLOTS:
     void doComputeHashOnMainThread();
     
 Q_SIGNALS:
+    
+    void outputLayerChanged();
     
     void mustComputeHashOnMainThread();
 
@@ -1153,7 +1212,7 @@ private:
     
     void declareRotoPythonField();
 
-    
+    std::string makeCacheInfo() const;
     std::string makeInfoForInput(int inputNumber) const;
     
     void setNodeIsRenderingInternal(std::list<Natron::Node*>& markedNodes);
@@ -1247,4 +1306,4 @@ public:
 };
 
 
-#endif // NATRON_ENGINE_NODE_H_
+#endif // NATRON_ENGINE_NODE_H

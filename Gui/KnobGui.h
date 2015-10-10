@@ -16,8 +16,8 @@
  * along with Natron.  If not, see <http://www.gnu.org/licenses/gpl-2.0.html>
  * ***** END LICENSE BLOCK ***** */
 
-#ifndef NATRON_GUI_KNOBGUI_H_
-#define NATRON_GUI_KNOBGUI_H_
+#ifndef NATRON_GUI_KNOBGUI_H
+#define NATRON_GUI_KNOBGUI_H
 
 // ***** BEGIN PYTHON BLOCK *****
 // from <https://docs.python.org/3/c-api/intro.html#include-files>:
@@ -54,6 +54,7 @@ class QHBoxLayout; //used by KnobGui
 class QGridLayout;
 class QMenu;
 namespace Natron {
+class ClickableLabel;
 class Label;
 class EffectInstance;
 }
@@ -128,7 +129,7 @@ public:
 
     void createGUI(QGridLayout* containerLayout,
                    QWidget* fieldContainer,
-                   Natron::Label* label,
+                   Natron::ClickableLabel* label,
                    QHBoxLayout* layout,
                    bool isOnNewLine,
                    const std::vector< boost::shared_ptr< KnobI > > & knobsOnSameLine);
@@ -207,6 +208,32 @@ public:
         }
 
         return (int)ret;
+    }
+    
+    /*This function is used by KnobUndoCommand. Calling this in a onInternalValueChanged/valueChanged
+     signal/slot sequence can cause an infinite loop.*/
+    template<typename T>
+    void setValueAtTime(int dimension,
+                        const T & v,
+                        int time,
+                        KeyFrame* newKey,
+                        bool refreshGui,
+                        Natron::ValueChangedReasonEnum reason)
+    {
+        
+        Knob<T>* knob = dynamic_cast<Knob<T>*>( getKnob().get() );
+        assert(knob);
+        bool addedKey  = false;
+        if (knob) {
+            addedKey = knob->setValueAtTime(time,v,dimension,reason,newKey);
+        }
+        if ((knob) && reason == Natron::eValueChangedReasonUserEdited) {
+            assert(newKey);
+            setKeyframeMarkerOnTimeline( newKey->getTime() );
+        }
+        if (refreshGui) {
+            updateGUI(dimension);
+        }
     }
 
     virtual void swapOpenGLBuffers() OVERRIDE FINAL;
@@ -446,4 +473,4 @@ private:
 };
 
 
-#endif // NATRON_GUI_KNOBGUI_H_
+#endif // NATRON_GUI_KNOBGUI_H

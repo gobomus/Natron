@@ -17,8 +17,8 @@
  * ***** END LICENSE BLOCK ***** */
 
 
-#ifndef _Gui_GuiApplicationManager_h_
-#define _Gui_GuiApplicationManager_h_
+#ifndef Gui_GuiApplicationManager_h
+#define Gui_GuiApplicationManager_h
 
 
 // ***** BEGIN PYTHON BLOCK *****
@@ -83,8 +83,10 @@ struct GuiApplicationManagerPrivate;
 class GuiApplicationManager
     : public AppManager
 {
+GCC_DIAG_SUGGEST_OVERRIDE_OFF
     Q_OBJECT
-    
+GCC_DIAG_SUGGEST_OVERRIDE_ON
+
 public:
 
     GuiApplicationManager();
@@ -236,4 +238,4 @@ private:
     boost::scoped_ptr<GuiApplicationManagerPrivate> _imp;
 };
 
-#endif // _Gui_GuiApplicationManager_h_
+#endif // Gui_GuiApplicationManager_h

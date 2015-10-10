@@ -9,6 +9,7 @@ moc*.cpp
 build
 build32
 build64
+*build_*
 sed*
 *latex*
 DerivedData
@@ -228,3 +229,7 @@ CrashReporterCLI/NatronRendererCrashReporter
 *repo.sh*
 *local.sh*
 OpenColorIO-Configs
+PortIndex
+PortIndex.quick
+*.7z*
+*.exe*

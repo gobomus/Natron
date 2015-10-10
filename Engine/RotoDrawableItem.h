@@ -16,8 +16,8 @@
  * along with Natron.  If not, see <http://www.gnu.org/licenses/gpl-2.0.html>
  * ***** END LICENSE BLOCK ***** */
 
-#ifndef _Engine_RotoDrawableItem_h_
-#define _Engine_RotoDrawableItem_h_
+#ifndef Engine_RotoDrawableItem_h
+#define Engine_RotoDrawableItem_h
 
 // ***** BEGIN PYTHON BLOCK *****
 // from <https://docs.python.org/3/c-api/intro.html#include-files>:
@@ -39,6 +39,7 @@
 
 #include "Global/GlobalDefines.h"
 #include "Engine/FitCurve.h"
+#include "Engine/CacheEntryHolder.h"
 #include "Engine/RotoItem.h"
 
 CLANG_DIAG_OFF(deprecated-declarations)
@@ -101,6 +102,7 @@ struct Matrix3x3;
 struct RotoDrawableItemPrivate;
 class RotoDrawableItem
     : public RotoItem
+    , public CacheEntryHolder
 {
 GCC_DIAG_SUGGEST_OVERRIDE_OFF
     Q_OBJECT
@@ -231,6 +233,7 @@ public:
     void activateNodes();
     void disconnectNodes();
 
+    virtual std::string getCacheID() const OVERRIDE FINAL;
     
 Q_SIGNALS:
 
@@ -246,7 +249,6 @@ Q_SIGNALS:
 
 public Q_SLOTS:
     
-    void onRotoOutputChannelsChanged();
     void onRotoKnobChanged(int,int);
     
 protected:
@@ -269,4 +271,4 @@ private:
 
 
 
-#endif // _Engine_RotoDrawableItem_h_
+#endif // Engine_RotoDrawableItem_h

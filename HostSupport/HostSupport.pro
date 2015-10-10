@@ -19,12 +19,32 @@
 TARGET = HostSupport
 TEMPLATE = lib
 CONFIG += staticlib
-CONFIG += expat
 CONFIG -= qt
 
 include(../global.pri)
 include(../config.pri)
 
+!noexpat: CONFIG += expat
+ 
+contains(CONFIG,trace_ofx_actions) {
+    DEFINES += OFX_DEBUG_ACTIONS
+}
+
+contains(CONFIG,trace_ofx_params) {
+    DEFINES += OFX_DEBUG_PARAMETERS
+}
+
+contains(CONFIG,trace_ofx_properties) {
+    DEFINES += OFX_DEBUG_PROPERTIES
+}
+
+precompile_header {
+  #message("Using precompiled header")
+  # Use Precompiled headers (PCH)
+  # we specify PRECOMPILED_DIR, or qmake places precompiled headers in Natron/c++.pch, thus blocking the creation of the Unix executable
+  PRECOMPILED_DIR = pch
+  PRECOMPILED_HEADER = pch.h
+}
 
 #OpenFX C api includes and OpenFX c++ layer includes that are located in the submodule under /libs/OpenFX
 INCLUDEPATH += $$PWD/../libs/OpenFX/include
@@ -46,6 +66,26 @@ win32 {
 	CONFIG(64bit){
 		DEFINES *= WIN64
 	}
+}
+
+noexpat {
+    SOURCES += \
+    ../libs/OpenFX/HostSupport/expat-2.1.0/lib/xmlparse.c \
+    ../libs/OpenFX/HostSupport/expat-2.1.0/lib/xmltok.c \
+    ../libs/OpenFX/HostSupport/expat-2.1.0/lib/xmltok_impl.c \
+    
+    HEADERS += \
+        ../libs/OpenFX/HostSupport/expat-2.1.0/lib/expat.h \
+        ../libs/OpenFX/HostSupport/expat-2.1.0/lib/expat_external.h \
+        ../libs/OpenFX/HostSupport/expat-2.1.0/lib/ascii.h \
+        ../libs/OpenFX/HostSupport/expat-2.1.0/lib/xmltok.h \
+        ../libs/OpenFX/HostSupport/expat-2.1.0/lib/xmltok_impl.h \
+        ../libs/OpenFX/HostSupport/expat-2.1.0/lib/asciitab.h \
+        ../libs/OpenFX/HostSupport/expat-2.1.0/expat_config.h \
+
+    DEFINES += HAVE_EXPAT_CONFIG_H
+
+    INCLUDEPATH += $$PWD/../libs/OpenFX/HostSupport/expat-2.1.0/lib
 }
 
 SOURCES += \

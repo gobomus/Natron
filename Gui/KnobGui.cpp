@@ -30,6 +30,7 @@
 #include <boost/weak_ptr.hpp>
 
 #include "Gui/GuiDefines.h"
+#include "Gui/ClickableLabel.h"
 
 using namespace Natron;
 
@@ -142,7 +143,7 @@ KnobGui::pushUndoCommand(QUndoCommand* cmd)
 void
 KnobGui::createGUI(QGridLayout* containerLayout,
                    QWidget* fieldContainer,
-                   Natron::Label* label,
+                   Natron::ClickableLabel* label,
                    QHBoxLayout* layout,
                    bool isOnNewLine,
                    const std::vector< boost::shared_ptr< KnobI > > & knobsOnSameLine)
@@ -192,9 +193,6 @@ KnobGui::createGUI(QGridLayout* containerLayout,
         reflectExpressionState(i,!exp.empty());
         if (exp.empty()) {
             onAnimationLevelChanged(i, knob->getAnimationLevel(i) );
-        }
-        if (knob->isSlave(i)) {
-            setReadOnly_(true, i);
         }
     }
 }
@@ -634,6 +632,9 @@ KnobGui::createDuplicateOnNode(Natron::EffectInstance* effect,bool linkExpressio
     KnobHolder* holder = knob->getHolder();
     EffectInstance* isEffect = dynamic_cast<EffectInstance*>(holder);
     assert(isEffect);
+    if (!isEffect) {
+        return;
+    }
 
     KnobBool* isBool = dynamic_cast<KnobBool*>(knob.get());
     KnobInt* isInt = dynamic_cast<KnobInt*>(knob.get());
@@ -737,6 +738,10 @@ KnobGui::createDuplicateOnNode(Natron::EffectInstance* effect,bool linkExpressio
         boost::shared_ptr<KnobParametric> newKnob = effect->createParametricKnob(newKnobName, knob->getDescription(), isParametric->getDimension());
         output = newKnob;
     }
+    if (!output) {
+        return;
+    }
+    
     output->cloneDefaultValues(knob.get());
     output->clone(knob.get());
     if (knob->canAnimate()) {
@@ -750,7 +755,9 @@ KnobGui::createDuplicateOnNode(Natron::EffectInstance* effect,bool linkExpressio
     if (linkExpression) {
         effect->getNode()->declarePythonFields();
         
-        boost::shared_ptr<NodeCollection> collec = isEffect->getNode()->getGroup();
+        boost::shared_ptr<NodeCollection> collec;
+        collec = isEffect->getNode()->getGroup();
+        
         NodeGroup* isCollecGroup = dynamic_cast<NodeGroup*>(collec.get());
         
         std::stringstream ss;

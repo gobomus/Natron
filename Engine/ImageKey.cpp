@@ -35,23 +35,27 @@ ImageKey::ImageKey()
 , _view(0)
 , _pixelAspect(1)
 , _draftMode(false)
+, _fullScaleWithDownscaleInputs(false)
 {
 }
 
-ImageKey::ImageKey(U64 nodeHashKey,
+ImageKey::ImageKey(const CacheEntryHolder* holder,
+                   U64 nodeHashKey,
                    bool frameVaryingOrAnimated,
                    double time,
                    //unsigned int mipMapLevel, //< Store different mipmapLevels under the same key
                    int view,
                    double pixelAspect,
-                   bool draftMode)
-: KeyHelper<U64>()
+                   bool draftMode,
+                   bool fullScaleWithDownscaleInputs)
+: KeyHelper<U64>(holder)
 , _nodeHashKey(nodeHashKey)
 , _frameVaryingOrAnimated(frameVaryingOrAnimated)
 , _time(time)
 , _view(view)
 , _pixelAspect(pixelAspect)
 , _draftMode(draftMode)
+, _fullScaleWithDownscaleInputs(fullScaleWithDownscaleInputs)
 {
 }
 
@@ -65,6 +69,7 @@ ImageKey::fillHash(Hash64* hash) const
     hash->append(_view);
     hash->append(_pixelAspect);
     hash->append(_draftMode);
+    hash->append(_fullScaleWithDownscaleInputs);
 }
 
 bool
@@ -75,12 +80,14 @@ ImageKey::operator==(const ImageKey & other) const
         _time == other._time &&
         _view == other._view &&
         _pixelAspect == other._pixelAspect &&
-        _draftMode == other._draftMode;
+        _draftMode == other._draftMode &&
+        _fullScaleWithDownscaleInputs == other._fullScaleWithDownscaleInputs;
     } else {
         return _nodeHashKey == other._nodeHashKey &&
         _view == other._view &&
         _pixelAspect == other._pixelAspect &&
-        _draftMode == other._draftMode;
+        _draftMode == other._draftMode &&
+        _fullScaleWithDownscaleInputs == other._fullScaleWithDownscaleInputs;
     }
     
 }

@@ -456,10 +456,11 @@ MultiInstancePanel::initializeKnobs()
             for (U32 j = 0; j < otherChildren.size(); ++j) {
                 if ( !otherChildren[j]->isInstanceSpecific() ) {
                     boost::shared_ptr<KnobI> thisChild = getKnobByName( otherChildren[j]->getName() );
-                    assert(thisChild);
-                    isPage->addKnob(thisChild);
-                    if ( isNodePage && !thisChild->isDeclaredByPlugin() ) {
-                        thisChild->setAllDimensionsEnabled(false);
+                    if (thisChild) {
+                        isPage->addKnob(thisChild);
+                        if ( isNodePage && !thisChild->isDeclaredByPlugin() ) {
+                            thisChild->setAllDimensionsEnabled(false);
+                        }
                     }
                 }
             }
@@ -515,7 +516,7 @@ MultiInstancePanel::createMultiInstanceGui(QVBoxLayout* layout)
     _imp->view->setColumnCount( dimensionNames.size() );
     _imp->view->setHorizontalHeaderLabels(dimensionNames);
 
-    _imp->view->setAttribute(Qt::WA_MacShowFocusRect,0);
+    _imp->view->setAttribute(Qt::WA_MacShowFocusRect,1);
     _imp->view->setUniformRowHeights(true);
 
 #if QT_VERSION < 0x050000

@@ -16,8 +16,8 @@
  * along with Natron.  If not, see <http://www.gnu.org/licenses/gpl-2.0.html>
  * ***** END LICENSE BLOCK ***** */
 
-#ifndef NATRON_GUI_NODEGUI_H_
-#define NATRON_GUI_NODEGUI_H_
+#ifndef NATRON_GUI_NODEGUI_H
+#define NATRON_GUI_NODEGUI_H
 
 // ***** BEGIN PYTHON BLOCK *****
 // from <https://docs.python.org/3/c-api/intro.html#include-files>:
@@ -164,6 +164,8 @@ public:
     void deleteReferences();
 
     ~NodeGui() OVERRIDE;
+    
+    virtual void restoreStateAfterCreation() OVERRIDE FINAL;
 
     /**
      * @brief Fills the serializationObject with the current state of the NodeGui.
@@ -429,6 +431,7 @@ protected:
     
 public Q_SLOTS:
 
+    void onOutputLayerChanged();
 
     void onSettingsPanelClosed(bool closed);
     
@@ -710,4 +713,4 @@ private:
     boost::scoped_ptr<ExportGroupTemplateDialogPrivate> _imp;
 };
 
-#endif // NATRON_GUI_NODEGUI_H_
+#endif // NATRON_GUI_NODEGUI_H

@@ -891,6 +891,7 @@ TrackMarker::getMarkerImage(int time) const
                                        RectD(),
                                        components,
                                        Natron::eImageBitDepthFloat,
+                                       false,
                                        node->getLiveInstance());
     ImageList planes;
     EffectInstance::RenderRoIRetCode stat = input->getLiveInstance()->renderRoI(args, &planes);
@@ -2388,6 +2389,7 @@ FrameAccessorImpl::GetImage(int /*clip*/,
                                        precomputedRoD,
                                        components,
                                        Natron::eImageBitDepthFloat,
+                                       true,
                                        _context->getNode()->getLiveInstance());
     ImageList planes;
     EffectInstance::RenderRoIRetCode stat = _trackerInput->getLiveInstance()->renderRoI(args, &planes);

@@ -39,15 +39,21 @@ public:
     int _view;
     double _pixelAspect;
     bool _draftMode;
+    
+    //When true that means the image has been computed based on inputs using a mipmaplevel != 0
+    //hence it is probably not very high quality, even though the mipmap level is 0
+    bool _fullScaleWithDownscaleInputs;
 
     ImageKey();
 
-    ImageKey(U64 nodeHashKey,
+    ImageKey(const CacheEntryHolder* holder,
+             U64 nodeHashKey,
              bool frameVaryingOrAnimated,
              double time,
              int view,
              double pixelAspect,
-             bool draftMode);
+             bool draftMode,
+             bool fullScaleWithDownscaleInputs);
 
     void fillHash(Hash64* hash) const;
 
@@ -62,6 +68,9 @@ public:
     {
         return _time;
     }
+    
+    template<class Archive>
+    void serialize(Archive & ar, const unsigned int version);
 };
 
 

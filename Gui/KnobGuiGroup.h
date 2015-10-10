@@ -16,8 +16,8 @@
  * along with Natron.  If not, see <http://www.gnu.org/licenses/gpl-2.0.html>
  * ***** END LICENSE BLOCK ***** */
 
-#ifndef _Gui_KnobGuiGroup_h_
-#define _Gui_KnobGuiGroup_h_
+#ifndef Gui_KnobGuiGroup_h
+#define Gui_KnobGuiGroup_h
 
 // ***** BEGIN PYTHON BLOCK *****
 // from <https://docs.python.org/3/c-api/intro.html#include-files>:
@@ -130,6 +130,9 @@ public Q_SLOTS:
     void setChecked(bool b);
 
 private:
+    
+    void setCheckedInternal(bool checked, bool userRequested);
+    
     virtual void createWidget(QHBoxLayout* layout) OVERRIDE FINAL;
     virtual void _hide() OVERRIDE FINAL;
     virtual void _show() OVERRIDE FINAL;
@@ -156,4 +159,4 @@ private:
 };
 
 
-#endif // _Gui_KnobGuiGroup_h_
+#endif // Gui_KnobGuiGroup_h

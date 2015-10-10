@@ -289,6 +289,25 @@ NodeCollection::resetTotalTimeSpentRenderingForAllNodes()
 }
 
 bool
+NodeCollection::isCacheIDAlreadyTaken(const std::string& name) const
+{
+    QMutexLocker k(&_imp->nodesMutex);
+    for (NodeList::iterator it = _imp->nodes.begin(); it!=_imp->nodes.end(); ++it) {
+        if ((*it)->getCacheID() == name) {
+            return true;
+        }
+        NodeGroup* isGroup = dynamic_cast<NodeGroup*>((*it)->getLiveInstance());
+        if (isGroup) {
+            bool found = isGroup->isCacheIDAlreadyTaken(name);
+            if (found) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+bool
 NodeCollection::hasNodeRendering() const
 {
     QMutexLocker k(&_imp->nodesMutex);
@@ -492,9 +511,14 @@ NodeCollection::connectNodes(int inputNumber,const NodePtr& input,Natron::Node* 
     NodePtr existingInput = output->getRealInput(inputNumber);
     if (force && existingInput) {
         bool ok = disconnectNodes(existingInput.get(), output);
-        assert(ok);
-        if (input->getMaxInputCount() > 0) {
+        if (!ok) {
+            throw std::runtime_error("NodeCollection::connectNodes() failed");
+        }
+        if (input && input->getMaxInputCount() > 0) {
             ok = connectNodes(input->getPreferredInputForConnection(), existingInput, input.get());
+            if (!ok) {
+                throw std::runtime_error("NodeCollection::connectNodes() failed");
+            }
         }
     }
     
@@ -889,16 +913,20 @@ NodeCollection::recomputeFrameRangeForAllReaders(int* firstFrame,int* lastFrame)
 }
 
 void
-NodeCollection::forceGetClipPreferencesOnAllTrees()
+NodeCollection::forceComputeInputDependentDataOnAllTrees()
 {
     NodeList nodes;
     getNodes_recursive(nodes);
     std::list<Project::NodesTree> trees;
     Project::extractTreesFromNodes(nodes, trees);
     
+    for (NodeList::iterator it = nodes.begin(); it!=nodes.end(); ++it) {
+        (*it)->markAllInputRelatedDataDirty();
+    }
+    
     std::list<Natron::Node*> markedNodes;
     for (std::list<Project::NodesTree>::iterator it = trees.begin(); it != trees.end(); ++it) {
-        it->output.node->restoreClipPreferencesRecursive(markedNodes);
+        it->output.node->forceRefreshAllInputRelatedData();
     }
 }
 
@@ -932,7 +960,6 @@ NodeCollection::setParallelRenderArgs(int time,
         
         Natron::EffectInstance* liveInstance = (*it)->getLiveInstance();
         assert(liveInstance);
-        U64 rotoAge = (*it)->getRotoAge();
         bool duringPaintStrokeCreation = activeRotoPaintNode && (*it)->isDuringPaintStrokeCreation();
         Natron::RenderSafetyEnum safety = (*it)->getCurrentRenderThreadSafety();
         
@@ -959,7 +986,7 @@ NodeCollection::setParallelRenderArgs(int time,
             }
             
             liveInstance->setParallelRenderArgsTLS(time, view, isRenderUserInteraction, isSequential, canAbort, nodeHash,
-                                                   rotoAge,renderAge,treeRoot, nodeRequest,textureIndex, timeline, isAnalysis,duringPaintStrokeCreation, rotoPaintNodes, safety, doNanHandling, draftMode, viewerProgressReportEnabled, stats);
+                                                   renderAge,treeRoot, nodeRequest,textureIndex, timeline, isAnalysis,duringPaintStrokeCreation, rotoPaintNodes, safety, doNanHandling, draftMode, viewerProgressReportEnabled, stats);
         }
         for (NodeList::iterator it2 = rotoPaintNodes.begin(); it2 != rotoPaintNodes.end(); ++it2) {
             
@@ -978,7 +1005,7 @@ NodeCollection::setParallelRenderArgs(int time,
                 nodeHash = (*it2)->getHashValue();
             }
             
-            (*it2)->getLiveInstance()->setParallelRenderArgsTLS(time, view, isRenderUserInteraction, isSequential, canAbort, nodeHash, (*it2)->getRotoAge(), renderAge, treeRoot, childRequest, textureIndex, timeline, isAnalysis, activeRotoPaintNode && (*it2)->isDuringPaintStrokeCreation(), NodeList(), (*it2)->getCurrentRenderThreadSafety(), doNanHandling, draftMode, viewerProgressReportEnabled,stats);
+            (*it2)->getLiveInstance()->setParallelRenderArgsTLS(time, view, isRenderUserInteraction, isSequential, canAbort, nodeHash, renderAge, treeRoot, childRequest, textureIndex, timeline, isAnalysis, activeRotoPaintNode && (*it2)->isDuringPaintStrokeCreation(), NodeList(), (*it2)->getCurrentRenderThreadSafety(), doNanHandling, draftMode, viewerProgressReportEnabled,stats);
         }
         
         if ((*it)->isMultiInstance()) {
@@ -1008,7 +1035,7 @@ NodeCollection::setParallelRenderArgs(int time,
                 Natron::EffectInstance* childLiveInstance = (*it2)->getLiveInstance();
                 assert(childLiveInstance);
                 Natron::RenderSafetyEnum childSafety = (*it2)->getCurrentRenderThreadSafety();
-                childLiveInstance->setParallelRenderArgsTLS(time, view, isRenderUserInteraction, isSequential, canAbort, nodeHash,0, renderAge,treeRoot, childRequest, textureIndex, timeline, isAnalysis, false, std::list<boost::shared_ptr<Natron::Node> >(), childSafety, doNanHandling, draftMode, viewerProgressReportEnabled,stats);
+                childLiveInstance->setParallelRenderArgsTLS(time, view, isRenderUserInteraction, isSequential, canAbort, nodeHash, renderAge,treeRoot, childRequest, textureIndex, timeline, isAnalysis, false, std::list<boost::shared_ptr<Natron::Node> >(), childSafety, doNanHandling, draftMode, viewerProgressReportEnabled,stats);
                 
             }
         }
@@ -1029,6 +1056,9 @@ NodeCollection::invalidateParallelRenderArgs()
     
     NodeList nodes = getNodes();
     for (NodeList::iterator it = nodes.begin(); it != nodes.end(); ++it) {
+        if (!(*it) || !(*it)->getLiveInstance()) {
+            continue;
+        }
         (*it)->getLiveInstance()->invalidateParallelRenderArgsTLS();
         
         if ((*it)->isMultiInstance()) {
@@ -2526,23 +2556,28 @@ NodeCollection::exportGroupToPython(const QString& pluginID,
                                     const QString& pluginGrouping,
                                     QString& output)
 {
+    QString extModule(pluginLabel);
+    extModule.append("Ext");
+    
     QTextStream ts(&output);
     // coding must be set in first or second line, see https://www.python.org/dev/peps/pep-0263/
     WRITE_STATIC_LINE("# -*- coding: utf-8 -*-");
-    QString descline("#This file was automatically generated by " NATRON_APPLICATION_NAME " PyPlug exporter version ");
-    descline.append(QString::number(NATRON_PYPLUG_EXPORTER_VERSION));
-    descline.append(".");
-    WRITE_STATIC_LINE();
-    WRITE_STATIC_LINE("#Note that Viewers are never exported");
+    WRITE_STATIC_LINE("#DO NOT EDIT THIS FILE");
+    QString descline = QString("#This file was automatically generated by " NATRON_APPLICATION_NAME " PyPlug exporter version %1.").arg(NATRON_PYPLUG_EXPORTER_VERSION);
     WRITE_STRING(descline);
+    WRITE_STATIC_LINE();
+    QString handWrittenStr = QString("#Hand-written code should be added in a separate file named %1.py").arg(extModule);
+    WRITE_STRING(handWrittenStr);
+    WRITE_STATIC_LINE("#See http://natron.readthedocs.org/en/workshop/groups.html#adding-hand-written-code-callbacks-etc");
+    WRITE_STATIC_LINE("#Note that Viewers are never exported");
+    WRITE_STATIC_LINE();
     WRITE_STATIC_LINE("import " NATRON_ENGINE_PYTHON_MODULE_NAME);
     WRITE_STATIC_LINE("import sys");
     WRITE_STATIC_LINE("");
     WRITE_STATIC_LINE("#Try to import the extensions file where callbacks and hand-written code should be located.");
     WRITE_STATIC_LINE("try:");
     
-    QString extModule(pluginLabel);
-    extModule.append("Ext");
+    
     WRITE_INDENT(1);WRITE_STRING("from " + extModule + " import *");
     WRITE_STRING("except ImportError:");
     WRITE_INDENT(1);WRITE_STRING("pass");
@@ -2583,9 +2618,12 @@ NodeCollection::exportGroupToPython(const QString& pluginID,
     exportGroupInternal(1, this, "group", ts);
     
     ///Import user hand-written code
-    WRITE_INDENT(1);WRITE_STRING("extModule = sys.modules[" + ESC(extModule) + "]");
+    WRITE_INDENT(1);WRITE_STATIC_LINE("try:");
+    WRITE_INDENT(2);WRITE_STRING("extModule = sys.modules[" + ESC(extModule) + "]");
+    WRITE_INDENT(1);WRITE_STATIC_LINE("except KeyError:");
+    WRITE_INDENT(2);WRITE_STATIC_LINE("extModule = None");
     
-    QString testAttr = QString("if hasattr(extModule ,\"createInstanceExt\") and hasattr(extModule.createInstanceExt,\"__call__\"):").arg(extModule);
+    QString testAttr("if extModule is not None and hasattr(extModule ,\"createInstanceExt\") and hasattr(extModule.createInstanceExt,\"__call__\"):");
     WRITE_INDENT(1);WRITE_STRING(testAttr);
     WRITE_INDENT(2);WRITE_STRING("extModule.createInstanceExt(app,group)");
 }

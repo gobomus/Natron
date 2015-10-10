@@ -52,6 +52,7 @@
 #include <limits>
 #include <cfloat>
 #include <algorithm> // min, max
+#include <stdexcept>
 
 #include "Engine/Bezier.h"
 #include "Engine/BezierCP.h"
@@ -70,6 +71,9 @@ static Point getPointAt(const BezierCPs& cps, int time, double t)
 {
     int ncps = (int)cps.size();
     assert(ncps);
+    if (!ncps) {
+        throw std::logic_error("getPointAt()");
+    }
     if (t < 0) {
         t += ncps;
     }
@@ -111,6 +115,9 @@ static Point getLeftPointAt(const BezierCPs& cps, int time, double t)
 {
     int ncps = (int)cps.size();
     assert(ncps);
+    if (!ncps) {
+        throw std::logic_error("getLeftPointAt()");
+    }
     if (t < 0) {
         t += ncps;
     }
@@ -166,6 +173,9 @@ static Point getRightPointAt(const BezierCPs& cps, int time, double t)
 {
     int ncps = cps.size();
     assert(ncps);
+    if (!ncps) {
+        throw std::logic_error("getRightPointAt()");
+    }
     if (t < 0) {
         t += ncps;
     }
@@ -596,7 +606,7 @@ static bool splitAt(const BezierCPs &cps, int time, double t, std::list<BezierCP
         std::list<BezierCPs> regularizedSecond;
         Natron::regularize(firstPart, time, &regularizedFirst);
         Natron::regularize(secondPart, time, &regularizedSecond);
-        ret->insert(ret->begin(),regularizedFirst.begin(),regularizedSecond.end());
+        ret->insert(ret->begin(),regularizedFirst.begin(),regularizedFirst.end());
         ret->insert(ret->end(), regularizedSecond.begin(), regularizedSecond.end());
         return true;
     }
@@ -1371,7 +1381,7 @@ void Natron::regularize(const BezierCPs &patch, int time, std::list<BezierCPs> *
     
      // Use Rolle's theorem to check for degeneracy on the boundary.
     double M = 0;
-    double cut;
+    double cut = 0.;
     for (int i = 0; i < 4; ++i) {
         double sol[4];
         int o[4];

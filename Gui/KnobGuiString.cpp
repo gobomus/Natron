@@ -99,7 +99,7 @@ AnimatingTextEdit::setAnimation(int v)
     animation = v;
     style()->unpolish(this);
     style()->polish(this);
-    repaint();
+    update();
 }
 
 void
@@ -109,7 +109,7 @@ AnimatingTextEdit::setReadOnlyNatron(bool ro)
     readOnlyNatron = ro;
     style()->unpolish(this);
     style()->polish(this);
-    repaint();
+    update();
 }
 
 void
@@ -118,7 +118,7 @@ AnimatingTextEdit::setDirty(bool b)
     dirty = b;
     style()->unpolish(this);
     style()->polish(this);
-    repaint();
+    update();
 }
 
 void
@@ -307,13 +307,12 @@ void KnobGuiString::removeSpecificGui()
     delete _lineEdit;
     delete _label;
     delete _container;
-
 }
 
 void
 KnobGuiString::onLineChanged()
 {
-    pushUndoCommand( new KnobUndoCommand<std::string>( this,_knob.lock()->getGuiValue(0),_lineEdit->text().toStdString() ) );
+    pushUndoCommand( new KnobUndoCommand<std::string>( this,_knob.lock()->getValue(0),_lineEdit->text().toStdString() ) );
 }
 
 QString
@@ -356,7 +355,7 @@ KnobGuiString::onTextChanged()
     if ( _knob.lock()->usesRichText() ) {
         txt = addHtmlTags(txt);
     }
-    pushUndoCommand( new KnobUndoCommand<std::string>( this,_knob.lock()->getGuiValue(0),txt.toStdString() ) );
+    pushUndoCommand( new KnobUndoCommand<std::string>( this,_knob.lock()->getValue(0),txt.toStdString() ) );
 }
 
 QString
@@ -377,7 +376,7 @@ KnobGuiString::addHtmlTags(QString text) const
     }
 
     ///if the knob had custom data, set them
-    QString knobOldtext( _knob.lock()->getGuiValue(0).c_str() );
+    QString knobOldtext( _knob.lock()->getValue(0).c_str() );
     QString startCustomTag(NATRON_CUSTOM_HTML_TAG_START);
     int startCustomData = knobOldtext.indexOf(startCustomTag);
     if (startCustomData != -1) {
@@ -408,7 +407,7 @@ void
 KnobGuiString::restoreTextInfoFromString()
 {
     boost::shared_ptr<KnobString> knob = _knob.lock();
-    QString text( knob->getGuiValue(0).c_str() );
+    QString text( knob->getValue(0).c_str() );
 
     if ( text.isEmpty() ) {
         EffectInstance* effect = dynamic_cast<EffectInstance*>( knob->getHolder() );
@@ -418,7 +417,7 @@ KnobGuiString::restoreTextInfoFromString()
             if (knob) {
                 KnobString* strKnob = dynamic_cast<KnobString*>( knob.get() );
                 if (strKnob) {
-                    QString sublabel = strKnob->getGuiValue(0).c_str();
+                    QString sublabel = strKnob->getValue(0).c_str();
                     text.append(NATRON_CUSTOM_HTML_TAG_START);
                     text.append('(' + sublabel + ')');
                     text.append(NATRON_CUSTOM_HTML_TAG_END);
@@ -597,7 +596,7 @@ KnobGuiString::onCurrentFontChanged(const QFont & font)
     
     boost::shared_ptr<KnobString> knob = _knob.lock();
     assert(_textEdit);
-    QString text( knob->getGuiValue(0).c_str() );
+    QString text( knob->getValue(0).c_str() );
     //find the first font tag
     QString toFind = QString(kFontSizeTag);
     int i = text.indexOf(toFind);
@@ -621,7 +620,7 @@ KnobGuiString::onCurrentFontChanged(const QFont & font)
         text.prepend(fontTag);
         text.append(kFontEndTag);
     }
-    pushUndoCommand( new KnobUndoCommand<std::string>( this,knob->getGuiValue(0),text.toStdString() ) );
+    pushUndoCommand( new KnobUndoCommand<std::string>( this,knob->getValue(0),text.toStdString() ) );
 }
 
 QString
@@ -644,7 +643,7 @@ KnobGuiString::onFontSizeChanged(double size)
 {
     assert(_textEdit);
     boost::shared_ptr<KnobString> knob = _knob.lock();;
-    QString text( knob->getGuiValue(0).c_str() );
+    QString text( knob->getValue(0).c_str() );
     //find the first font tag
     QString toFind = QString(kFontSizeTag);
     int i = text.indexOf(toFind);
@@ -660,7 +659,7 @@ KnobGuiString::onFontSizeChanged(double size)
     text.remove( i, currentSize.size() );
     text.insert( i, QString::number(size) );
     _fontSize = size;
-    pushUndoCommand( new KnobUndoCommand<std::string>( this,knob->getGuiValue(0),text.toStdString() ) );
+    pushUndoCommand( new KnobUndoCommand<std::string>( this,knob->getValue(0),text.toStdString() ) );
 }
 
 void
@@ -668,7 +667,7 @@ KnobGuiString::boldChanged(bool toggled)
 {
     assert(_textEdit);
     boost::shared_ptr<KnobString> knob = _knob.lock();
-    QString text( knob->getGuiValue(0).c_str() );
+    QString text( knob->getValue(0).c_str() );
     QString toFind = QString(kBoldStartTag);
     int i = text.indexOf(toFind);
 
@@ -694,7 +693,7 @@ KnobGuiString::boldChanged(bool toggled)
     }
 
     _boldActivated = toggled;
-    pushUndoCommand( new KnobUndoCommand<std::string>( this,knob->getGuiValue(0),text.toStdString() ) );
+    pushUndoCommand( new KnobUndoCommand<std::string>( this,knob->getValue(0),text.toStdString() ) );
 }
 
 void
@@ -719,9 +718,9 @@ KnobGuiString::colorFontButtonClicked()
     if ( dialog.exec() ) {
         _fontColor = dialog.currentColor();
 
-        QString text( knob->getGuiValue(0).c_str() );
+        QString text( knob->getValue(0).c_str() );
         findReplaceColorName(text,_fontColor.name());
-        pushUndoCommand( new KnobUndoCommand<std::string>( this,knob->getGuiValue(0),text.toStdString() ) );
+        pushUndoCommand( new KnobUndoCommand<std::string>( this,knob->getValue(0),text.toStdString() ) );
     }
     updateFontColorIcon(_fontColor);
 }
@@ -758,7 +757,7 @@ void
 KnobGuiString::italicChanged(bool toggled)
 {
     boost::shared_ptr<KnobString> knob = _knob.lock();
-    QString text( knob->getGuiValue(0).c_str() );
+    QString text( knob->getValue(0).c_str() );
     //find the first font tag
     QString toFind = QString(kFontSizeTag);
     int i = text.indexOf(toFind);
@@ -791,7 +790,7 @@ KnobGuiString::italicChanged(bool toggled)
         text.append(kItalicEndTag); //< this is always the last tag
     }
     _italicActivated = toggled;
-    pushUndoCommand( new KnobUndoCommand<std::string>( this,knob->getGuiValue(0),text.toStdString() ) );
+    pushUndoCommand( new KnobUndoCommand<std::string>( this,knob->getValue(0),text.toStdString() ) );
 }
 
 QString
@@ -895,7 +894,7 @@ void
 KnobGuiString::updateGUI(int /*dimension*/)
 {
     boost::shared_ptr<KnobString> knob = _knob.lock();
-    std::string value = knob->getGuiValue(0);
+    std::string value = knob->getValue(0);
 
     if ( knob->isMultiLine() ) {
         assert(_textEdit);
@@ -1057,13 +1056,13 @@ void
 KnobGuiString::reflectExpressionState(int /*dimension*/,
                                        bool hasExpr)
 {
-    bool isSlaved = _knob.lock()->isSlave(0);
+    bool isEnabled = _knob.lock()->isEnabled(0);
     if (_textEdit) {
         _textEdit->setAnimation(3);
-        _textEdit->setReadOnly(hasExpr || isSlaved);
+        _textEdit->setReadOnly(hasExpr || !isEnabled);
     } else if (_lineEdit) {
         _lineEdit->setAnimation(3);
-        _lineEdit->setReadOnly(hasExpr || isSlaved);
+        _lineEdit->setReadOnly(hasExpr || !isEnabled);
     }
 }
 

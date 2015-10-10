@@ -235,9 +235,21 @@ QDirModelPrivate_size(quint64 bytes)
 void
 NodeGraph::updateCacheSizeText()
 {
-    if (!getGui() || getGui()->isGUIFrozen()) {
+    if (!getGui()) {
         return;
     }
+    if (getGui()->isGUIFrozen()) {
+        if (_imp->_cacheSizeText->isVisible()) {
+            _imp->_cacheSizeText->hide();
+        }
+        return;
+    } else {
+        if (!_imp->_cacheSizeText->isVisible()) {
+            _imp->_cacheSizeText->show();
+        }
+
+    }
+    
     QString oldText = _imp->_cacheSizeText->toPlainText();
     quint64 cacheSize = appPTR->getCachesTotalMemorySize();
     QString cacheSizeStr = QDirModelPrivate_size(cacheSize);
@@ -276,13 +288,13 @@ NodeGraph::toggleKnobLinksVisible()
 void
 NodeGraph::toggleAutoPreview()
 {
-    _imp->_gui->getApp()->getProject()->toggleAutoPreview();
+    getGui()->getApp()->getProject()->toggleAutoPreview();
 }
 
 void
 NodeGraph::forceRefreshAllPreviews()
 {
-    _imp->_gui->forceRefreshAllPreviews();
+    getGui()->forceRefreshAllPreviews();
 }
 
 void
@@ -397,9 +409,9 @@ NodeGraph::showMenu(const QPoint & pos)
     QAction* autoPreview = new ActionWithShortcut(kShortcutGroupNodegraph,kShortcutIDActionGraphToggleAutoPreview,
                                                   kShortcutDescActionGraphToggleAutoPreview,_imp->_menu);
     autoPreview->setCheckable(true);
-    autoPreview->setChecked( _imp->_gui->getApp()->getProject()->isAutoPreviewEnabled() );
+    autoPreview->setChecked( getGui()->getApp()->getProject()->isAutoPreviewEnabled() );
     QObject::connect( autoPreview,SIGNAL( triggered() ),this,SLOT( toggleAutoPreview() ) );
-    QObject::connect( _imp->_gui->getApp()->getProject().get(),SIGNAL( autoPreviewChanged(bool) ),autoPreview,SLOT( setChecked(bool) ) );
+    QObject::connect( getGui()->getApp()->getProject().get(),SIGNAL( autoPreviewChanged(bool) ),autoPreview,SLOT( setChecked(bool) ) );
     _imp->_menu->addAction(autoPreview);
     
     QAction* autoTurbo = new ActionWithShortcut(kShortcutGroupNodegraph,kShortcutIDActionGraphToggleAutoTurbo,
@@ -422,9 +434,9 @@ NodeGraph::showMenu(const QPoint & pos)
     
     _imp->_menu->addSeparator();
     
-    std::list<ToolButton*> orederedToolButtons = _imp->_gui->getToolButtonsOrdered();
+    std::list<ToolButton*> orederedToolButtons = getGui()->getToolButtonsOrdered();
     for (std::list<ToolButton*>::iterator it = orederedToolButtons.begin(); it != orederedToolButtons.end(); ++it) {
-        (*it)->getMenu()->setIcon( (*it)->getIcon() );
+        (*it)->getMenu()->setIcon( (*it)->getMenuIcon() );
         _imp->_menu->addAction( (*it)->getMenu()->menuAction() );
     }
     

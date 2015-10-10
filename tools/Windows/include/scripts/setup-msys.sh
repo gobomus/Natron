@@ -3,10 +3,10 @@
 
 source $(pwd)/common.sh || exit 1
 
-if [ "$1" == "32" ]; then
-PKG_PREFIX=$PKG_PREFIX32
+if [ "$1" = "32" ]; then
+    PKG_PREFIX=$PKG_PREFIX32
 else
-PKG_PREFIX=$PKG_PREFIX64
+    PKG_PREFIX=$PKG_PREFIX64
 fi
 
 #Update database
