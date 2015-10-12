@@ -707,14 +707,12 @@ TrackMarker::removeAllKeyframes()
 void
 TrackMarker::setUserKeyframe(int time)
 {
-    std::pair<std::set<int>::iterator,bool> ret;
     {
         QMutexLocker k(&_imp->trackMutex);
-        ret = _imp->userKeyframes.insert(time);
+        _imp->userKeyframes.insert(time);
     }
-    if (ret.second) {
-        getContext()->s_keyframeSetOnTrack(shared_from_this(), time);
-    }
+    getContext()->s_keyframeSetOnTrack(shared_from_this(), time);
+    
 }
 
 void
@@ -1545,8 +1543,6 @@ struct TrackerContextPrivate
         sWndBtmLeft->setMaximum(0, 1);
         sWndBtmLeft->setEvaluateOnChange(false);
         sWndBtmLeft->setIsPersistant(false);
-        QObject::connect(sWndBtmLeft->getSignalSlotHandler().get(), SIGNAL(valueChanged(int,int)),
-                         _publicInterface, SIGNAL(mustRefreshSelectedMarkerTexture()));
         searchWindowGroup->addKnob(sWndBtmLeft);
         
         searchWindowBtmLeft = sWndBtmLeft;
@@ -1562,8 +1558,6 @@ struct TrackerContextPrivate
         sWndTopRight->setMinimum(0, 1);
         sWndTopRight->setEvaluateOnChange(false);
         sWndTopRight->setIsPersistant(false);
-        QObject::connect(sWndTopRight->getSignalSlotHandler().get(), SIGNAL(valueChanged(int,int)),
-                         _publicInterface, SIGNAL(mustRefreshSelectedMarkerTexture()));
         searchWindowGroup->addKnob(sWndTopRight);
         searchWindowTopRight = sWndTopRight;
         knobs.push_back(sWndTopRight);
@@ -1623,8 +1617,7 @@ struct TrackerContextPrivate
         centerKnob->setIsPersistant(false);
         centerKnob->setEvaluateOnChange(false);
         settingsPage->addKnob(centerKnob);
-        QObject::connect(centerKnob->getSignalSlotHandler().get(), SIGNAL(valueChanged(int,int)),
-                         _publicInterface, SIGNAL(mustRefreshSelectedMarkerTexture()));
+
        
         center = centerKnob;
         knobs.push_back(centerKnob);
@@ -1636,8 +1629,7 @@ struct TrackerContextPrivate
         offsetKnob->setIsPersistant(false);
         offsetKnob->setEvaluateOnChange(false);
         settingsPage->addKnob(offsetKnob);
-        QObject::connect(offsetKnob->getSignalSlotHandler().get(), SIGNAL(valueChanged(int,int)),
-                         _publicInterface, SIGNAL(mustRefreshSelectedMarkerTexture()));
+
         offset = offsetKnob;
         knobs.push_back(offsetKnob);
         perTrackKnobs.push_back(offsetKnob);

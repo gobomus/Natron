@@ -331,6 +331,10 @@ TrackerPanel::TrackerPanel(const boost::shared_ptr<NodeGui>& n,
 , _imp(new TrackerPanelPrivate(this, n))
 {
     boost::shared_ptr<TrackerContext> context = getContext();
+    
+    QObject::connect( n->getNode()->getApp()->getTimeLine().get(), SIGNAL( frameChanged(SequenceTime,int) ), this,
+                     SLOT( onTimeChanged(SequenceTime, int) ) );
+    
     QObject::connect(context.get(), SIGNAL(selectionChanged(int)), this, SLOT(onContextSelectionChanged(int)));
     QObject::connect(context.get(), SIGNAL(selectionAboutToChange(int)), this, SLOT(onContextSelectionAboutToChange(int)));
     
@@ -387,7 +391,6 @@ TrackerPanel::TrackerPanel(const boost::shared_ptr<NodeGui>& n,
     trackLayout->setSpacing(2);
     _imp->trackLabel = new ClickableLabel(tr("Track keyframe:"),trackContainer);
     _imp->trackLabel->setSunken(false);
-    _imp->trackLabel->setEnabled(false);
     trackLayout->addWidget(_imp->trackLabel);
     
     _imp->currentKeyframe = new SpinBox(trackContainer,SpinBox::eSpinBoxTypeDouble);
@@ -397,7 +400,6 @@ TrackerPanel::TrackerPanel(const boost::shared_ptr<NodeGui>& n,
     trackLayout->addWidget(_imp->currentKeyframe);
     
     _imp->ofLabel = new ClickableLabel(tr("of"),trackContainer);
-    _imp->ofLabel->setEnabled(false);
     trackLayout->addWidget(_imp->ofLabel);
     
     _imp->totalKeyframes = new SpinBox(trackContainer,SpinBox::eSpinBoxTypeInt);
@@ -1602,7 +1604,7 @@ TrackerPanel::onTrackKeyframeSet(const boost::shared_ptr<TrackMarker>& marker, i
         k.userKeys.insert(key);
         _imp->keys[marker] = k;
     } else {
-        
+        _imp->updateTrackKeysInfoBar(key);
         std::pair<std::set<int>::iterator,bool> ret = found->second.userKeys.insert(key);
         if (ret.second && found->second.visible) {
             _imp->node.lock()->getNode()->getApp()->getTimeLine()->addKeyframeIndicator(key);
@@ -1961,6 +1963,12 @@ TrackerPanelPrivate::updateTrackKeysInfoBar(int time)
         keyframes.insert(keys.begin(), keys.end());
     }
     
+    prevKeyframe->setEnabled(!keyframes.empty());
+    nextKeyframe->setEnabled(!keyframes.empty());
+    addKeyframe->setEnabled(!markers.empty());
+    removeKeyframe->setEnabled(!markers.empty());
+    clearAnimation->setEnabled(!markers.empty());
+    
     totalKeyframes->setValue( (double)keyframes.size() );
     
     if ( keyframes.empty() ) {
@@ -1996,6 +2004,12 @@ TrackerPanelPrivate::updateTrackKeysInfoBar(int time)
             currentKeyframe->setAnimation(1);
         }
     }
+}
+
+void
+TrackerPanel::onTimeChanged(SequenceTime time, int /*reason*/)
+{
+    _imp->updateTrackKeysInfoBar(time);
 }
 
 void

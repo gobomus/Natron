@@ -313,6 +313,7 @@ struct TrackerGuiPrivate
     ///Filter allkeys so only that only the MAX_TRACK_KEYS_TO_DISPLAY surrounding are displayed
     static KeyFrameTexIDs getKeysToRenderForMarker(double currentTime, const KeyFrameTexIDs& allKeys);
     
+    void computeTextureCanonicalRect(const Texture& tex, int xOffset, int texWidthPx, RectD* rect) const;
     void computeSelectedMarkerCanonicalRect(RectD* rect) const;
     bool isNearbySelectedMarkerTextureResizeAnchor(const QPointF& pos) const;
     bool isInsideSelectedMarkerTextureResizeAnchor(const QPointF& pos) const;
@@ -538,7 +539,6 @@ TrackerGui::createGui()
         QObject::connect(context.get(), SIGNAL(keyframeSetOnTrack(boost::shared_ptr<TrackMarker>,int)), this , SLOT(onKeyframeSetOnTrack(boost::shared_ptr<TrackMarker>,int)));
         QObject::connect(context.get(), SIGNAL(keyframeRemovedOnTrack(boost::shared_ptr<TrackMarker>,int)), this , SLOT(onKeyframeRemovedOnTrack(boost::shared_ptr<TrackMarker>,int)));
         QObject::connect(context.get(), SIGNAL(allKeyframesRemovedOnTrack(boost::shared_ptr<TrackMarker>)), this , SLOT(onAllKeyframesRemovedOnTrack(boost::shared_ptr<TrackMarker>)));
-        QObject::connect(context.get(), SIGNAL(mustRefreshSelectedMarkerTexture()), this, SLOT(updateSelectedMarkerTexture()));
         
         QPixmap createKeyOnMovePix;
         appPTR->getIcon(Natron::NATRON_PIXMAP_CREATE_USER_KEY_ON_MOVE, &createKeyOnMovePix);
@@ -1248,7 +1248,15 @@ TrackerGuiPrivate::isInsideKeyFrameTexture(double currentTime, const QPointF& po
             }
             KeyFrameTexIDs::iterator found = keysToRender.begin();
             std::advance(found, texIndex);
-            return found->first;
+            
+            RectD texCanonicalRect;
+            computeTextureCanonicalRect(*found->second, indexF * SELECTED_MARKER_KEYFRAME_WIDTH_SCREEN_PX + xRightMainTexture,
+                                        SELECTED_MARKER_KEYFRAME_WIDTH_SCREEN_PX, &texCanonicalRect);
+            
+            if (pos.y() >= texCanonicalRect.y1 && pos.y() < texCanonicalRect.y2) {
+                return found->first;
+            }
+            break;
         }
     }
     return INT_MAX;
@@ -1289,20 +1297,25 @@ TrackerGuiPrivate::isInsideSelectedMarkerTextureResizeAnchor(const QPointF& pos)
 }
 
 void
-TrackerGuiPrivate::computeSelectedMarkerCanonicalRect(RectD* rect) const
+TrackerGuiPrivate::computeTextureCanonicalRect(const Texture& tex,int xOffset, int texWidthPx, RectD* rect) const
 {
-    assert(selectedMarkerTexture);
     
     ///Preserve width
-    double par = selectedMarkerTexture->w() / (double)selectedMarkerTexture->h();
+    double par = tex.w() / (double)tex.h();
     
-    rect->x2 = viewer->getViewer()->toZoomCoordinates(QPointF(selectedMarkerWidth, 0.)).x();
-    QPointF topLeft = viewer->getViewer()->toZoomCoordinates(QPointF(0, 0.));
+    rect->x2 = viewer->getViewer()->toZoomCoordinates(QPointF(xOffset + texWidthPx, 0.)).x();
+    QPointF topLeft = viewer->getViewer()->toZoomCoordinates(QPointF(xOffset, 0.));
     rect->x1 = topLeft.x();
     rect->y2 = topLeft.y();
     double height = rect->width() / par;
     rect->y1 = rect->y2 - height;
+}
 
+void
+TrackerGuiPrivate::computeSelectedMarkerCanonicalRect(RectD* rect) const
+{
+    assert(selectedMarkerTexture);
+    computeTextureCanonicalRect(*selectedMarkerTexture, 0, selectedMarkerWidth, rect);
 }
 
 static Natron::Point toMagWindowPoint(const Natron::Point& ptnPoint,
@@ -1383,6 +1396,9 @@ TrackerGuiPrivate::drawSelectedMarkerKeyframes(const std::pair<double,double>& p
     boost::shared_ptr<TrackMarker> marker = selectedMarker.lock();
     assert(marker);
     if (!marker) {
+        return;
+    }
+    if (!marker->isEnabled()) {
         return;
     }
     boost::shared_ptr<KnobDouble> centerKnob = marker->getCenterKnob();
@@ -1504,20 +1520,20 @@ TrackerGuiPrivate::drawSelectedMarkerKeyframes(const std::pair<double,double>& p
                     KeyFrameTexIDs::const_iterator next = it2;
                     ++next;
                     KeyFrameTexIDs::const_iterator prev = it2;
-                    if (prev != it->second.begin()) {
+                    if (prev != keysToRender.begin()) {
                         --prev;
                     } else {
-                        prev = it->second.end();
+                        prev = keysToRender.end();
                     }
-                    if (next == it->second.end() && time < currentTime) {
+                    if (next == keysToRender.end() && time < currentTime) {
                         //Beyond the last keyframe
                         glColor4f(0.93, 0.54, 0, 1);
-                    } else if (prev == it->second.end() && time > currentTime) {
+                    } else if (prev == keysToRender.end() && time > currentTime) {
                         //Before the first keyframe
                         glColor4f(0.93, 0.54, 0, 1);
                     } else {
                         if (time < currentTime) {
-                            assert(next != it->second.end());
+                            assert(next != keysToRender.end());
                             if (next->first > currentTime) {
                                 glColor4f(1, 0.75, 0.47, 1);
                             } else {
@@ -1526,7 +1542,7 @@ TrackerGuiPrivate::drawSelectedMarkerKeyframes(const std::pair<double,double>& p
                                 
                         } else {
                             //time > currentTime
-                            assert(prev != it->second.end());
+                            assert(prev != keysToRender.end());
                             if (prev->first < currentTime) {
                                 glColor4f(1, 0.75, 0.47, 1);
                             } else {
@@ -2034,8 +2050,11 @@ TrackerGui::penDown(double time,
         
         if (_imp->clickToAddTrackEnabled && !didSomething) {
             boost::shared_ptr<TrackMarker> marker = context->createMarker();
-            boost::shared_ptr<KnobDouble> centerKnob = marker->getCenterKnob();
+            boost::shared_ptr<KnobDouble> centerKnob = context->getCenterKnob();
             centerKnob->setValuesAtTime(time, pos.x(), pos.y(), Natron::eValueChangedReasonNatronInternalEdited);
+            if (_imp->createKeyOnMoveButton->isChecked()) {
+                marker->setUserKeyframe(time);
+            }
             _imp->panel->pushUndoCommand(new AddTrackCommand(marker,context));
             didSomething = true;
         }
@@ -2063,8 +2082,12 @@ TrackerGui::penDown(double time,
             }
         }
         if (!didSomething) {
-            context->clearSelection(TrackerContext::eTrackSelectionViewer);
-            didSomething = true;
+            std::list<boost::shared_ptr<TrackMarker> > selectedMarkers;
+            context->getSelectedMarkers(&selectedMarkers);
+            if (!selectedMarkers.empty()) {
+                context->clearSelection(TrackerContext::eTrackSelectionViewer);
+                didSomething = true;
+            }
         }
     }
     _imp->lastMousePos = pos;
@@ -2339,6 +2362,10 @@ TrackerGuiPrivate::transformPattern(double time, TrackerMouseStateEnum state, co
     effect->endChanges();
     
     refreshSelectedMarkerTexture();
+    
+    if (createKeyOnMoveButton->isChecked()) {
+        interactMarker->setUserKeyframe(time);
+    }
 }
 
 bool
@@ -2623,6 +2650,9 @@ TrackerGui::penMotion(double time,
                                           Natron::eValueChangedReasonPluginEdited);
                 }
                 updateSelectedMarkerTexture();
+                if (_imp->createKeyOnMoveButton->isChecked()) {
+                    _imp->interactMarker->setUserKeyframe(time);
+                }
                 didSomething = true;
             }   break;
             case eMouseStateDraggingInnerBtmLeft:
@@ -2718,7 +2748,9 @@ TrackerGui::penMotion(double time,
                 } else {
                     patternCorners[index]->setValues(cur.x, cur.y, Natron::eValueChangedReasonNatronInternalEdited);
                 }
-                
+                if (_imp->createKeyOnMoveButton->isChecked()) {
+                    _imp->interactMarker->setUserKeyframe(time);
+                }
                 didSomething = true;
             }   break;
             case eMouseStateDraggingOuterBtmLeft:
@@ -2757,11 +2789,13 @@ TrackerGui::penMotion(double time,
                 } else {
                     searchWndBtmLeft->setValues(p.x, p.y, Natron::eValueChangedReasonNatronInternalEdited);
                 }
+
                 updateSelectedMarkerTexture();
                 didSomething = true;
             }   break;
             case eMouseStateDraggingOuterBtmRight:
             {
+               
                 if (_imp->controlDown == 0) {
                     _imp->transformPattern(time, _imp->eventState, delta);
                     didSomething = true;
@@ -2800,6 +2834,7 @@ TrackerGui::penMotion(double time,
                 } else {
                     searchWndTopRight->setValue(p.x,0);
                 }
+                
                 updateSelectedMarkerTexture();
                 didSomething = true;
             }   break;
@@ -2839,11 +2874,13 @@ TrackerGui::penMotion(double time,
                 } else {
                     searchWndTopRight->setValues(p.x, p.y,Natron::eValueChangedReasonNatronInternalEdited);
                 }
+                
                 updateSelectedMarkerTexture();
                 didSomething = true;
             }   break;
             case eMouseStateDraggingOuterTopLeft:
             {
+                
                 if (_imp->controlDown == 0) {
                     _imp->transformPattern(time, _imp->eventState, delta);
                     didSomething = true;
@@ -2882,6 +2919,7 @@ TrackerGui::penMotion(double time,
                 } else {
                     searchWndTopRight->setValue(p.y,1);
                 }
+                
                 updateSelectedMarkerTexture();
                 didSomething = true;
             }   break;
@@ -2949,6 +2987,9 @@ TrackerGui::penMotion(double time,
                                       centerKnob->getValueAtTime(time,1) - delta.y *  _imp->selectedMarkerScale.y,
                                       Natron::eValueChangedReasonPluginEdited);
             
+                if (_imp->createKeyOnMoveButton->isChecked()) {
+                    _imp->interactMarker->setUserKeyframe(time);
+                }
                 updateSelectedMarkerTexture();
                 didSomething = true;
 
@@ -3348,6 +3389,7 @@ void
 TrackerGui::onCreateKeyOnMoveButtonClicked(bool clicked)
 {
     _imp->createKeyOnMoveButton->setDown(clicked);
+    _imp->createKeyOnMoveButton->setChecked(clicked);
 }
 
 void
@@ -3390,9 +3432,12 @@ TrackerGui::onResetOffsetButtonClicked()
 {
     std::list<boost::shared_ptr<TrackMarker> > markers;
     _imp->panel->getContext()->getSelectedMarkers(&markers);
-    for (std::list<boost::shared_ptr<TrackMarker> >::iterator it = markers.begin(); it != markers.end(); ++it) {
-        (*it)->resetOffset();
+    boost::shared_ptr<KnobDouble> offsetKnob = _imp->panel->getContext()->getOffsetKnob();
+    assert(offsetKnob);
+    for (int i = 0; i < offsetKnob->getDimension(); ++i) {
+        offsetKnob->resetToDefaultValue(i);
     }
+
 }
 
 void
@@ -3400,6 +3445,8 @@ TrackerGui::onResetTrackButtonClicked()
 {
     _imp->panel->onResetButtonClicked();
 }
+
+
 
 void
 TrackerGui::onContextSelectionChanged(int reason)
@@ -3409,14 +3456,20 @@ TrackerGui::onContextSelectionChanged(int reason)
     if (selection.empty() || selection.size() > 1) {
         _imp->showMarkerTexture = false;
     } else {
-        if (_imp->selectedMarker.lock() != selection.front()) {
-            _imp->selectedMarker = selection.front();
+        
+        assert(selection.size() == 1);
+        
+        const boost::shared_ptr<TrackMarker>& selectionFront = selection.front();
+        boost::shared_ptr<TrackMarker> oldMarker = _imp->selectedMarker.lock();
+        if (oldMarker != selectionFront) {
+   
+            _imp->selectedMarker = selectionFront;
             _imp->refreshSelectedMarkerTexture();
             
             //Don't update in this case, the refresh of the texture will do it for us
             return;
         } else {
-            if (selection.front()) {
+            if (selectionFront) {
                 _imp->showMarkerTexture = true;
             }
         }
@@ -3661,6 +3714,20 @@ TrackerGuiPrivate::makeMarkerKeyTexture(int time, const boost::shared_ptr<TrackM
     k.time = time;
     k.track = track;
     k.roi = track->getMarkerImageRoI(time);
+    
+    TrackKeysMap::iterator foundTrack = trackTextures.find(track);
+    if (foundTrack != trackTextures.end()) {
+        KeyFrameTexIDs::iterator foundKey = foundTrack->second.find(k.time);
+        if (foundKey != foundTrack->second.end()) {
+            const TextureRect& texRect = foundKey->second->getTextureRect();
+            if (k.roi.x1 == texRect.x1 &&
+                k.roi.x2 == texRect.x2 &&
+                k.roi.y1 == texRect.y1 &&
+                k.roi.y2 == texRect.y2) {
+                return;
+            }
+        }
+    }
     
     TrackWatcherPtr watcher(new TrackWatcher());
     QObject::connect(watcher.get(), SIGNAL(finished()), _publicInterface, SLOT(onKeyFrameImageRenderingFinished()));

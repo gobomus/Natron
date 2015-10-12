@@ -426,8 +426,6 @@ Q_SIGNALS:
     void searchBtmLeftKnobValueChanged(boost::shared_ptr<TrackMarker> marker,int,int);
     void searchTopRightKnobValueChanged(boost::shared_ptr<TrackMarker> marker,int,int);
     
-    void mustRefreshSelectedMarkerTexture();
-
     void trackingStarted();
     void trackingFinished();
     void trackingProgress(double);

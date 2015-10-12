@@ -162,6 +162,8 @@ public Q_SLOTS:
     void onTrackingFinished();
     void onTrackingProgress(double p);
     
+    void onTimeChanged(SequenceTime time, int reason);
+    
 private:
     
     void onSelectionAboutToChangeInternal(const std::list<boost::shared_ptr<TrackMarker> >& markers);
