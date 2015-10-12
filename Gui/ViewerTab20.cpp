@@ -785,6 +785,7 @@ ViewerTab::notifyOverlaysKeyDown(double scaleX,
          it != nodes.rend();
          ++it) {
         if (notifyOverlaysKeyDown_internal(*it, scaleX, scaleY, e, natronKey, natronMod)) {
+            didSomething = true;
             if (isModifier) {
                 continue;
             }

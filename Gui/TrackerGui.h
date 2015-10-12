@@ -134,7 +134,9 @@ public Q_SLOTS:
     void updateSelectedMarkerTexture();
     
 private Q_SLOTS:
+    
     void onTrackImageRenderingFinished();
+    void onKeyFrameImageRenderingFinished();
     
 private:
     

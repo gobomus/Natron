@@ -148,14 +148,16 @@ TrackerNode::initializeKnobs()
 }
 
 bool
-TrackerNode::isIdentity(double /*time*/,
+TrackerNode::isIdentity(double time,
                         const RenderScale & /*scale*/,
                         const RectI & /*roi*/,
                         int /*view*/,
-                        double* /*inputTime*/,
-                        int* /*inputNb*/)
+                        double* inputTime,
+                        int* inputNb)
 {
     // Identity for now, until we can apply a transform
+    *inputTime = time;
+    *inputNb = 0;
     return true;
 }
 

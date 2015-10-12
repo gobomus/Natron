@@ -76,6 +76,9 @@ CLANG_DIAG_ON(uninitialized)
 
 #define SELECTED_MARKER_WINDOW_BASE_WIDTH_SCREEN_PX 200
 
+#define SELECTED_MARKER_KEYFRAME_WIDTH_SCREEN_PX 75
+#define MAX_TRACK_KEYS_TO_DISPLAY 10
+
 using namespace Natron;
 
 
@@ -134,6 +137,46 @@ enum TrackerDrawStateEnum
     eDrawStateShowScalingHint,
 };
 
+typedef QFutureWatcher<std::pair<boost::shared_ptr<Natron::Image>,RectI> > TrackWatcher;
+typedef boost::shared_ptr<TrackWatcher> TrackWatcherPtr;
+
+struct TrackRequestKey {
+    int time;
+    boost::weak_ptr<TrackMarker> track;
+    RectI roi;
+};
+
+struct TrackRequestKey_compareLess
+{
+    bool operator()(const TrackRequestKey& lhs, const TrackRequestKey& rhs) const
+    {
+        if (lhs.time < rhs.time) {
+            return true;
+        } else if (lhs.time > rhs.time) {
+            return false;
+        } else {
+            boost::shared_ptr<TrackMarker> lptr = lhs.track.lock();
+            boost::shared_ptr<TrackMarker> rptr = rhs.track.lock();
+            if (lptr.get() < rptr.get()) {
+                return true;
+            } else if (lptr.get() > rptr.get()) {
+                return false;
+            } else {
+                double la = lhs.roi.area();
+                double ra = rhs.roi.area();
+                if (la < ra) {
+                    return true;
+                } else if (la > ra) {
+                    return false;
+                } else {
+                    return false;
+                }
+            }
+        }
+    }
+};
+
+typedef std::map<TrackRequestKey, TrackWatcherPtr, TrackRequestKey_compareLess> TrackKeyframeRequests;
 
 struct TrackerGuiPrivate
 {
@@ -174,9 +217,10 @@ struct TrackerGuiPrivate
     
     boost::shared_ptr<TrackMarker> interactMarker,hoverMarker;
     
-    typedef std::map<int,GLuint> KeyFrameTexIDs;
-    typedef std::map<boost::shared_ptr<TrackMarker>, KeyFrameTexIDs> TrackKeysMap;
+    typedef std::map<int,boost::shared_ptr<Texture> > KeyFrameTexIDs;
+    typedef std::map<boost::weak_ptr<TrackMarker>, KeyFrameTexIDs> TrackKeysMap;
     TrackKeysMap trackTextures;
+    TrackKeyframeRequests trackRequestsMap;
     
     boost::shared_ptr<Texture> selectedMarkerTexture;
     RectI selectedMarkerTextureRoI;
@@ -184,9 +228,10 @@ struct TrackerGuiPrivate
     boost::weak_ptr<TrackMarker> selectedMarker;
     GLuint pboID;
     int selectedMarkerWidth;
-    boost::shared_ptr<QFutureWatcher<std::pair<boost::shared_ptr<Natron::Image>,RectI> > > imageGetterWatcher;
+    TrackWatcherPtr imageGetterWatcher;
     bool showMarkerTexture;
     RenderScale selectedMarkerScale;
+    boost::weak_ptr<Image> selectedMarkerImg;
 
     TrackerGuiPrivate(TrackerGui* publicInterface,
                       const boost::shared_ptr<TrackerPanelV1> & panelv1,
@@ -224,6 +269,7 @@ struct TrackerGuiPrivate
     , hoverState(eDrawStateInactive)
     , interactMarker()
     , trackTextures()
+    , trackRequestsMap()
     , selectedMarkerTexture()
     , selectedMarkerTextureRoI()
     , selectedMarker()
@@ -232,6 +278,7 @@ struct TrackerGuiPrivate
     , imageGetterWatcher()
     , showMarkerTexture(false)
     , selectedMarkerScale()
+    , selectedMarkerImg()
     {
         glGenBuffers(1, &pboID);
         selectedMarkerScale.x = selectedMarkerScale.y = 1.;
@@ -246,7 +293,12 @@ struct TrackerGuiPrivate
     
     void refreshSelectedMarkerTexture();
     
+    void convertImageTosRGBOpenGLTexture(const boost::shared_ptr<Image>& image,const boost::shared_ptr<Texture>& tex, const RectI& renderWindow);
+    
+    void makeMarkerKeyTexture(int time, const boost::shared_ptr<TrackMarker>& track);
+    
     void drawSelectedMarkerTexture(const std::pair<double,double>& pixelScale,
+                                   int currentTime,
                                    const Natron::Point& selectedCenter,
                                    const Natron::Point& offset,
                                    const Natron::Point& selectedPtnTopLeft,
@@ -256,9 +308,18 @@ struct TrackerGuiPrivate
                                    const Natron::Point& selectedSearchWndBtmLeft,
                                    const Natron::Point& selectedSearchWndTopRight);
     
+    void drawSelectedMarkerKeyframes(const std::pair<double,double>& pixelScale, int currentTime);
+    
+    ///Filter allkeys so only that only the MAX_TRACK_KEYS_TO_DISPLAY surrounding are displayed
+    static KeyFrameTexIDs getKeysToRenderForMarker(double currentTime, const KeyFrameTexIDs& allKeys);
+    
     void computeSelectedMarkerCanonicalRect(RectD* rect) const;
     bool isNearbySelectedMarkerTextureResizeAnchor(const QPointF& pos) const;
     bool isInsideSelectedMarkerTextureResizeAnchor(const QPointF& pos) const;
+    
+    ///Returns the keyframe time if the mouse is inside a keyframe texture
+    int isInsideKeyFrameTexture(double currentTime, const QPointF& pos, const QPointF& viewportPos) const;
+    
 };
 
 class DuringOverlayFlag_RAII
@@ -1099,7 +1160,7 @@ TrackerGui::drawOverlays(double time,
             } // for (std::vector<boost::shared_ptr<TrackMarker> >::iterator it = allMarkers.begin(); it!=allMarkers.end(); ++it) {
             
             if (_imp->showMarkerTexture) {
-                _imp->drawSelectedMarkerTexture(std::make_pair(pixelScaleX, pixelScaleY), selectedCenter, selectedOffset,  selectedPtnTopLeft, selectedPtnTopRight,selectedPtnBtmRight, selectedPtnBtmLeft, selectedSearchBtmLeft, selectedSearchTopRight);
+                _imp->drawSelectedMarkerTexture(std::make_pair(pixelScaleX, pixelScaleY), time, selectedCenter, selectedOffset,  selectedPtnTopLeft, selectedPtnTopRight,selectedPtnBtmRight, selectedPtnBtmLeft, selectedSearchBtmLeft, selectedSearchTopRight);
             }
         } // // if (_imp->panelv1) {
         
@@ -1144,6 +1205,54 @@ TrackerGui::drawOverlays(double time,
         }
     } // GLProtectAttrib a(GL_CURRENT_BIT | GL_COLOR_BUFFER_BIT | GL_LINE_BIT | GL_ENABLE_BIT | GL_HINT_BIT);
 } // drawOverlays
+
+int
+TrackerGuiPrivate::isInsideKeyFrameTexture(double currentTime, const QPointF& pos, const QPointF& viewportPos) const
+{
+    
+    if (!showMarkerTexture) {
+        return INT_MAX;
+    }
+    
+    
+    RectD textureRectCanonical;
+    computeSelectedMarkerCanonicalRect(&textureRectCanonical);
+    
+    if (pos.y() < textureRectCanonical.y1 || pos.y() > textureRectCanonical.y2) {
+        return INT_MAX;
+    }
+    if (pos.x() < textureRectCanonical.x2) {
+        return INT_MAX;
+    }
+    
+    boost::shared_ptr<TrackMarker> marker = selectedMarker.lock();
+    if (!marker) {
+        return INT_MAX;
+    }
+    
+    //Find out which keyframe it is by counting keyframe portions
+    int xRightMainTexture = viewer->getViewer()->toWidgetCoordinates(QPointF(textureRectCanonical.x2,0)).x();
+    double indexF = (viewportPos.x() - xRightMainTexture) / double(SELECTED_MARKER_KEYFRAME_WIDTH_SCREEN_PX);
+    int texIndex = (int)std::floor(indexF);
+    
+    for (TrackKeysMap::const_iterator it = trackTextures.begin(); it!=trackTextures.end(); ++it) {
+        if (it->first.lock() == marker) {
+            
+            if (it->second.empty()) {
+                break;
+            }
+            ///Render at most MAX_TRACK_KEYS_TO_DISPLAY keyframes
+            KeyFrameTexIDs keysToRender = getKeysToRenderForMarker(currentTime, it->second);
+            if (texIndex < 0 || texIndex >= (int)keysToRender.size()) {
+                return INT_MAX;
+            }
+            KeyFrameTexIDs::iterator found = keysToRender.begin();
+            std::advance(found, texIndex);
+            return found->first;
+        }
+    }
+    return INT_MAX;
+}
 
 bool
 TrackerGuiPrivate::isNearbySelectedMarkerTextureResizeAnchor(const QPointF& pos) const
@@ -1230,8 +1339,256 @@ drawEllipse(double x, double y, double radiusX, double radiusY, int l, double r,
     glPopMatrix();
 }
 
+TrackerGuiPrivate::KeyFrameTexIDs
+TrackerGuiPrivate::getKeysToRenderForMarker(double currentTime, const KeyFrameTexIDs& allKeys)
+{
+    KeyFrameTexIDs keysToRender;
+    ///Find the first key equivalent to currentTime or after
+    KeyFrameTexIDs::const_iterator lower = allKeys.lower_bound(currentTime);
+    KeyFrameTexIDs::const_iterator prev = lower;
+    if (lower != allKeys.begin()) {
+        --prev;
+    } else {
+        prev = allKeys.end();
+    }
+    
+    for (int i = 0; i < MAX_TRACK_KEYS_TO_DISPLAY; ++i) {
+        if (lower != allKeys.end()) {
+            keysToRender.insert(*lower);
+            ++lower;
+        }
+        if (i == MAX_TRACK_KEYS_TO_DISPLAY) {
+            break;
+        }
+        if (prev != allKeys.end()) {
+            keysToRender.insert(*prev);
+            if (prev != allKeys.begin()) {
+                --prev;
+            } else {
+                prev = allKeys.end();
+            }
+        } else {
+            if (lower == allKeys.end()) {
+                ///No more keyframes
+                break;
+            }
+        }
+    }
+    return keysToRender;
+}
+
+void
+TrackerGuiPrivate::drawSelectedMarkerKeyframes(const std::pair<double,double>& pixelScale, int currentTime)
+{
+    boost::shared_ptr<TrackMarker> marker = selectedMarker.lock();
+    assert(marker);
+    if (!marker) {
+        return;
+    }
+    boost::shared_ptr<KnobDouble> centerKnob = marker->getCenterKnob();
+    boost::shared_ptr<KnobDouble> offsetKnob = marker->getOffsetKnob();
+    boost::shared_ptr<KnobDouble> correlationKnob = marker->getCorrelationKnob();
+    boost::shared_ptr<KnobDouble> ptnTopLeft = marker->getPatternTopLeftKnob();
+    boost::shared_ptr<KnobDouble> ptnTopRight = marker->getPatternTopRightKnob();
+    boost::shared_ptr<KnobDouble> ptnBtmRight = marker->getPatternBtmRightKnob();
+    boost::shared_ptr<KnobDouble> ptnBtmLeft = marker->getPatternBtmLeftKnob();
+    boost::shared_ptr<KnobDouble> searchWndBtmLeft = marker->getSearchWindowBottomLeftKnob();
+    boost::shared_ptr<KnobDouble> searchWndTopRight = marker->getSearchWindowTopRightKnob();
+    
+    const QFont& font = viewer->font();
+    QFontMetrics fm(font);
+    int fontHeight = fm.height();
+    
+    double xOffsetPixels = selectedMarkerWidth;
+    QPointF viewerTopLeftCanonical = viewer->getViewer()->toZoomCoordinates(QPointF(0, 0.));
+
+    
+    for (TrackKeysMap::iterator it = trackTextures.begin(); it!=trackTextures.end(); ++it) {
+        if (it->first.lock() == marker) {
+            
+            if (it->second.empty()) {
+                break;
+            }
+            ///Render at most MAX_TRACK_KEYS_TO_DISPLAY keyframes
+            KeyFrameTexIDs keysToRender = getKeysToRenderForMarker(currentTime, it->second);
+            
+            for (KeyFrameTexIDs::const_iterator it2 = keysToRender.begin(); it2 != keysToRender.end(); ++it2) {
+                
+                double time = (double)it2->first;
+                
+                Natron::Point offset,center,topLeft,topRight,btmRight,btmLeft;
+                Natron::Point searchTopLeft,searchTopRight,searchBtmLeft,searchBtmRight;
+                center.x = centerKnob->getValueAtTime(time, 0);
+                center.y = centerKnob->getValueAtTime(time, 1);
+                offset.x = offsetKnob->getValueAtTime(time, 0);
+                offset.y = offsetKnob->getValueAtTime(time, 1);
+                
+                topLeft.x = ptnTopLeft->getValueAtTime(time, 0) + offset.x + center.x;
+                topLeft.y = ptnTopLeft->getValueAtTime(time, 1) + offset.y + center.y;
+                
+                topRight.x = ptnTopRight->getValueAtTime(time, 0) + offset.x + center.x;
+                topRight.y = ptnTopRight->getValueAtTime(time, 1) + offset.y + center.y;
+                
+                btmRight.x = ptnBtmRight->getValueAtTime(time, 0) + offset.x + center.x;
+                btmRight.y = ptnBtmRight->getValueAtTime(time, 1) + offset.y + center.y;
+                
+                btmLeft.x = ptnBtmLeft->getValueAtTime(time, 0) + offset.x + center.x;
+                btmLeft.y = ptnBtmLeft->getValueAtTime(time, 1) + offset.y + center.y;
+                
+                searchBtmLeft.x = searchWndBtmLeft->getValueAtTime(time, 0) + offset.x + center.x;
+                searchBtmLeft.y = searchWndBtmLeft->getValueAtTime(time, 1) + offset.y + center.y;
+                
+                searchTopRight.x = searchWndTopRight->getValueAtTime(time, 0) + offset.x + center.x;
+                searchTopRight.y = searchWndTopRight->getValueAtTime(time, 1) + offset.y + center.y;
+                
+                searchTopLeft.x = searchBtmLeft.x;
+                searchTopLeft.y = searchTopRight.y;
+                
+                searchBtmRight.x = searchTopRight.x;
+                searchBtmRight.y = searchBtmLeft.y;
+                
+                const TextureRect& texRect = it2->second->getTextureRect();
+                assert(texRect.h > 0);
+                double par = texRect.w / (double)texRect.h;
+                RectD textureRectCanonical;
+                
+                textureRectCanonical.x2 = viewer->getViewer()->toZoomCoordinates(QPointF(SELECTED_MARKER_KEYFRAME_WIDTH_SCREEN_PX + xOffsetPixels, 0.)).x();
+                textureRectCanonical.x1 = viewer->getViewer()->toZoomCoordinates(QPointF(xOffsetPixels, 0.)).x();
+                textureRectCanonical.y2 = viewerTopLeftCanonical.y();
+                double height = textureRectCanonical.width() / par;
+                textureRectCanonical.y1 = textureRectCanonical.y2 - height;
+                
+                
+                //Remove any offset to the center to see the marker in the magnification window
+                double xCenterPercent = (center.x - searchBtmLeft.x + offset.x) / (searchTopRight.x - searchBtmLeft.x);
+                double yCenterPercent = (center.y - searchBtmLeft.y + offset.y) / (searchTopRight.y - searchBtmLeft.y);
+                Natron::Point centerPointCanonical;
+                centerPointCanonical.y = textureRectCanonical.y1 + yCenterPercent * (textureRectCanonical.y2 - textureRectCanonical.y1);
+                centerPointCanonical.x = textureRectCanonical.x1 + xCenterPercent * (textureRectCanonical.x2 - textureRectCanonical.x1);
+                
+                Natron::Point innerTopLeft = toMagWindowPoint(topLeft, searchBtmLeft, searchTopRight, textureRectCanonical);
+                Natron::Point innerTopRight = toMagWindowPoint(topRight, searchBtmLeft, searchTopRight, textureRectCanonical);
+                Natron::Point innerBtmLeft = toMagWindowPoint(btmLeft, searchBtmLeft, searchTopRight, textureRectCanonical);
+                Natron::Point innerBtmRight = toMagWindowPoint(btmRight, searchBtmLeft, searchTopRight, textureRectCanonical);
+                
+                //Map texture
+                glColor4f(1., 1., 1., 1.);
+                glEnable(GL_TEXTURE_2D);
+                glBindTexture(GL_TEXTURE_2D, it2->second->getTexID());
+                glBegin(GL_POLYGON);
+                glTexCoord2d(0, 0); glVertex2d(textureRectCanonical.x1, textureRectCanonical.y1);
+                glTexCoord2d(0, 1); glVertex2d(textureRectCanonical.x1, textureRectCanonical.y2);
+                glTexCoord2d(1, 1); glVertex2d(textureRectCanonical.x2, textureRectCanonical.y2);
+                glTexCoord2d(1, 0); glVertex2d(textureRectCanonical.x2, textureRectCanonical.y1);
+                glEnd();
+                
+                glBindTexture(GL_TEXTURE_2D, 0);
+                
+                QPointF textPos = viewer->getViewer()->toZoomCoordinates(QPointF(xOffsetPixels + 5, fontHeight + 5 ));
+                viewer->getViewer()->renderText(textPos.x(), textPos.y(), marker->getLabel().c_str(), QColor(200,200,200), font);
+                
+                QPointF framePos = viewer->getViewer()->toZoomCoordinates(QPointF(xOffsetPixels + 5, viewer->getViewer()->toWidgetCoordinates(QPointF(textureRectCanonical.x1, textureRectCanonical.y1)).y()));
+                QString frameText = _publicInterface->tr("Frame");
+                frameText.append(" " + QString::number(it2->first));
+                viewer->getViewer()->renderText(framePos.x(), framePos.y(), frameText, QColor(200,200,200), font);
+                
+                //Draw contour
+                glEnable(GL_LINE_SMOOTH);
+                glHint(GL_LINE_SMOOTH_HINT, GL_DONT_CARE);
+                glEnable(GL_BLEND);
+                glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+                
+                if (time == currentTime) {
+                    glColor4f(0.93, 0.54, 0, 1);
+                } else {
+                    KeyFrameTexIDs::const_iterator next = it2;
+                    ++next;
+                    KeyFrameTexIDs::const_iterator prev = it2;
+                    if (prev != it->second.begin()) {
+                        --prev;
+                    } else {
+                        prev = it->second.end();
+                    }
+                    if (next == it->second.end() && time < currentTime) {
+                        //Beyond the last keyframe
+                        glColor4f(0.93, 0.54, 0, 1);
+                    } else if (prev == it->second.end() && time > currentTime) {
+                        //Before the first keyframe
+                        glColor4f(0.93, 0.54, 0, 1);
+                    } else {
+                        if (time < currentTime) {
+                            assert(next != it->second.end());
+                            if (next->first > currentTime) {
+                                glColor4f(1, 0.75, 0.47, 1);
+                            } else {
+                                glColor4f(1., 1., 1., 0.5);
+                            }
+                                
+                        } else {
+                            //time > currentTime
+                            assert(prev != it->second.end());
+                            if (prev->first < currentTime) {
+                                glColor4f(1, 0.75, 0.47, 1);
+                            } else {
+                                glColor4f(1., 1., 1., 0.5);
+                            }
+                            
+                        }
+                    }
+                    
+                    
+                }
+                
+                glLineWidth(1.5);
+                glCheckError();
+                glBegin(GL_LINE_LOOP);
+                glVertex2d(textureRectCanonical.x1, textureRectCanonical.y1);
+                glVertex2d(textureRectCanonical.x1, textureRectCanonical.y2);
+                glVertex2d(textureRectCanonical.x2, textureRectCanonical.y2);
+                glVertex2d(textureRectCanonical.x2, textureRectCanonical.y1);
+                glEnd();
+                
+                glCheckError();
+                
+                
+                
+                //Draw internal marker
+                for (int l = 0; l < 2; ++l) {
+                    // shadow (uses GL_PROJECTION)
+                    glMatrixMode(GL_PROJECTION);
+                    int direction = (l == 0) ? 1 : -1;
+                    // translate (1,-1) pixels
+                    glTranslated(direction * pixelScale.first / 256, -direction * pixelScale.second / 256, 0);
+                    glMatrixMode(GL_MODELVIEW);
+                    
+                    glColor4f(0.8 *l, 0.8 *l, 0.8 *l, 1);
+                    
+                    glBegin(GL_LINE_LOOP);
+                    glVertex2d(innerTopLeft.x, innerTopLeft.y);
+                    glVertex2d(innerTopRight.x, innerTopRight.y);
+                    glVertex2d(innerBtmRight.x, innerBtmRight.y);
+                    glVertex2d(innerBtmLeft.x, innerBtmLeft.y);
+                    glEnd();
+                    
+                    glBegin(GL_POINTS);
+                    glVertex2d(centerPointCanonical.x, centerPointCanonical.y);
+                    glEnd();
+                    
+                }
+                
+                xOffsetPixels += SELECTED_MARKER_KEYFRAME_WIDTH_SCREEN_PX;
+
+                
+            }
+            break;
+        }
+    }
+    
+}
+
 void
 TrackerGuiPrivate::drawSelectedMarkerTexture(const std::pair<double,double>& pixelScale,
+                                             int currentTime,
                                              const Natron::Point& ptnCenter,
                                              const Natron::Point& offset,
                                              const Natron::Point& ptnTopLeft,
@@ -1241,7 +1598,8 @@ TrackerGuiPrivate::drawSelectedMarkerTexture(const std::pair<double,double>& pix
                                              const Natron::Point& selectedSearchWndBtmLeft,
                                              const Natron::Point& selectedSearchWndTopRight)
 {
-    if (!selectedMarkerTexture) {
+    boost::shared_ptr<TrackMarker> marker = selectedMarker.lock();
+    if (!selectedMarkerTexture || !marker) {
         return;
     }
     
@@ -1285,6 +1643,7 @@ TrackerGuiPrivate::drawSelectedMarkerTexture(const std::pair<double,double>& pix
     btmRightTex = Transform::matApply(m, btmRightTex);
     topRightTex = Transform::matApply(m, topRightTex);
     
+    //Map texture
     glColor4f(1., 1., 1., 1.);
     glEnable(GL_TEXTURE_2D);
     glBindTexture(GL_TEXTURE_2D, selectedMarkerTexture->getTexID());
@@ -1297,6 +1656,7 @@ TrackerGuiPrivate::drawSelectedMarkerTexture(const std::pair<double,double>& pix
     
     glBindTexture(GL_TEXTURE_2D, 0);
     
+    //Draw contour
     glEnable(GL_LINE_SMOOTH);
     glHint(GL_LINE_SMOOTH_HINT, GL_DONT_CARE);
     glEnable(GL_BLEND);
@@ -1318,6 +1678,13 @@ TrackerGuiPrivate::drawSelectedMarkerTexture(const std::pair<double,double>& pix
     glEnd();
     glCheckError();
     
+    const QFont& font = viewer->font();
+    QFontMetrics fm(font);
+    
+    QPointF textPos = viewer->getViewer()->toZoomCoordinates(QPointF(5, fm.height() + 5));
+    viewer->getViewer()->renderText(textPos.x(), textPos.y(), marker->getLabel().c_str(), QColor(200,200,200), font);
+    
+    //Draw internal marker
 
     for (int l = 0; l < 2; ++l) {
         // shadow (uses GL_PROJECTION)
@@ -1340,7 +1707,7 @@ TrackerGuiPrivate::drawSelectedMarkerTexture(const std::pair<double,double>& pix
         glVertex2d(centerPoint.x, centerPoint.y);
         glEnd();
         
-        
+        ///Draw ellipse if scaling
         if (eventState == eMouseStateScalingSelectedMarker || hoverState == eDrawStateShowScalingHint) {
             double ellipseColor[3];
             if (eventState == eMouseStateScalingSelectedMarker) {
@@ -1358,6 +1725,10 @@ TrackerGuiPrivate::drawSelectedMarkerTexture(const std::pair<double,double>& pix
         }
         
     }
+    
+    ///Now draw keyframes
+    drawSelectedMarkerKeyframes(pixelScale,currentTime);
+    
     
 }
 
@@ -1674,17 +2045,25 @@ TrackerGui::penDown(double time,
             didSomething = true;
         }
         
-        if (!didSomething) {
-            if (!_imp->showMarkerTexture || !_imp->isInsideSelectedMarkerTextureResizeAnchor(pos)) {
-                context->clearSelection(TrackerContext::eTrackSelectionViewer);
+        if (!didSomething && _imp->showMarkerTexture && _imp->isInsideSelectedMarkerTextureResizeAnchor(pos)) {
+            if (_imp->shiftDown) {
+                _imp->eventState = eMouseStateScalingSelectedMarker;
             } else {
-                if (_imp->shiftDown) {
-                    _imp->eventState = eMouseStateScalingSelectedMarker;
-                } else {
-                    _imp->eventState = eMouseStateDraggingSelectedMarker;
-                }
-                _imp->interactMarker = _imp->selectedMarker.lock();
+                _imp->eventState = eMouseStateDraggingSelectedMarker;
             }
+            _imp->interactMarker = _imp->selectedMarker.lock();
+            didSomething = true;
+        }
+        
+        if (!didSomething) {
+            int keyTime = _imp->isInsideKeyFrameTexture(time, pos, viewportPos);
+            if (keyTime != INT_MAX) {
+                _imp->viewer->seek(keyTime);
+                didSomething = true;
+            }
+        }
+        if (!didSomething) {
+            context->clearSelection(TrackerContext::eTrackSelectionViewer);
             didSomething = true;
         }
     }
@@ -2188,6 +2567,9 @@ TrackerGui::penMotion(double time,
             hoverProcess = true;
         } else if (_imp->showMarkerTexture && _imp->isInsideSelectedMarkerTextureResizeAnchor(pos)) {
             _imp->viewer->getViewer()->setCursor(Qt::SizeAllCursor);
+            hoverProcess = true;
+        } else if (_imp->showMarkerTexture && _imp->isInsideKeyFrameTexture(time, pos, viewportPos) != INT_MAX) {
+            _imp->viewer->getViewer()->setCursor(Qt::PointingHandCursor);
             hoverProcess = true;
         } else {
             _imp->viewer->getViewer()->unsetCursor();
@@ -3074,8 +3456,6 @@ TrackerGui::onTrackImageRenderingFinished()
     assert(future);
     std::pair<boost::shared_ptr<Natron::Image>,RectI> ret = future->result();
     
-    RectI bounds;
-    RectI roi;
     
     _imp->viewer->getViewer()->makeOpenGLcontextCurrent();
     _imp->showMarkerTexture = true;
@@ -3083,18 +3463,66 @@ TrackerGui::onTrackImageRenderingFinished()
         _imp->selectedMarkerTexture.reset(new Texture(GL_TEXTURE_2D, GL_LINEAR, GL_NEAREST, GL_CLAMP_TO_EDGE));
     }
     
-    if (ret.first) {
-        bounds = ret.first->getBounds();
-        ret.second.intersect(bounds, &roi);
-        _imp->selectedMarkerTextureRoI = ret.second;
+    _imp->selectedMarkerTextureRoI = ret.second;
+    
+    _imp->convertImageTosRGBOpenGLTexture(ret.first, _imp->selectedMarkerTexture, ret.second);
+   
+    
+    _imp->viewer->getViewer()->redraw();
+
+}
+
+void
+TrackerGui::onKeyFrameImageRenderingFinished()
+{
+    assert(QThread::currentThread() == qApp->thread());
+    TrackWatcher* future = dynamic_cast<TrackWatcher*>(sender());
+    assert(future);
+    std::pair<boost::shared_ptr<Natron::Image>,RectI> ret = future->result();
+    if (!ret.first || ret.second.isNull()) {
+        return;
+    }
+    
+    _imp->viewer->getViewer()->makeOpenGLcontextCurrent();
+    
+    for (TrackKeyframeRequests::iterator it = _imp->trackRequestsMap.begin(); it!=_imp->trackRequestsMap.end(); ++it) {
+        if (it->second.get() == future) {
+            
+            boost::shared_ptr<TrackMarker> track = it->first.track.lock();
+            if (!track) {
+                return;
+            }
+            TrackerGuiPrivate::KeyFrameTexIDs& keyTextures = _imp->trackTextures[track];
+            boost::shared_ptr<Texture> tex(new Texture(GL_TEXTURE_2D, GL_LINEAR, GL_NEAREST, GL_CLAMP_TO_EDGE));
+            keyTextures[it->first.time] = tex;
+            _imp->convertImageTosRGBOpenGLTexture(ret.first, tex, ret.second);
+            
+            _imp->trackRequestsMap.erase(it);
+            
+            _imp->viewer->getViewer()->redraw();
+            return;
+        }
+    }
+    assert(false);
+}
+
+void
+TrackerGuiPrivate::convertImageTosRGBOpenGLTexture(const boost::shared_ptr<Image>& image,const boost::shared_ptr<Texture>& tex, const RectI& renderWindow)
+{
+    RectI bounds;
+    RectI roi;
+    
+    if (image) {
+        bounds = image->getBounds();
+        renderWindow.intersect(bounds, &roi);
     } else {
-        bounds = ret.second;
+        bounds = renderWindow;
         roi = bounds;
-        _imp->selectedMarkerTextureRoI = roi;
     }
     if (roi.isNull()) {
         return;
     }
+
     
     std::size_t bytesCount = 4 * sizeof(unsigned char) * roi.area();
     
@@ -3109,21 +3537,21 @@ TrackerGui::onTrackImageRenderingFinished()
     GLint currentBoundPBO = 0;
     glGetIntegerv(GL_PIXEL_UNPACK_BUFFER_BINDING, &currentBoundPBO);
     
-    glBindBufferARB( GL_PIXEL_UNPACK_BUFFER_ARB, _imp->pboID );
+    glBindBufferARB( GL_PIXEL_UNPACK_BUFFER_ARB, pboID );
     glBufferDataARB(GL_PIXEL_UNPACK_BUFFER_ARB, bytesCount, NULL, GL_DYNAMIC_DRAW_ARB);
     GLvoid *buf = glMapBufferARB(GL_PIXEL_UNPACK_BUFFER_ARB, GL_WRITE_ONLY_ARB);
     glCheckError();
     assert(buf);
     
-    if (!ret.first) {
+    if (!image) {
         int pixelsCount = roi.area();
         unsigned int* dstPixels = (unsigned int*)buf;
         for (int i = 0; i < pixelsCount; ++i, ++dstPixels) {
             *dstPixels = toBGRA(0, 0, 0, 255);
         }
     } else {
-        assert(ret.first->getComponents() == Natron::ImageComponents::getRGBComponents());
-        Image::ReadAccess acc(ret.first.get());
+        assert(image->getComponents() == Natron::ImageComponents::getRGBComponents());
+        Image::ReadAccess acc(image.get());
         
         
         
@@ -3182,15 +3610,11 @@ TrackerGui::onTrackImageRenderingFinished()
     
     glUnmapBufferARB(GL_PIXEL_UNPACK_BUFFER_ARB);
     glCheckError();
-    _imp->selectedMarkerTexture->fillOrAllocateTexture(region, Texture::eDataTypeByte, RectI(), false);
-    
+    tex->fillOrAllocateTexture(region, Texture::eDataTypeByte, RectI(), false);
     
     glBindBufferARB(GL_PIXEL_UNPACK_BUFFER_ARB, currentBoundPBO);
     
     glCheckError();
-    
-    _imp->viewer->getViewer()->updateGL();
-
 }
 
 void
@@ -3209,30 +3633,71 @@ TrackerGuiPrivate::refreshSelectedMarkerTexture()
     if (!marker) {
         return;
     }
+    
     int time = panel->getNode()->getNode()->getApp()->getTimeLine()->currentFrame();
     
-    imageGetterWatcher.reset(new QFutureWatcher<std::pair<boost::shared_ptr<Natron::Image>,RectI> >());
+    RectI roi = marker->getMarkerImageRoI(time);
+    if (roi.isNull()) {
+        return;
+    }
+    ImagePtr existingMarkerImg = selectedMarkerImg.lock();
+    if (existingMarkerImg && existingMarkerImg->getTime() == time && roi == selectedMarkerTextureRoI) {
+        return;
+    }
+    
+    selectedMarkerImg.reset();
+    
+    imageGetterWatcher.reset(new TrackWatcher());
     QObject::connect(imageGetterWatcher.get(), SIGNAL(finished()), _publicInterface, SLOT(onTrackImageRenderingFinished()));
-    imageGetterWatcher->setFuture(QtConcurrent::run(marker.get(),&TrackMarker::getMarkerImage, time));
+    imageGetterWatcher->setFuture(QtConcurrent::run(marker.get(),&TrackMarker::getMarkerImage, time, roi));
     
 }
 
+void
+TrackerGuiPrivate::makeMarkerKeyTexture(int time, const boost::shared_ptr<TrackMarker>& track)
+{
+    assert(QThread::currentThread() == qApp->thread());
+    TrackRequestKey k;
+    k.time = time;
+    k.track = track;
+    k.roi = track->getMarkerImageRoI(time);
+    
+    TrackWatcherPtr watcher(new TrackWatcher());
+    QObject::connect(watcher.get(), SIGNAL(finished()), _publicInterface, SLOT(onKeyFrameImageRenderingFinished()));
+    trackRequestsMap[k] = watcher;
+    watcher->setFuture(QtConcurrent::run(track.get(),&TrackMarker::getMarkerImage, time, k.roi));
+}
 
 
 void
 TrackerGui::onKeyframeSetOnTrack(const boost::shared_ptr<TrackMarker>& marker, int key)
 {
-    
+    _imp->makeMarkerKeyTexture(key,marker);
 }
 
 void
 TrackerGui::onKeyframeRemovedOnTrack(const boost::shared_ptr<TrackMarker>& marker, int key)
 {
-    
+    for (TrackerGuiPrivate::TrackKeysMap::iterator it = _imp->trackTextures.begin(); it!=_imp->trackTextures.end(); ++it) {
+        if (it->first.lock() == marker) {
+            std::map<int,boost::shared_ptr<Texture> >::const_iterator found = it->second.find(key);
+            if (found != it->second.end()) {
+                it->second.erase(found);
+            }
+            break;
+        }
+    }
+    _imp->viewer->getViewer()->redraw();
 }
 
 void
 TrackerGui::onAllKeyframesRemovedOnTrack(const boost::shared_ptr<TrackMarker>& marker)
 {
-    
+    for (TrackerGuiPrivate::TrackKeysMap::iterator it = _imp->trackTextures.begin(); it!=_imp->trackTextures.end(); ++it) {
+        if (it->first.lock() == marker) {
+            it->second.clear();
+            break;
+        }
+    }
+    _imp->viewer->getViewer()->redraw();
 }

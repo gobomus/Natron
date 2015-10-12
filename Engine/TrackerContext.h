@@ -126,7 +126,9 @@ public:
     
     void removeAllKeyframes();
     
-    std::pair<boost::shared_ptr<Natron::Image>,RectI> getMarkerImage(int time) const;
+    std::pair<boost::shared_ptr<Natron::Image>,RectI> getMarkerImage(int time,const RectI& roi) const;
+   
+    RectI getMarkerImageRoI(int time) const;
     
 public Q_SLOTS:
     

@@ -415,6 +415,7 @@ TrackerPanel::TrackerPanel(const boost::shared_ptr<NodeGui>& n,
     
     _imp->prevKeyframe = new Button(QIcon(prevPix),"",trackContainer);
     _imp->prevKeyframe->setFixedSize(NATRON_MEDIUM_BUTTON_SIZE,NATRON_MEDIUM_BUTTON_SIZE);
+    _imp->prevKeyframe->setIconSize(QSize(NATRON_MEDIUM_BUTTON_SIZE,NATRON_MEDIUM_BUTTON_SIZE));
     _imp->prevKeyframe->setToolTip(Natron::convertFromPlainText(tr("Go to the previous keyframe."), Qt::WhiteSpaceNormal));
     _imp->prevKeyframe->setEnabled(false);
     QObject::connect( _imp->prevKeyframe, SIGNAL( clicked(bool) ), this, SLOT( onGoToPrevKeyframeButtonClicked() ) );
@@ -422,6 +423,7 @@ TrackerPanel::TrackerPanel(const boost::shared_ptr<NodeGui>& n,
     
     _imp->nextKeyframe = new Button(QIcon(nextPix),"",trackContainer);
     _imp->nextKeyframe->setFixedSize(NATRON_MEDIUM_BUTTON_SIZE,NATRON_MEDIUM_BUTTON_SIZE);
+    _imp->nextKeyframe->setIconSize(QSize(NATRON_MEDIUM_BUTTON_SIZE,NATRON_MEDIUM_BUTTON_SIZE));
     _imp->nextKeyframe->setToolTip(Natron::convertFromPlainText(tr("Go to the next keyframe."), Qt::WhiteSpaceNormal));
     _imp->nextKeyframe->setEnabled(false);
     QObject::connect( _imp->nextKeyframe, SIGNAL( clicked(bool) ), this, SLOT( onGoToNextKeyframeButtonClicked() ) );
@@ -429,6 +431,7 @@ TrackerPanel::TrackerPanel(const boost::shared_ptr<NodeGui>& n,
     
     _imp->addKeyframe = new Button(QIcon(addPix),"",trackContainer);
     _imp->addKeyframe->setFixedSize(NATRON_MEDIUM_BUTTON_SIZE,NATRON_MEDIUM_BUTTON_SIZE);
+    _imp->addKeyframe->setIconSize(QSize(NATRON_MEDIUM_BUTTON_SIZE,NATRON_MEDIUM_BUTTON_SIZE));
     _imp->addKeyframe->setToolTip(Natron::convertFromPlainText(tr("Add keyframe at the current timeline's time."), Qt::WhiteSpaceNormal));
     _imp->addKeyframe->setEnabled(false);
     QObject::connect( _imp->addKeyframe, SIGNAL( clicked(bool) ), this, SLOT( onAddKeyframeButtonClicked() ) );
@@ -436,6 +439,7 @@ TrackerPanel::TrackerPanel(const boost::shared_ptr<NodeGui>& n,
     
     _imp->removeKeyframe = new Button(QIcon(removePix),"",trackContainer);
     _imp->removeKeyframe->setFixedSize(NATRON_MEDIUM_BUTTON_SIZE,NATRON_MEDIUM_BUTTON_SIZE);
+    _imp->removeKeyframe->setIconSize(QSize(NATRON_MEDIUM_BUTTON_SIZE,NATRON_MEDIUM_BUTTON_SIZE));
     _imp->removeKeyframe->setToolTip(Natron::convertFromPlainText(tr("Remove keyframe at the current timeline's time."), Qt::WhiteSpaceNormal));
     _imp->removeKeyframe->setEnabled(false);
     QObject::connect( _imp->removeKeyframe, SIGNAL( clicked(bool) ), this, SLOT( onRemoveKeyframeButtonClicked() ) );
@@ -443,6 +447,7 @@ TrackerPanel::TrackerPanel(const boost::shared_ptr<NodeGui>& n,
     
     _imp->clearAnimation = new Button(QIcon(clearAnimPix),"",trackContainer);
     _imp->clearAnimation->setFixedSize(NATRON_MEDIUM_BUTTON_SIZE,NATRON_MEDIUM_BUTTON_SIZE);
+    _imp->clearAnimation->setIconSize(QSize(NATRON_MEDIUM_BUTTON_SIZE,NATRON_MEDIUM_BUTTON_SIZE));
     _imp->clearAnimation->setToolTip(Natron::convertFromPlainText(tr("Remove all animation for the selected track(s)."), Qt::WhiteSpaceNormal));
     _imp->clearAnimation->setEnabled(false);
     QObject::connect( _imp->clearAnimation, SIGNAL( clicked(bool) ), this, SLOT( onRemoveAnimationButtonClicked() ) );
@@ -477,7 +482,6 @@ TrackerPanel::TrackerPanel(const boost::shared_ptr<NodeGui>& n,
     _imp->view->setColumnCount( dimensionNames.size() );
     _imp->view->setHorizontalHeaderLabels(dimensionNames);
     
-    _imp->view->setAttribute(Qt::WA_MacShowFocusRect,0);
     
 #if QT_VERSION < 0x050000
     _imp->view->header()->setResizeMode(QHeaderView::ResizeToContents);
@@ -580,6 +584,7 @@ TrackerPanel::TrackerPanel(const boost::shared_ptr<NodeGui>& n,
     
     _imp->selectAllButton = new Button(QIcon(selectAll),"",_imp->buttonsContainer);
     _imp->selectAllButton->setFixedSize(NATRON_SMALL_BUTTON_SIZE,NATRON_SMALL_BUTTON_SIZE);
+    _imp->selectAllButton->setIconSize(QSize(NATRON_SMALL_BUTTON_SIZE,NATRON_SMALL_BUTTON_SIZE));
     _imp->selectAllButton->setToolTip(Natron::convertFromPlainText(tr("Select all."), Qt::WhiteSpaceNormal));
     _imp->buttonsLayout->addWidget(_imp->selectAllButton);
     QObject::connect( _imp->selectAllButton, SIGNAL( clicked(bool) ), this, SLOT( onSelectAllButtonClicked() ) );

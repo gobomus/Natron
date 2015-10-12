@@ -833,12 +833,9 @@ TrackMarker::onSearchTopRightKnobValueChanged(int dimension,int reason)
     getContext()->s_searchTopRightKnobValueChanged(shared_from_this(), dimension, reason);
 }
 
-std::pair<boost::shared_ptr<Natron::Image>,RectI>
-TrackMarker::getMarkerImage(int time) const
+RectI
+TrackMarker::getMarkerImageRoI(int time) const
 {
-    std::list<ImageComponents> components;
-    components.push_back(ImageComponents::getRGBComponents());
-    
     const unsigned int mipmapLevel = 0;
     
     Natron::Point center,offset;
@@ -857,11 +854,28 @@ TrackMarker::getMarkerImage(int time) const
     RectI roi;
     NodePtr node = getContext()->getNode();
     NodePtr input = node->getInput(0);
+    if (!input) {
+        return RectI();
+    }
     roiCanonical.toPixelEnclosing(mipmapLevel, input ? input->getLiveInstance()->getPreferredAspectRatio() : 1., &roi);
+    
+    return roi;
+}
+
+std::pair<boost::shared_ptr<Natron::Image>,RectI>
+TrackMarker::getMarkerImage(int time, const RectI& roi) const
+{
+    std::list<ImageComponents> components;
+    components.push_back(ImageComponents::getRGBComponents());
+    
+    const unsigned int mipmapLevel = 0;
+    assert(!roi.isNull());
+    
+    NodePtr node = getContext()->getNode();
+    NodePtr input = node->getInput(0);
     if (!input) {
         return std::make_pair(ImagePtr(),roi);
     }
-
     
     ParallelRenderArgsSetter frameRenderArgs(node->getApp()->getProject().get(),
                                              time,
@@ -896,9 +910,9 @@ TrackMarker::getMarkerImage(int time) const
     ImageList planes;
     EffectInstance::RenderRoIRetCode stat = input->getLiveInstance()->renderRoI(args, &planes);
     if (stat != EffectInstance::eRenderRoIRetCodeOk || planes.empty()) {
-        return std::make_pair(ImagePtr(),RectI());
+        return std::make_pair(ImagePtr(),roi);
     }
-    return std::make_pair(planes.front(),roi);;
+    return std::make_pair(planes.front(),roi);
 }
 
 struct TrackMarkerAndOptions
