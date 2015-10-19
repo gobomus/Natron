@@ -131,6 +131,9 @@ struct GuiPrivate
     ActionWithShortcut *actionShortcutEditor;
     ActionWithShortcut *actionNewViewer;
     ActionWithShortcut *actionFullScreen;
+#ifdef __NATRON_WIN32__
+    ActionWithShortcut *actionShowWindowsConsole;
+#endif
     ActionWithShortcut *actionClearDiskCache;
     ActionWithShortcut *actionClearPlayBackCache;
     ActionWithShortcut *actionClearNodeCache;
@@ -218,7 +221,6 @@ struct GuiPrivate
     Natron::Menu *menuEdit;
     Natron::Menu *menuLayout;
     Natron::Menu *menuDisplay;
-    Natron::Menu *menuOptions;
     Natron::Menu *menuRender;
     Natron::Menu *viewersMenu;
     Natron::Menu *viewerInputsMenu;
@@ -250,6 +252,7 @@ struct GuiPrivate
     std::map<KnobHolder*, QProgressDialog*> _progressBars;
 
     ///list of the currently opened property panels
+    mutable QMutex openedPanelsMutex;
     std::list<DockablePanel*> openedPanels;
     QString _openGLVersion;
     QString _glewVersion;
@@ -273,6 +276,10 @@ struct GuiPrivate
     bool keyPressEventHasVisitedFocusWidget;
     
     bool wasLaskUserSeekDuringPlayback;
+    
+#ifdef __NATRON_WIN32__
+    bool applicationConsoleVisible;
+#endif
     
     GuiPrivate(GuiAppInstance* app,
                Gui* gui);

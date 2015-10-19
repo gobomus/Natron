@@ -453,6 +453,10 @@ void
 OfxEffectInstance::tryInitializeOverlayInteracts()
 {
     assert(_context != eContextNone);
+    if (_overlayInteract) {
+        // already created
+        return;
+    }
     /*create overlay instance if any*/
     OfxPluginEntryPoint *overlayEntryPoint = _effect->getOverlayInteractMainEntry();
     if (overlayEntryPoint) {
@@ -2516,10 +2520,6 @@ OfxEffectInstance::knobChanged(KnobI* k,
     }
     
     if ( (stat != kOfxStatOK) && (stat != kOfxStatReplyDefault) ) {
-        QString err( QString( getNode()->getScriptName_mt_safe().c_str() ) + ": An error occured while changing parameter " +
-                    k->getDescription().c_str() );
-        appPTR->writeToOfxLog_mt_safe(err);
-        
         return;
     }
     

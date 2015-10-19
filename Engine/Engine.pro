@@ -288,6 +288,7 @@ HEADERS += \
     LRUHashTable.h \
     Lut.h \
     MemoryFile.h \
+    MergingEnum.h \
     Node.h \
     NodeGroup.h \
     NodeGroupSerialization.h \

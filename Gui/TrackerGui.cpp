@@ -540,10 +540,14 @@ TrackerGui::createGui()
         QObject::connect(context.get(), SIGNAL(keyframeRemovedOnTrack(boost::shared_ptr<TrackMarker>,int)), this , SLOT(onKeyframeRemovedOnTrack(boost::shared_ptr<TrackMarker>,int)));
         QObject::connect(context.get(), SIGNAL(allKeyframesRemovedOnTrack(boost::shared_ptr<TrackMarker>)), this , SLOT(onAllKeyframesRemovedOnTrack(boost::shared_ptr<TrackMarker>)));
         
-        QPixmap createKeyOnMovePix;
-        appPTR->getIcon(Natron::NATRON_PIXMAP_CREATE_USER_KEY_ON_MOVE, &createKeyOnMovePix);
+        QPixmap addKeyOnPix,addKeyOffPix;
+        QIcon addKeyIc;
+        appPTR->getIcon(Natron::NATRON_PIXMAP_CREATE_USER_KEY_ON_MOVE_ON, &addKeyOnPix);
+        appPTR->getIcon(Natron::NATRON_PIXMAP_CREATE_USER_KEY_ON_MOVE_OFF, &addKeyOffPix);
+        addKeyIc.addPixmap(addKeyOnPix, QIcon::Normal, QIcon::On);
+        addKeyIc.addPixmap(addKeyOffPix, QIcon::Normal, QIcon::Off);
         
-        _imp->createKeyOnMoveButton = new Button(QIcon(createKeyOnMovePix), "", _imp->buttonsBar);
+        _imp->createKeyOnMoveButton = new Button(addKeyIc, "", _imp->buttonsBar);
         _imp->createKeyOnMoveButton->setFixedSize(NATRON_MEDIUM_BUTTON_SIZE, NATRON_MEDIUM_BUTTON_SIZE);
         _imp->createKeyOnMoveButton->setIconSize(QSize(NATRON_MEDIUM_BUTTON_ICON_SIZE, NATRON_MEDIUM_BUTTON_ICON_SIZE));
         _imp->createKeyOnMoveButton->setToolTip(Natron::convertFromPlainText(tr("When enabled, adjusting a track on the viewer will create a new keyframe"), Qt::WhiteSpaceNormal));
@@ -581,6 +585,7 @@ TrackerGui::createGui()
         appPTR->getIcon(Natron::NATRON_PIXMAP_REMOVE_USER_KEY, &removeKeyPix);
         appPTR->getIcon(Natron::NATRON_PIXMAP_RESET_TRACK_OFFSET, &resetOffsetPix);
         appPTR->getIcon(Natron::NATRON_PIXMAP_RESET_USER_KEYS, &removeAllUserKeysPix);
+        
         
         _imp->setKeyFrameButton = new Button(QIcon(addKeyPix), "", keyframeContainer);
         _imp->setKeyFrameButton->setFixedSize(NATRON_MEDIUM_BUTTON_SIZE, NATRON_MEDIUM_BUTTON_SIZE);

@@ -1740,12 +1740,16 @@ Knob<T>::onTimeChanged(SequenceTime /*time*/)
     if (getIsSecret()) {
         return;
     }
+    bool shouldRefresh = false;
     for (int i = 0; i < dims; ++i) {
         
-        if (_signalSlotHandler && (isAnimated(i) || !getExpression(i).empty())) {
-            _signalSlotHandler->s_valueChanged(i, Natron::eValueChangedReasonTimeChanged);
+        if (getKnobGuiPointer() && _signalSlotHandler && (isAnimated(i) || !getExpression(i).empty())) {
+            shouldRefresh = true;
         }
         checkAnimationLevel(i);
+    }
+    if (shouldRefresh) {
+        _signalSlotHandler->s_valueChanged(-1, Natron::eValueChangedReasonTimeChanged);
     }
 }
 
@@ -2287,10 +2291,10 @@ Knob<T>::clone(KnobI* other,
                 guiCurve->clone(*otherGuiCurve);
             }
             checkAnimationLevel(i);
-            if (_signalSlotHandler) {
-                _signalSlotHandler->s_valueChanged(i,Natron::eValueChangedReasonPluginEdited);
-            }
         }
+    }
+    if (_signalSlotHandler) {
+        _signalSlotHandler->s_valueChanged(dimension,Natron::eValueChangedReasonPluginEdited);
     }
     cloneExtraData(other,dimension);
     if (getHolder()) {
@@ -2326,10 +2330,12 @@ Knob<T>::cloneAndCheckIfChanged(KnobI* other,int dimension)
             
             if (hasChanged) {
                 checkAnimationLevel(i);
-                if (_signalSlotHandler) {
-                    _signalSlotHandler->s_valueChanged(i,Natron::eValueChangedReasonPluginEdited);
-                }
             }
+        }
+    }
+    if (hasChanged) {
+        if (_signalSlotHandler) {
+            _signalSlotHandler->s_valueChanged(dimension,Natron::eValueChangedReasonPluginEdited);
         }
     }
     hasChanged |= cloneExtraDataAndCheckIfChanged(other);
@@ -2368,10 +2374,10 @@ Knob<T>::clone(KnobI* other,
                 guiCurve->clone(*otherGuiCurve,offset,range);
             }
             checkAnimationLevel(i);
-            if (_signalSlotHandler) {
-                _signalSlotHandler->s_valueChanged(i,Natron::eValueChangedReasonPluginEdited);
-            }
         }
+    }
+    if (_signalSlotHandler) {
+        _signalSlotHandler->s_valueChanged(dimension,Natron::eValueChangedReasonPluginEdited);
     }
     cloneExtraData(other,offset,range,dimension);
     if (getHolder()) {
@@ -2417,10 +2423,12 @@ Knob<T>::cloneAndUpdateGui(KnobI* other,int dimension)
                 if (!keysList.empty()) {
                     _signalSlotHandler->s_multipleKeyFramesSet(keysList, i, (int)Natron::eValueChangedReasonNatronInternalEdited);
                 }
-                _signalSlotHandler->s_valueChanged(i,Natron::eValueChangedReasonPluginEdited);
             }
             checkAnimationLevel(i);
         }
+    }
+    if (_signalSlotHandler) {
+        _signalSlotHandler->s_valueChanged(dimension,Natron::eValueChangedReasonPluginEdited);
     }
     cloneExtraData(other,dimension);
     if (getHolder()) {
