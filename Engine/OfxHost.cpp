@@ -83,6 +83,7 @@ CLANG_DIAG_ON(unknown-pragmas)
 
 #include "Global/GlobalDefines.h"
 #include "Global/MemoryInfo.h"
+#include "Global/QtCompat.h"
 
 #include "Engine/AppManager.h"
 #include "Engine/OfxMemory.h"
@@ -173,6 +174,12 @@ Natron::OfxHost::~OfxHost()
 #ifdef MULTI_THREAD_SUITE_USES_THREAD_SAFE_MUTEX_ALLOCATION
     delete _imp->pluginsMutexesLock;
 #endif
+}
+
+void
+Natron::OfxHost::setOfxHostOSHandle(void* handle)
+{
+    _properties.setPointerProperty(kOfxPropHostOSHandle, handle);
 }
 
 void
@@ -561,6 +568,31 @@ Natron::OfxHost::createOfxEffect(boost::shared_ptr<Natron::Node> node,
     return hostSideEffect;
 }
 
+///Return the xml cache file used before Natron 2 RC2
+static QString getOldCacheFilePath()
+{
+    QString cachePath = Natron::StandardPaths::writableLocation(Natron::StandardPaths::eStandardLocationCache) + '/';
+    QString oldOfxCache = cachePath + "OFXCache.xml";
+    return oldOfxCache;
+}
+
+static QString getOFXCacheDirPath()
+{
+    QString cachePath = Natron::StandardPaths::writableLocation(Natron::StandardPaths::eStandardLocationCache) + '/';
+    QString ofxCachePath = cachePath + "OFXLoadCache";
+    return ofxCachePath;
+}
+
+///Return the xml cache file used after Natron 2 RC2
+static QString getCacheFilePath()
+{
+    QString ofxCachePath = getOFXCacheDirPath() + '/';
+    QString ofxCacheFilePath = ofxCachePath + "OFXCache_" +
+    QString(NATRON_VERSION_STRING) + QString("_") +
+    QString(NATRON_DEVELOPMENT_STATUS) + QString("_") +
+    QString::number(NATRON_BUILD_NUMBER) + QString(".xml");
+    return ofxCacheFilePath;
+}
 
 void
 Natron::OfxHost::loadOFXPlugins(std::map<std::string,std::vector< std::pair<std::string,double> > >* readersMap,
@@ -602,14 +634,14 @@ Natron::OfxHost::loadOFXPlugins(std::map<std::string,std::vector< std::pair<std:
         // ignore
     }
 
-    /// now read an old cache
     // The cache location depends on the OS.
-    // On OSX, it will be ~/Library/Caches/<organization>/<application>/OFXCache.xml
-    //on Linux ~/.cache/<organization>/<application>/OFXCache.xml
-    //on windows:
-    QString ofxcachename = Natron::StandardPaths::writableLocation(Natron::StandardPaths::eStandardLocationCache) + QDir::separator() + "OFXCache.xml";
-    std::ifstream ifs( ofxcachename.toStdString().c_str() );
-    if ( ifs.is_open() ) {
+    // On OSX, it will be ~/Library/Caches/<organization>/<application>/OFXLoadCache/
+    //on Linux ~/.cache/<organization>/<application>/OFXLoadCache/
+    //on windows: C:\Users\<username>\App Data\Local\<organization>\<application>\Caches\OFXLoadCache
+    QString ofxCacheFilePath = getCacheFilePath();
+    
+    std::ifstream ifs(ofxCacheFilePath.toStdString().c_str());
+    if (ifs.is_open()) {
         OFX::Host::PluginCache::getPluginCache()->readCache(ifs);
         ifs.close();
     }
@@ -643,9 +675,13 @@ Natron::OfxHost::loadOFXPlugins(std::map<std::string,std::vector< std::pair<std:
         QStringList groups = OfxEffectInstance::makePluginGrouping(p->getIdentifier(),
                                                                    p->getVersionMajor(), p->getVersionMinor(),
                                                                    pluginLabel, grouping);
+        for (int i = 0; i < groups.size(); ++i) {
+            groups[i] = groups[i].trimmed();
+        }
 
         assert( p->getBinary() );
-        QString iconFilename = QString( bundlePath.c_str() ) + "/Contents/Resources/";
+        QString iconPath = QString( bundlePath.c_str() ) + "/Contents/Resources/";
+        QString iconFileName;
         std::string pngIcon;
         try {
             // kOfxPropIcon is normally only defined for parameter desctriptors
@@ -658,10 +694,11 @@ Natron::OfxHost::loadOFXPlugins(std::map<std::string,std::vector< std::pair<std:
             // no icon defined by kOfxPropIcon, use the default value
             pngIcon = openfxId + ".png";
         }
-        iconFilename.append( pngIcon.c_str() );
+        iconFileName.append(iconPath);
+        iconFileName.append( pngIcon.c_str() );
         QString groupIconFilename;
         if (groups.size() > 0) {
-            groupIconFilename = QString( p->getBinary()->getBundlePath().c_str() ) + "/Contents/Resources/";
+            groupIconFilename = iconPath;
             // the plugin grouping has no descriptor, just try the default filename.
             groupIconFilename.append(groups[0]);
             groupIconFilename.append(".png");
@@ -669,7 +706,20 @@ Natron::OfxHost::loadOFXPlugins(std::map<std::string,std::vector< std::pair<std:
             //Use default Misc group when the plug-in doesn't belong to a group
             groups.push_back(PLUGIN_GROUP_DEFAULT);
         }
-
+        QStringList groupIcons;
+        groupIcons << groupIconFilename;
+        for (int i = 1; i < groups.size(); ++i) {
+            QString groupIconPath = iconPath;
+            for (int j = 0; j <= i; ++j) {
+                groupIconPath += groups[j];
+                if (j < i) {
+                    groupIconPath += '/';
+                } else {
+                    groupIconPath.append(".png");
+                }
+            }
+            groupIcons << groupIconPath;
+        }
         
         const std::set<std::string> & contexts = p->getContexts();
         std::set<std::string>::const_iterator foundReader = contexts.find(kOfxImageEffectContextReader);
@@ -679,8 +729,8 @@ Natron::OfxHost::loadOFXPlugins(std::map<std::string,std::vector< std::pair<std:
         Natron::Plugin* natronPlugin = appPTR->registerPlugin( groups,
                                                               openfxId.c_str(),
                                                               pluginLabel.c_str(),
-                                                              iconFilename,
-                                                              groupIconFilename,
+                                                              iconFileName,
+                                                              groupIcons,
                                                               foundReader != contexts.end(),
                                                               foundWriter != contexts.end(),
                                                               new Natron::LibraryBinary(Natron::LibraryBinary::eLibraryTypeBuiltin),
@@ -743,12 +793,10 @@ void
 Natron::OfxHost::writeOFXCache()
 {
     /// and write a new cache, long version with everything in there
-    QString ofxcachename = Natron::StandardPaths::writableLocation(Natron::StandardPaths::eStandardLocationCache);
-
-    QDir().mkpath(ofxcachename);
-    ofxcachename +=  QDir::separator();
-    ofxcachename += "OFXCache.xml";
-    std::ofstream of( ofxcachename.toStdString().c_str() );
+    QString ofxCachePath = getOFXCacheDirPath();
+    QDir().mkpath(ofxCachePath);
+    QString ofxCacheFilePath = getCacheFilePath();
+    std::ofstream of( ofxCacheFilePath.toStdString().c_str() );
     assert( of.is_open() );
     assert( OFX::Host::PluginCache::getPluginCache() );
     OFX::Host::PluginCache::getPluginCache()->writePluginCache(of);
@@ -758,15 +806,11 @@ Natron::OfxHost::writeOFXCache()
 void
 Natron::OfxHost::clearPluginsLoadedCache()
 {
-    QString ofxcachename = Natron::StandardPaths::writableLocation(Natron::StandardPaths::eStandardLocationCache);
-
-    QDir().mkpath(ofxcachename);
-    ofxcachename +=  QDir::separator();
-    ofxcachename += "OFXCache.xml";
-
-    if ( QFile::exists(ofxcachename) ) {
-        QFile::remove(ofxcachename);
+    QString oldOfxCache = getOldCacheFilePath();
+    if (QFile::exists(oldOfxCache)) {
+        QFile::remove(oldOfxCache);
     }
+    Natron::removeRecursively(getOFXCacheDirPath());
 }
 
 void

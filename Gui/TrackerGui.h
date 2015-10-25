@@ -135,6 +135,7 @@ public Q_SLOTS:
     
 private Q_SLOTS:
     
+    void onTrackerInputChanged(int inputNb);
     void onTrackImageRenderingFinished();
     void onKeyFrameImageRenderingFinished();
     

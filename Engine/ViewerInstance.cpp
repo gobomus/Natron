@@ -1205,6 +1205,8 @@ ViewerInstance::renderViewer_internal(int view,
             if (currentlyTracking) {
                 QMutexLocker k(&_imp->viewerParamsMutex);
                 partialRectsToRender = _imp->partialUpdateRects;
+                inArgs.params->recenterViewport = _imp->viewportCenterSet;
+                inArgs.params->viewportCenter = _imp->viewportCenter;
             }
             
             QMutexLocker k(&_imp->lastRenderParamsMutex);
@@ -2487,7 +2489,9 @@ ViewerInstance::ViewerInstancePrivate::updateViewer(boost::shared_ptr<UpdateView
                                               params->srcPremult,
                                               params->textureIndex,
                                               params->roi,
-                                              params->updateOnlyRoi);
+                                              params->updateOnlyRoi,
+                                              params->recenterViewport,
+                                              params->viewportCenter);
         updateViewerPboIndex = (updateViewerPboIndex + 1) % 2;
         
         if (!instance->getApp()->getIsUserPainting().get()) {
@@ -2980,6 +2984,15 @@ ViewerInstance::clearPartialUpdateRects()
 {
     QMutexLocker k(&_imp->viewerParamsMutex);
     _imp->partialUpdateRects.clear();
+}
+
+void
+ViewerInstance::setViewportCenter(double x, double y)
+{
+    QMutexLocker k(&_imp->viewerParamsMutex);
+    _imp->viewportCenterSet = true;
+    _imp->viewportCenter.x = x;
+    _imp->viewportCenter.y = y;
 }
 
 void

@@ -136,6 +136,8 @@ public:
     , isSequential(false)
     , roi()
     , updateOnlyRoi(false)
+    , recenterViewport(false)
+    , viewportCenter()
     {
     }
     
@@ -176,6 +178,9 @@ public:
     bool isSequential;
     RectI roi;
     bool updateOnlyRoi;
+    
+    bool recenterViewport;
+    Natron::Point viewportCenter;
 };
 
 struct ViewerInstance::ViewerInstancePrivate
@@ -213,6 +218,8 @@ public:
     , currentlyUpdatingOpenGLViewerMutex()
     , currentlyUpdatingOpenGLViewer(false)
     , partialUpdateRects()
+    , viewportCenter()
+    , viewportCenterSet(false)
     , isTracking(false)
     , renderAgeMutex()
     , renderAge()
@@ -472,6 +479,13 @@ public:
      * disregarding the RoI. This is protected by viewerParamsMutex
      */
     std::list<RectD> partialUpdateRects;
+    
+    /*
+     * @brief If set, the viewport center will be updated to this point upon the next update of the texture, this is protected by
+     * viewerParamsMutex
+     */
+    Natron::Point viewportCenter;
+    bool viewportCenterSet;
     
     //True if during tracking
     bool isTracking;

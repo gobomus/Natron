@@ -1036,11 +1036,11 @@ public:
     
     boost::shared_ptr<KnobChoice> getChannelSelectorKnob(int inputNb) const;
     
-    bool getUserComponents(int inputNb,bool* processChannels,bool* isAll,Natron::ImageComponents *layer) const;
+    bool getSelectedLayer(int inputNb,bool* processChannels,bool* isAll,Natron::ImageComponents *layer) const;
     
     bool addUserComponents(const Natron::ImageComponents& comps);
     
-    void getUserComponents(std::list<Natron::ImageComponents>* comps);
+    void getUserCreatedComponents(std::list<Natron::ImageComponents>* comps);
     
     bool hasAtLeastOneChannelToProcess() const;
     
@@ -1058,7 +1058,7 @@ public:
     
     void markAllInputRelatedDataDirty();
     
-    bool getSelectedLayer(int inputNb,std::string& layer) const;
+    bool getSelectedLayerChoiceRaw(int inputNb,std::string& layer) const;
     
 private:
     

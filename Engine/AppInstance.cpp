@@ -167,7 +167,13 @@ AppInstance::checkForNewVersion() const
 static
 int compareDevStatus(const QString& a,const QString& b)
 {
-    if (a == NATRON_DEVELOPMENT_ALPHA) {
+    if (a == NATRON_DEVELOPMENT_DEVEL || a == NATRON_DEVELOPMENT_SNAPSHOT) {
+        //Do not try updates when update available is a dev build
+        return -1;
+    } else if (b == NATRON_DEVELOPMENT_DEVEL || b == NATRON_DEVELOPMENT_SNAPSHOT) {
+        //This is a dev build, do not try updates
+        return -1;
+    } else if (a == NATRON_DEVELOPMENT_ALPHA) {
         if (b == NATRON_DEVELOPMENT_ALPHA) {
             return 0;
         } else {
@@ -305,8 +311,8 @@ AppInstance::newVersionCheckDownloaded()
                 .arg(NATRON_DEVELOPMENT_STATUS)
                 .arg(extractedSoftwareVersionStr)
                 .arg(extractedDevStatusStr) +
-                QObject::tr("<p>You can download it from ") + QString("<a href='http://sourceforge.net/projects/natron/'>"
-                                                                    "<font color=\"orange\">Sourceforge</a>. </p>");
+                QObject::tr("<p>You can download it from ") + QString("<a href='www.natron.fr/download'>"
+                                                                    "<font color=\"orange\">www.natron.fr</a>. </p>");
 
             }
         
@@ -858,6 +864,22 @@ AppInstance::createNodeInternal(const QString & pluginID,
             if (reply == Natron::eStandardButtonYes) {
                 settings->setUseGlobalThreadPool(false);
                 settings->setNumberOfParallelRenders(1);
+            }
+        }
+        
+        ///If this is a stereo plug-in, check that the project has been set for multi-view
+        if (userEdited && !requestedByLoad) {
+            const QStringList& grouping = plugin->getGrouping();
+            if (!grouping.isEmpty() && grouping[0] == PLUGIN_GROUP_MULTIVIEW) {
+                int nbViews = getProject()->getProjectViewsCount();
+                if (nbViews < 2) {
+                    Natron::StandardButtonEnum reply = Natron::questionDialog(tr("Multi-View").toStdString(),
+                                                                              tr("Using a multi-view node requires the project settings to be setup "
+                                                                                 "for multi-view. Would you like to setup the project for stereo?").toStdString(), false);
+                    if (reply == Natron::eStandardButtonYes) {
+                        getProject()->setupProjectForStereo();
+                    }
+                }
             }
         }
     }

@@ -928,6 +928,7 @@ class TrackArgsLibMV
     bool _isForward;
     boost::shared_ptr<TimeLine> _timeline;
     bool _isUpdateViewerEnabled;
+    bool _centerViewer;
     ViewerInstance* _viewer;
     boost::shared_ptr<mv::AutoTrack> _libmvAutotrack;
     boost::shared_ptr<FrameAccessorImpl> _fa;
@@ -942,6 +943,7 @@ public:
     , _isForward(false)
     , _timeline()
     , _isUpdateViewerEnabled(false)
+    , _centerViewer(false)
     , _viewer(0)
     , _libmvAutotrack()
     , _fa()
@@ -955,6 +957,7 @@ public:
                    bool isForward,
                    const boost::shared_ptr<TimeLine>& timeline,
                    bool isUpdateViewerEnabled,
+                   bool centerViewer,
                    ViewerInstance* viewer,
                    const boost::shared_ptr<mv::AutoTrack>& autoTrack,
                    const boost::shared_ptr<FrameAccessorImpl>& fa,
@@ -964,6 +967,7 @@ public:
     , _isForward(isForward)
     , _timeline(timeline)
     , _isUpdateViewerEnabled(isUpdateViewerEnabled)
+    , _centerViewer(centerViewer)
     , _viewer(viewer)
     , _libmvAutotrack(autoTrack)
     , _fa(fa)
@@ -987,6 +991,7 @@ public:
         _viewer = other._viewer;
         _libmvAutotrack = other._libmvAutotrack;
         _fa = other._fa;
+        _centerViewer = other._centerViewer;
         _tracks = other._tracks;
     }
     
@@ -1019,6 +1024,12 @@ public:
     {
         return _viewer;
     }
+    
+    bool isCenterViewerEnabled() const
+    {
+        return _centerViewer;
+    }
+
     
     bool isUpdateViewerEnabled() const
     {
@@ -1286,6 +1297,12 @@ static void natronTrackerToLibMVTracker(bool trackChannels[3],
     mvMarker->patch.coordinates(3,1) = bl.y + mvMarker->center(1);
 }
 
+/*
+ * @brief This is the internal tracking function that makes use of LivMV to do 1 track step
+ * @param trackingIndex This is the index of the Marker we should track in the args
+ * @param args Multiple arguments global to the whole track, not just this step
+ * @param time The search frame time, that is, the frame to track
+ */
 static bool trackStepLibMV(int trackIndex, const TrackArgsLibMV& args, int time)
 {
     assert(trackIndex >= 0 && trackIndex < args.getNumTracks());
@@ -1296,11 +1313,9 @@ static bool trackStepLibMV(int trackIndex, const TrackArgsLibMV& args, int time)
     boost::shared_ptr<mv::AutoTrack> autoTrack = args.getLibMVAutoTrack();
     QMutex* autoTrackMutex = args.getAutoTrackMutex();
     
+    //The frame on the mvMarker should have been set accordingly
     assert(track->mvMarker.frame == time);
-    
 
-    
-    
     if (track->mvMarker.source == mv::Marker::MANUAL) {
         // This is a user keyframe or the first frame, we do not track it
         assert(time == args.getStart() || track->natronMarker->isUserKeyframe(track->mvMarker.frame));
@@ -1321,6 +1336,7 @@ static bool trackStepLibMV(int trackIndex, const TrackArgsLibMV& args, int time)
         track->mvMarker.reference_frame = track->natronMarker->getReferenceFrame(time, args.getForward());
         assert(track->mvMarker.reference_frame != track->mvMarker.frame);
         
+        // Do the actual tracking
         libmv::TrackRegionResult result;
         if (!autoTrack->TrackMarker(&track->mvMarker, &result, &track->mvOptions) || !result.is_usable()) {
             return false;
@@ -1329,6 +1345,7 @@ static bool trackStepLibMV(int trackIndex, const TrackArgsLibMV& args, int time)
         //Ok the tracking has succeeded, now the marker is in this state:
         //the source is TRACKED, the search_window has been offset by the center delta,  the center has been offset
         
+        //Extract the marker to the knob keyframes
         setKnobKeyframesFromMarker(track->mvMarker, &result, track->natronMarker);
         
         //Add the marker to the autotrack
@@ -2306,6 +2323,9 @@ void natronImageToLibMvFloatImage(bool enabledChannels[3],
     }
 }
 
+/*
+ * @brief This is called by LibMV to retrieve an image either for reference or as search frame.
+ */
 mv::FrameAccessor::Key
 FrameAccessorImpl::GetImage(int /*clip*/,
                             int frame,
@@ -2327,6 +2347,9 @@ FrameAccessorImpl::GetImage(int /*clip*/,
     key.mipMapLevel = downscale;
     key.mode = input_mode;
     
+    /*
+     Check if a frame exists in the cache with matching key and bounds enclosing the given region
+     */
     {
         QMutexLocker k(&_cacheMutex);
         std::pair<FrameAccessorCache::iterator,FrameAccessorCache::iterator> range = _cache.equal_range(key);
@@ -2334,7 +2357,8 @@ FrameAccessorImpl::GetImage(int /*clip*/,
             if (it->second.bounds.isNull() ||
                 (region && region->min(0) >= it->second.bounds.x1 && region->min(1) <= it->second.bounds.y2 &&
                  region->max(0) <= it->second.bounds.x2 && region->max(1) >= it->second.bounds.y1)) {
-                    // LibMV is kinda dumb on this we must necessarily copy the data...
+                    // LibMV is kinda dumb on this we must necessarily copy the data either via CopyFrom or the
+                    // assignment constructor
                     destination->CopyFrom<float>(*it->second.image);
                     ++it->second.referenceCount;
                     return (mv::FrameAccessor::Key)it->second.image.get();
@@ -2378,12 +2402,12 @@ FrameAccessorImpl::GetImage(int /*clip*/,
                                              node, //  requester
                                              0, // request
                                              0, //texture index
-                                             node->getApp()->getTimeLine().get(),
-                                             NodePtr(),
+                                             node->getApp()->getTimeLine().get(), //Timeline
+                                             NodePtr(), // rotoPaintNode
                                              true, //isAnalysis
                                              false,//draftMode
                                              false, //viewer progress
-                                             boost::shared_ptr<RenderStats>());
+                                             boost::shared_ptr<RenderStats>()); // Stats
 
     
     EffectInstance::RenderRoIArgs args(frame,
@@ -2409,6 +2433,9 @@ FrameAccessorImpl::GetImage(int /*clip*/,
     RectI intersectedRoI;
     roi.intersect(sourceImage->getBounds(), &intersectedRoI);
     
+    /*
+     Copy the Natron image to the LivMV float image
+     */
     FrameAccessorCacheEntry entry;
     entry.image.reset(new MvFloatImage(roi.height(), roi.width()));
     entry.bounds = roi;
@@ -2468,17 +2495,14 @@ FrameAccessorImpl::NumFrames(int /*clip*/)
 }
 
 void
-TrackerContext::trackSelectedMarkers(int start, int end, bool forward, bool updateViewer, ViewerInstance* viewer)
+TrackerContext::trackMarkers(const std::list<boost::shared_ptr<TrackMarker> >& markers,
+                             int start,
+                             int end,
+                             bool forward,
+                             bool updateViewer,
+                             bool centerViewer,
+                             ViewerInstance* viewer)
 {
-    std::list<boost::shared_ptr<TrackMarker> > markers;
-    {
-        QMutexLocker k(&_imp->trackerContextMutex);
-        for (std::list<boost::shared_ptr<TrackMarker> >::iterator it = _imp->selectedMarkers.begin(); it != _imp->selectedMarkers.end(); ++it) {
-            if ((*it)->isEnabled()) {
-                markers.push_back(*it);
-            }
-        }
-    }
     
     if (markers.empty()) {
         return;
@@ -2498,10 +2522,19 @@ TrackerContext::trackSelectedMarkers(int start, int end, bool forward, bool upda
     std::vector<boost::shared_ptr<TrackMarkerAndOptions> > trackAndOptions;
     
     mv::TrackRegionOptions mvOptions;
+    /*
+     Get the global parameters for the LivMV track: pre-blur sigma, No iterations, normalized intensities, etc...
+     */
     _imp->beginLibMVOptionsForTrack(&mvOptions);
     
+    /*
+     For the given markers, do the following:
+     - Get the "User" keyframes that have been set and create a LibMV marker for each keyframe as well as for the "start" time
+     - Set the "per-track" parameters that were given by the user, that is the mv::TrackRegionOptions
+     - t->mvMarker will contain the marker that evolves throughout the tracking
+     */
     int trackIndex = 0;
-    for (std::list<boost::shared_ptr<TrackMarker> >::iterator it = markers.begin(); it!= markers.end(); ++it, ++trackIndex) {
+    for (std::list<boost::shared_ptr<TrackMarker> >::const_iterator it = markers.begin(); it!= markers.end(); ++it, ++trackIndex) {
         boost::shared_ptr<TrackMarkerAndOptions> t(new TrackMarkerAndOptions);
         t->natronMarker = *it;
         
@@ -2541,16 +2574,39 @@ TrackerContext::trackSelectedMarkers(int start, int end, bool forward, bool upda
             trackContext->AddMarker(t->mvMarker);
         }
         
-                
+        
         t->mvOptions = mvOptions;
         _imp->endLibMVOptionsForTrack(*t->natronMarker, &t->mvOptions);
         trackAndOptions.push_back(t);
     }
     
     
-    
-    TrackArgsLibMV args(start, end, forward, getNode()->getApp()->getTimeLine(), updateViewer, viewer, trackContext, accessor, trackAndOptions);
+    /*
+     Launch tracking in the scheduler thread.
+     */
+    TrackArgsLibMV args(start, end, forward, getNode()->getApp()->getTimeLine(), updateViewer, centerViewer, viewer, trackContext, accessor, trackAndOptions);
     _imp->scheduler.track(args);
+}
+
+void
+TrackerContext::trackSelectedMarkers(int start, int end, bool forward, bool updateViewer, bool centerViewer, ViewerInstance* viewer)
+{
+    std::list<boost::shared_ptr<TrackMarker> > markers;
+    {
+        QMutexLocker k(&_imp->trackerContextMutex);
+        for (std::list<boost::shared_ptr<TrackMarker> >::iterator it = _imp->selectedMarkers.begin(); it != _imp->selectedMarkers.end(); ++it) {
+            if ((*it)->isEnabled()) {
+                markers.push_back(*it);
+            }
+        }
+    }
+    trackMarkers(markers,start,end,forward,updateViewer, centerViewer, viewer);
+}
+
+void
+TrackerContext::abortTracking()
+{
+    _imp->scheduler.abortTracking();
 }
 
 void
@@ -2990,7 +3046,7 @@ TrackScheduler<TrackArgsType>::run()
         bool isForward = curArgs.getForward();
         int framesCount = isForward ? (end - start) : (start - end);
         bool isUpdateViewerOnTrackingEnabled = curArgs.isUpdateViewerEnabled();
-        
+        bool isCenterViewerEnbaled = curArgs.isCenterViewerEnabled();
         int numTracks = curArgs.getNumTracks();
         std::vector<int> trackIndexes;
         for (std::size_t i = 0; i < (std::size_t)numTracks; ++i) {
@@ -3037,6 +3093,19 @@ TrackScheduler<TrackArgsType>::run()
                 if (numTracks < TRACKER_MAX_TRACKS_FOR_PARTIAL_VIEWER_UPDATE) {
                     std::list<RectD> updateRects;
                     curArgs.getRedrawAreasNeeded(cur, &updateRects);
+                    if (isCenterViewerEnbaled) {
+                        RectD bbox;
+                        bool bboxSet = false;
+                        for (std::list<RectD>::iterator it = updateRects.begin(); it != updateRects.end(); ++it) {
+                            if (!bboxSet) {
+                                bboxSet = true;
+                                bbox = *it;
+                            } else {
+                                bbox.merge(*it);
+                            }
+                        }
+                        
+                    }
                     viewer->setPartialUpdateRects(updateRects);
                 }
                 Q_EMIT renderCurrentFrameForViewer(viewer);

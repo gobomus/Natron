@@ -25,6 +25,7 @@
 
 #include "TrackerNode.h"
 #include "Engine/Node.h"
+#include "Engine/TrackerContext.h"
 
 using namespace Natron;
 
@@ -54,7 +55,7 @@ TrackerNode::getPluginLabel() const
 std::string
 TrackerNode::getDescription() const
 {
-    return "";
+    return "Track a 2D point using LibMV from the Blender open-source software.";
 }
 
 std::string
@@ -161,3 +162,9 @@ TrackerNode::isIdentity(double time,
     return true;
 }
 
+void
+TrackerNode::onInputChanged(int inputNb)
+{
+    boost::shared_ptr<TrackerContext> ctx = getNode()->getTrackerContext();
+    ctx->s_onNodeInputChanged(inputNb);
+}

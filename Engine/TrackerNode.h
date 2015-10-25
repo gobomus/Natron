@@ -61,11 +61,11 @@ public:
     
     virtual bool getCanTransform() const OVERRIDE FINAL WARN_UNUSED_RETURN { return false; }
     
-    virtual std::string getPluginID() const OVERRIDE WARN_UNUSED_RETURN;
+    virtual std::string getPluginID() const OVERRIDE FINAL WARN_UNUSED_RETURN;
     
-    virtual std::string getPluginLabel() const OVERRIDE WARN_UNUSED_RETURN;
+    virtual std::string getPluginLabel() const OVERRIDE FINAL WARN_UNUSED_RETURN;
     
-    virtual std::string getDescription() const WARN_UNUSED_RETURN;
+    virtual std::string getDescription() const OVERRIDE FINAL WARN_UNUSED_RETURN;
     
     virtual void getPluginGrouping(std::list<std::string>* grouping) const OVERRIDE FINAL
     {
@@ -80,6 +80,8 @@ public:
     
     virtual void addAcceptedComponents(int inputNb,std::list<Natron::ImageComponents>* comps) OVERRIDE FINAL;
     virtual void addSupportedBitDepth(std::list<Natron::ImageBitDepthEnum>* depths) const OVERRIDE FINAL;
+    
+    virtual void onInputChanged(int inputNb) OVERRIDE FINAL;
     
     virtual Natron::RenderSafetyEnum renderThreadSafety() const OVERRIDE FINAL WARN_UNUSED_RETURN
     {

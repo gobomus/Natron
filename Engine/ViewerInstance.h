@@ -249,6 +249,8 @@ public:
     void setPartialUpdateRects(const std::list<RectD>& rois);
     void clearPartialUpdateRects();
     
+    void setViewportCenter(double x, double y);
+    
     void setIsTracking(bool tracking);
     bool isTracking() const;
 

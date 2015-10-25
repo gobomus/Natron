@@ -224,6 +224,11 @@ public:
         return _isUpdateViewerEnabled;
     }
     
+    bool isCenterViewerEnabled() const
+    {
+        return false;
+    }
+    
     int getStart() const
     {
         return _start;
@@ -312,7 +317,16 @@ public:
      * @brief Tracks the selected markers over the range defined by [start,end[ (end pointing to the frame
      * after the last one, a la STL).
      **/
-    void trackSelectedMarkers(int start, int end, bool forward, bool updateViewer, ViewerInstance* viewer);
+    void trackSelectedMarkers(int start, int end, bool forward, bool updateViewer, bool centerViewer, ViewerInstance* viewer);
+    void trackMarkers(const std::list<boost::shared_ptr<TrackMarker> >& marks,
+                      int start,
+                      int end,
+                      bool forward,
+                      bool updateViewer,
+                      bool centerViewer,
+                      ViewerInstance* viewer);
+    
+    void abortTracking();
     
     void beginEditSelection();
     
@@ -340,6 +354,8 @@ public:
     
     void goToPreviousKeyFrame(int time);
     void goToNextKeyFrame(int time);
+    
+    
     
     static bool trackStepV1(int trackIndex, const TrackArgsV1& args, int time);
 
@@ -383,6 +399,8 @@ public:
     
     void s_searchBtmLeftKnobValueChanged(const boost::shared_ptr<TrackMarker>& marker,int dimension,int reason) { Q_EMIT searchBtmLeftKnobValueChanged(marker,dimension,reason); }
     void s_searchTopRightKnobValueChanged(const boost::shared_ptr<TrackMarker>& marker,int dimension,int reason) { Q_EMIT searchTopRightKnobValueChanged(marker, dimension, reason); }
+    
+    void s_onNodeInputChanged(int inputNb) { Q_EMIT onNodeInputChanged(inputNb); }
     
 public Q_SLOTS:
     
@@ -429,6 +447,8 @@ Q_SIGNALS:
     void trackingStarted();
     void trackingFinished();
     void trackingProgress(double);
+    
+    void onNodeInputChanged(int inputNb);
     
 private:
     
@@ -501,7 +521,7 @@ public:
     /**
      * @brief Track the selectedInstances, calling the instance change action on each button (either the previous or
      * next button) in a separate thread.
-     * @param start the first frame to track, if forward is true then start < end
+     * @param start the first frame to track, if forward is true then start < end otherwise start > end
      * @param end the next frame after the last frame to track (a la STL iterators), if forward is true then end > start
      **/
     void track(const TrackArgsType& args);

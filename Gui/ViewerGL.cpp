@@ -1363,7 +1363,9 @@ ViewerGL::transferBufferFromRAMtoGPU(const unsigned char* ramBuffer,
                                      Natron::ImagePremultiplicationEnum premult,
                                      int textureIndex,
                                      const RectI& roi,
-                                     bool updateOnlyRoi)
+                                     bool updateOnlyRoi,
+                                     bool recenterViewer,
+                                     const Natron::Point& viewportCenter)
 {
     // always running in the main thread
     assert( qApp && qApp->thread() == QThread::currentThread() );
@@ -1462,7 +1464,12 @@ ViewerGL::transferBufferFromRAMtoGPU(const unsigned char* ramBuffer,
         _imp->memoryHeldByLastRenderedImages[textureIndex] = 0;
     }
     
-
+    if (recenterViewer) {
+        QMutexLocker k(&_imp->zoomCtxMutex);
+        double curCenterX = (_imp->zoomCtx.left() + _imp->zoomCtx.right()) / 2.;
+        double curCenterY = (_imp->zoomCtx.bottom() + _imp->zoomCtx.top()) / 2.;
+        _imp->zoomCtx.translate(viewportCenter.x - curCenterX, viewportCenter.y - curCenterY);
+    }
 
     if (!tiles.empty() && tiles.front()) {
         const ImagePtr& firstTile = tiles.front();
@@ -1491,6 +1498,7 @@ ViewerGL::transferBufferFromRAMtoGPU(const unsigned char* ramBuffer,
         }
     }
     setRegionOfDefinition(rod,region.par,textureIndex);
+    
 
 }
 

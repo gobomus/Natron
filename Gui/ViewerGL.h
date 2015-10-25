@@ -188,7 +188,9 @@ public:
                                             unsigned int mipMapLevel,Natron::ImagePremultiplicationEnum premult,
                                             int textureIndex,
                                             const RectI& roi,
-                                            bool updateOnlyRoi) OVERRIDE FINAL;
+                                            bool updateOnlyRoi,
+                                            bool recenterViewer,
+                                            const Natron::Point& viewportCenter) OVERRIDE FINAL;
     
     virtual void clearLastRenderedImage() OVERRIDE FINAL;
     
