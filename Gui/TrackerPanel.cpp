@@ -470,7 +470,7 @@ TrackerPanel::TrackerPanel(const boost::shared_ptr<NodeGui>& n,
     _imp->model = new TableModel(0,0,_imp->view);
     QObject::connect( _imp->model,SIGNAL( s_itemChanged(TableItem*) ),this,SLOT( onItemDataChanged(TableItem*) ) );
     _imp->view->setTableModel(_imp->model);
-    
+    _imp->view->setUniformRowHeights(true);
     QItemSelectionModel *selectionModel = _imp->view->selectionModel();
     QObject::connect( selectionModel, SIGNAL( selectionChanged(QItemSelection,QItemSelection) ),this,
                      SLOT( onModelSelectionChanged(QItemSelection,QItemSelection) ) );

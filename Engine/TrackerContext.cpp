@@ -2679,11 +2679,8 @@ TrackerContext::trackMarkers(const std::list<boost::shared_ptr<TrackMarker> >& m
             natronTrackerToLibMVTracker(enabledChannels, *t->natronMarker, trackIndex, start, forward, formatHeight, &t->mvMarker);
             assert(t->mvMarker.source != mv::Marker::MANUAL);
             
-            // Force its reference frame to the "start" so we do not track it since the user started on this frame
-            t->mvMarker.reference_frame = start;
-            
             // Set knob values at this time with a 0 correlation score
-            setKnobKeyframesFromMarker(t->mvMarker, formatHeight, NULL, t->natronMarker);
+            //setKnobKeyframesFromMarker(t->mvMarker, formatHeight, NULL, t->natronMarker);
             
             trackContext->AddMarker(t->mvMarker);
         }
