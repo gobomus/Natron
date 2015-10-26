@@ -328,6 +328,8 @@ public:
     
     void abortTracking();
     
+    bool isCurrentlyTracking() const;
+    
     void beginEditSelection();
     
     void endEditSelection(TrackSelectionReason reason);
@@ -360,7 +362,7 @@ public:
     static bool trackStepV1(int trackIndex, const TrackArgsV1& args, int time);
 
     
-    boost::shared_ptr<KnobDouble> getSearchWindowBottomLeftKnob() const;
+    /*boost::shared_ptr<KnobDouble> getSearchWindowBottomLeftKnob() const;
     boost::shared_ptr<KnobDouble> getSearchWindowTopRightKnob() const;
     boost::shared_ptr<KnobDouble> getPatternTopLeftKnob() const;
     boost::shared_ptr<KnobDouble> getPatternTopRightKnob() const;
@@ -370,7 +372,7 @@ public:
     boost::shared_ptr<KnobDouble> getCenterKnob() const;
     boost::shared_ptr<KnobDouble> getOffsetKnob() const;
     boost::shared_ptr<KnobDouble> getCorrelationKnob() const;
-    boost::shared_ptr<KnobChoice> getMotionModelKnob() const;
+    boost::shared_ptr<KnobChoice> getMotionModelKnob() const;*/
     
     void s_keyframeSetOnTrack(const boost::shared_ptr<TrackMarker>& marker,int key) { Q_EMIT keyframeSetOnTrack(marker,key); }
     void s_keyframeRemovedOnTrack(const boost::shared_ptr<TrackMarker>& marker,int key) { Q_EMIT keyframeRemovedOnTrack(marker,key); }

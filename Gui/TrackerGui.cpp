@@ -542,6 +542,7 @@ TrackerGui::createGui()
         QObject::connect(context.get(), SIGNAL(keyframeRemovedOnTrack(boost::shared_ptr<TrackMarker>,int)), this , SLOT(onKeyframeRemovedOnTrack(boost::shared_ptr<TrackMarker>,int)));
         QObject::connect(context.get(), SIGNAL(allKeyframesRemovedOnTrack(boost::shared_ptr<TrackMarker>)), this , SLOT(onAllKeyframesRemovedOnTrack(boost::shared_ptr<TrackMarker>)));
         QObject::connect(context.get(), SIGNAL(onNodeInputChanged(int)), this , SLOT(onTrackerInputChanged(int)));
+        QObject::connect(context.get(), SIGNAL(trackingFinished()), this , SLOT(onTrackingEnded()));
         
         QPixmap addKeyOnPix,addKeyOffPix;
         QIcon addKeyIc;
@@ -2060,12 +2061,13 @@ TrackerGui::penDown(double time,
         
         if (_imp->clickToAddTrackEnabled && !didSomething) {
             boost::shared_ptr<TrackMarker> marker = context->createMarker();
-            boost::shared_ptr<KnobDouble> centerKnob = context->getCenterKnob();
+            boost::shared_ptr<KnobDouble> centerKnob = marker->getCenterKnob();
             centerKnob->setValuesAtTime(time, pos.x(), pos.y(), Natron::eValueChangedReasonNatronInternalEdited);
             if (_imp->createKeyOnMoveButton->isChecked()) {
                 marker->setUserKeyframe(time);
             }
             _imp->panel->pushUndoCommand(new AddTrackCommand(marker,context));
+            updateSelectedMarkerTexture();
             didSomething = true;
         }
         
@@ -2124,8 +2126,8 @@ TrackerGuiPrivate::transformPattern(double time, TrackerMouseStateEnum state, co
     boost::shared_ptr<KnobDouble> searchWndTopRight,searchWndBtmLeft;
     boost::shared_ptr<KnobDouble> patternCorners[4];
     boost::shared_ptr<TrackerContext> context = panel->getContext();
-    boost::shared_ptr<KnobDouble> centerKnob = context->getCenterKnob();
-    boost::shared_ptr<KnobDouble> offsetKnob = context->getOffsetKnob();
+    boost::shared_ptr<KnobDouble> centerKnob = interactMarker->getCenterKnob();
+    boost::shared_ptr<KnobDouble> offsetKnob = interactMarker->getOffsetKnob();
     
     bool transformPatternCorners = state != eMouseStateDraggingOuterBtmLeft &&
     state != eMouseStateDraggingOuterBtmRight &&
@@ -2137,13 +2139,13 @@ TrackerGuiPrivate::transformPattern(double time, TrackerMouseStateEnum state, co
     state != eMouseStateDraggingOuterBtmMid;
     
     if (transformPatternCorners) {
-        patternCorners[0] = context->getPatternTopLeftKnob();
-        patternCorners[1] = context->getPatternBtmLeftKnob();
-        patternCorners[2] = context->getPatternBtmRightKnob();
-        patternCorners[3] = context->getPatternTopRightKnob();
+        patternCorners[0] = interactMarker->getPatternTopLeftKnob();
+        patternCorners[1] = interactMarker->getPatternBtmLeftKnob();
+        patternCorners[2] = interactMarker->getPatternBtmRightKnob();
+        patternCorners[3] = interactMarker->getPatternTopRightKnob();
     }
-    searchWndTopRight = context->getSearchWindowTopRightKnob();
-    searchWndBtmLeft = context->getSearchWindowBottomLeftKnob();
+    searchWndTopRight = interactMarker->getSearchWindowTopRightKnob();
+    searchWndBtmLeft = interactMarker->getSearchWindowBottomLeftKnob();
     
     QPointF centerPoint;
     centerPoint.rx() = centerKnob->getValueAtTime(time, 0);
@@ -2624,8 +2626,8 @@ TrackerGui::penMotion(double time,
         boost::shared_ptr<KnobDouble> centerKnob,offsetKnob,searchWndTopRight,searchWndBtmLeft;
         boost::shared_ptr<KnobDouble> patternCorners[4];
         if (_imp->interactMarker) {
-            centerKnob = context->getCenterKnob();
-            offsetKnob = context->getOffsetKnob();
+            centerKnob = _imp->interactMarker->getCenterKnob();
+            offsetKnob = _imp->interactMarker->getOffsetKnob();
             
             /*
              
@@ -2636,12 +2638,12 @@ TrackerGui::penMotion(double time,
              Btm left (1) ------------ Btm right (2)
              
              */
-            patternCorners[0] = context->getPatternTopLeftKnob();
-            patternCorners[1] = context->getPatternBtmLeftKnob();
-            patternCorners[2] = context->getPatternBtmRightKnob();
-            patternCorners[3] = context->getPatternTopRightKnob();
-            searchWndTopRight = context->getSearchWindowTopRightKnob();
-            searchWndBtmLeft = context->getSearchWindowBottomLeftKnob();
+            patternCorners[0] = _imp->interactMarker->getPatternTopLeftKnob();
+            patternCorners[1] = _imp->interactMarker->getPatternBtmLeftKnob();
+            patternCorners[2] = _imp->interactMarker->getPatternBtmRightKnob();
+            patternCorners[3] = _imp->interactMarker->getPatternTopRightKnob();
+            searchWndTopRight = _imp->interactMarker->getSearchWindowTopRightKnob();
+            searchWndBtmLeft = _imp->interactMarker->getSearchWindowBottomLeftKnob();
         }
         
         
@@ -2655,7 +2657,7 @@ TrackerGui::penMotion(double time,
                                            offsetKnob->getValueAtTime(time,1) + delta.y,
                                            Natron::eValueChangedReasonPluginEdited);
                 } else {
-                    centerKnob->setValues(centerKnob->getValueAtTime(time,0) + delta.x,
+                    centerKnob->setValuesAtTime(time, centerKnob->getValueAtTime(time,0) + delta.x,
                                           centerKnob->getValueAtTime(time,1) + delta.y,
                                           Natron::eValueChangedReasonPluginEdited);
                 }
@@ -2992,10 +2994,11 @@ TrackerGui::penMotion(double time,
             }   break;
             case eMouseStateDraggingSelectedMarker:
             {
-                
-                centerKnob->setValues(centerKnob->getValueAtTime(time,0) - delta.x *  _imp->selectedMarkerScale.x,
-                                      centerKnob->getValueAtTime(time,1) - delta.y *  _imp->selectedMarkerScale.y,
-                                      Natron::eValueChangedReasonPluginEdited);
+                double x = centerKnob->getValueAtTime(time,0);
+                double y = centerKnob->getValueAtTime(time,1);
+                x -= delta.x *  _imp->selectedMarkerScale.x;
+                y -= delta.y *  _imp->selectedMarkerScale.y;
+                centerKnob->setValuesAtTime(time, x,y,Natron::eValueChangedReasonPluginEdited);
             
                 if (_imp->createKeyOnMoveButton->isChecked()) {
                     _imp->interactMarker->setUserKeyframe(time);
@@ -3118,41 +3121,25 @@ TrackerGui::keyDown(double time,
             std::list<Natron::Node*> selectedInstances;
             _imp->panelv1->getSelectedInstances(&selectedInstances);
             didSomething = !selectedInstances.empty();
+        } else {
+            _imp->panel->onRemoveButtonClicked();
+            didSomething = true;
         }
     } else if ( isKeybind(kShortcutGroupTracking, kShortcutIDActionTrackingBackward, modifiers, key) ) {
-        _imp->trackBwButton->setDown(true);
-        _imp->trackBwButton->setChecked(true);
-        if (_imp->panelv1) {
-            didSomething = _imp->panelv1->trackBackward(_imp->viewer->getInternalNode());
-            if (!didSomething) {
-                _imp->panelv1->stopTracking();
-                _imp->trackBwButton->setDown(false);
-                _imp->trackBwButton->setChecked(false);
-            }
-        }
+        onTrackBwClicked();
+        didSomething = true;
     } else if ( isKeybind(kShortcutGroupTracking, kShortcutIDActionTrackingPrevious, modifiers, key) ) {
-        if (_imp->panelv1) {
-            didSomething = _imp->panelv1->trackPrevious(_imp->viewer->getInternalNode());
-        }
+        onTrackPrevClicked();
+        didSomething = true;
     } else if ( isKeybind(kShortcutGroupTracking, kShortcutIDActionTrackingNext, modifiers, key) ) {
-        if (_imp->panelv1) {
-            didSomething = _imp->panelv1->trackNext(_imp->viewer->getInternalNode());
-        }
+        onTrackNextClicked();
+        didSomething = true;
     } else if ( isKeybind(kShortcutGroupTracking, kShortcutIDActionTrackingForward, modifiers, key) ) {
-        _imp->trackFwButton->setDown(true);
-        _imp->trackFwButton->setChecked(true);
-        if (_imp->panelv1) {
-            didSomething = _imp->panelv1->trackForward(_imp->viewer->getInternalNode());
-            if (!didSomething) {
-                _imp->panelv1->stopTracking();
-                _imp->trackFwButton->setDown(false);
-                _imp->trackFwButton->setChecked(false);
-            }
-        }
+        onTrackFwClicked();
+        didSomething = true;
     } else if ( isKeybind(kShortcutGroupTracking, kShortcutIDActionTrackingStop, modifiers, key) ) {
-        if (_imp->panelv1) {
-            _imp->panelv1->stopTracking();
-        }
+        onStopButtonClicked();
+        didSomething = true;
     }
 
     return didSomething;
@@ -3308,6 +3295,7 @@ void
 TrackerGui::onTrackBwClicked()
 {
     _imp->trackBwButton->setDown(true);
+    _imp->trackBwButton->setChecked(true);
     if (_imp->panelv1) {
         if (!_imp->panelv1->trackBackward(_imp->viewer->getInternalNode())) {
             _imp->panelv1->stopTracking();
@@ -3316,11 +3304,15 @@ TrackerGui::onTrackBwClicked()
         }
     } else {
         boost::shared_ptr<TimeLine> timeline = _imp->viewer->getGui()->getApp()->getTimeLine();
-        int startFrame = timeline->currentFrame();
+        int startFrame = timeline->currentFrame() - 1;
         double first,last;
         _imp->viewer->getGui()->getApp()->getProject()->getFrameRange(&first, &last);
         boost::shared_ptr<TrackerContext> ctx = _imp->panel->getContext();
-        ctx->trackSelectedMarkers(startFrame, first -1, false, _imp->updateViewerButton->isDown(), _imp->centerViewerButton->isDown(), _imp->viewer->getInternalNode());
+        if (ctx->isCurrentlyTracking()) {
+            ctx->abortTracking();
+        } else {
+            ctx->trackSelectedMarkers(startFrame, first -1, false, _imp->updateViewerButton->isDown(), _imp->centerViewerButton->isDown(), _imp->viewer->getInternalNode());
+        }
     }
 }
 
@@ -3331,7 +3323,7 @@ TrackerGui::onTrackPrevClicked()
         _imp->panelv1->trackPrevious(_imp->viewer->getInternalNode());
     } else {
         boost::shared_ptr<TimeLine> timeline = _imp->viewer->getGui()->getApp()->getTimeLine();
-        int startFrame = timeline->currentFrame();
+        int startFrame = timeline->currentFrame() - 1;
         boost::shared_ptr<TrackerContext> ctx = _imp->panel->getContext();
         ctx->trackSelectedMarkers(startFrame, startFrame - 1, false, _imp->updateViewerButton->isDown(),_imp->centerViewerButton->isDown(),  _imp->viewer->getInternalNode());
     }
@@ -3355,7 +3347,7 @@ TrackerGui::onTrackNextClicked()
     if (_imp->panelv1) {
         _imp->panelv1->trackNext(_imp->viewer->getInternalNode());
     } else {
-        int startFrame = _imp->viewer->getGui()->getApp()->getTimeLine()->currentFrame();
+        int startFrame = _imp->viewer->getGui()->getApp()->getTimeLine()->currentFrame() + 1;
         boost::shared_ptr<TrackerContext> ctx = _imp->panel->getContext();
         ctx->trackSelectedMarkers(startFrame, startFrame + 1, true, _imp->updateViewerButton->isDown(), _imp->centerViewerButton->isDown(), _imp->viewer->getInternalNode());
     }
@@ -3365,6 +3357,7 @@ void
 TrackerGui::onTrackFwClicked()
 {
     _imp->trackFwButton->setDown(true);
+    _imp->trackFwButton->setChecked(true);
     if (_imp->panelv1) {
         if (!_imp->panelv1->trackForward(_imp->viewer->getInternalNode())) {
             _imp->panelv1->stopTracking();
@@ -3373,11 +3366,15 @@ TrackerGui::onTrackFwClicked()
         }
     } else {
         boost::shared_ptr<TimeLine> timeline = _imp->viewer->getGui()->getApp()->getTimeLine();
-        int startFrame = timeline->currentFrame();
+        int startFrame = timeline->currentFrame() + 1;
         double first,last;
         _imp->viewer->getGui()->getApp()->getProject()->getFrameRange(&first, &last);
         boost::shared_ptr<TrackerContext> ctx = _imp->panel->getContext();
-        ctx->trackSelectedMarkers(startFrame, last + 1, true, _imp->updateViewerButton->isDown(), _imp->centerViewerButton->isDown(), _imp->viewer->getInternalNode());
+        if (ctx->isCurrentlyTracking()) {
+            ctx->abortTracking();
+        } else {
+            ctx->trackSelectedMarkers(startFrame, last + 1, true, _imp->updateViewerButton->isDown(), _imp->centerViewerButton->isDown(), _imp->viewer->getInternalNode());
+        }
     }
 }
 
@@ -3480,11 +3477,14 @@ TrackerGui::onResetOffsetButtonClicked()
 {
     std::list<boost::shared_ptr<TrackMarker> > markers;
     _imp->panel->getContext()->getSelectedMarkers(&markers);
-    boost::shared_ptr<KnobDouble> offsetKnob = _imp->panel->getContext()->getOffsetKnob();
-    assert(offsetKnob);
-    for (int i = 0; i < offsetKnob->getDimension(); ++i) {
-        offsetKnob->resetToDefaultValue(i);
+    for (std::list<boost::shared_ptr<TrackMarker> >::iterator it = markers.begin(); it!=markers.end(); ++it) {
+        boost::shared_ptr<KnobDouble> offsetKnob = (*it)->getOffsetKnob();
+        assert(offsetKnob);
+        for (int i = 0; i < offsetKnob->getDimension(); ++i) {
+            offsetKnob->resetToDefaultValue(i);
+        }
     }
+    
 
 }
 

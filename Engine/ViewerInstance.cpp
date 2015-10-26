@@ -1346,7 +1346,11 @@ ViewerInstance::renderViewer_internal(int view,
         for (std::list<RectD>::iterator it = partialRectsToRender.begin(); it!=partialRectsToRender.end(); ++it) {
             RectI pixelRect;
             it->toPixelEnclosing(inArgs.params->mipMapLevel, par, &pixelRect);
-            splitRoi.push_back(pixelRect);
+            ///Intersect to the RoI
+            if (pixelRect.intersect(roi, &pixelRect)) {
+                splitRoi.push_back(pixelRect);
+            }
+            
         }
     } else if (tilingProgressReportPrefEnabled && inArgs.params->cachedFrame && !isSequentialRender && canAbort && inArgs.activeInputToRender->supportsTiles()) {
 

@@ -55,6 +55,8 @@ class Gui;
 class KnobPage;
 class QVBoxLayout;
 class Button;
+class QGridLayout;
+class QWidget;
 class QUndoStack;
 class QUndoCommand;
 class QGridLayout;
@@ -68,8 +70,15 @@ class KnobGroup;
  **/
 class TabGroup : public QFrame
 {
+    
+    Q_OBJECT
+    
     QTabWidget* _tabWidget;
-    std::vector<boost::weak_ptr<KnobGroup> > _tabs;
+    struct TabData {
+        QWidget* tabContainer;
+        QGridLayout* gridLayout;
+    };
+    std::vector<std::pair< boost::weak_ptr<KnobGroup>,TabData > > _tabs;
     
 public:
     
@@ -83,6 +92,10 @@ public:
     {
         return _tabs.empty();
     }
+
+public Q_SLOTS:
+    
+    void onGroupSecretChanged();
 };
 
 #endif // Gui_TabGroup_h

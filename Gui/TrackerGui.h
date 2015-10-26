@@ -112,7 +112,7 @@ public Q_SLOTS:
     void updateSelectionFromSelectionRectangle(bool onRelease);
 
     void onSelectionCleared();
-
+        
     void onTrackingEnded();
     
     void onCreateKeyOnMoveButtonClicked(bool clicked);

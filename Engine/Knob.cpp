@@ -2608,10 +2608,20 @@ KnobHelper::checkAnimationLevel(int dimension)
 {
     AnimationLevelEnum level = Natron::eAnimationLevelNone;
 
-    if ( canAnimate() && isAnimated(dimension) && getHolder() && getHolder()->getApp() ) {
+    if ( canAnimate() && isAnimated(dimension)) {
 
         boost::shared_ptr<Curve> c = getCurve(dimension);
-        SequenceTime time = getHolder()->getApp()->getTimeLine()->currentFrame();
+        SequenceTime time;
+        if (getHolder() && getHolder()->getApp()) {
+            time = getHolder()->getApp()->getTimeLine()->currentFrame();
+        } else {
+            AppInstance* topLevel = appPTR->getTopLevelInstance();
+            if (topLevel) {
+                time = topLevel->getTimeLine()->currentFrame();
+            } else {
+                time = 0;
+            }
+        }
         if (c->getKeyFramesCount() > 0) {
             KeyFrame kf;
             bool found = c->getKeyFrameWithTime(time, &kf);;

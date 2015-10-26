@@ -28,6 +28,8 @@
 #include <QVBoxLayout>
 #include <QGridLayout>
 
+#include "Engine/KnobTypes.h"
+
 #define NATRON_FORM_LAYOUT_LINES_SPACING 0
 
 
@@ -43,6 +45,43 @@ TabGroup::TabGroup(QWidget* parent)
     QHBoxLayout* frameLayout = new QHBoxLayout(this);
     _tabWidget = new QTabWidget(this);
     frameLayout->addWidget(_tabWidget);
+    setVisible(false);
+}
+
+void
+TabGroup::onGroupSecretChanged()
+{
+    KnobSignalSlotHandler* handler = qobject_cast<KnobSignalSlotHandler*>(sender());
+    if (!handler) {
+        return;
+    }
+    KnobGroup* knob = dynamic_cast<KnobGroup*>(handler->getKnob().get());
+    if (!knob) {
+        return;
+    }
+    int found = -1;
+    for (U32 i = 0 ; i < _tabs.size(); ++i) {
+        if (_tabs[i].first.lock().get() == knob) {
+            found = (int)i;
+            break;
+        }
+    }
+    if (found == -1) {
+        return;
+    }
+    
+    bool secret = handler->getKnob()->getIsSecret();
+    if (secret) {
+        _tabWidget->removeTab(found);
+        if (_tabWidget->count() == 0) {
+            hide();
+        }
+    } else {
+        _tabWidget->insertTab(found, _tabs[found].second.tabContainer, _tabs[found].second.tabContainer->objectName());
+        if (!isVisible()) {
+            setVisible(true);
+        }
+    }
 }
 
 QGridLayout*
@@ -51,23 +90,36 @@ TabGroup::addTab(const boost::shared_ptr<KnobGroup>& group,const QString& name)
     
     QWidget* tab = 0;
     QGridLayout* tabLayout = 0;
-    for (U32 i = 0 ; i < _tabs.size(); ++i) {
-        if (_tabs[i].lock() == group) {
-            tab = _tabWidget->widget(i);
-            assert(tab);
-            tabLayout = qobject_cast<QGridLayout*>( tab->layout() );
-            assert(tabLayout);
+    for (std::size_t i = 0; i < _tabs.size(); ++i) {
+        boost::shared_ptr<KnobGroup> k = _tabs[i].first.lock();
+        if (!k) {
+            continue;
+        }
+        if (k == group) {
+            tab = _tabs[i].second.tabContainer;
+            tabLayout = _tabs[i].second.gridLayout;
+            break;
         }
     }
    
     if (!tab) {
+        QObject::connect(group->getSignalSlotHandler().get(), SIGNAL(secretChanged()), this, SLOT(onGroupSecretChanged()));
         tab = new QWidget(_tabWidget);
+        tab->setObjectName(name);
         tabLayout = new QGridLayout(tab);
         tabLayout->setColumnStretch(1, 1);
         //tabLayout->setContentsMargins(0, 0, 0, 0);
         tabLayout->setSpacing(NATRON_FORM_LAYOUT_LINES_SPACING); // unfortunately, this leaves extra space when parameters are hidden
-        _tabWidget->addTab(tab,name);
-        _tabs.push_back(group);
+        if (!group->getIsSecret()) {
+            _tabWidget->addTab(tab,name);
+            if (!isVisible()) {
+                setVisible(true);
+            }
+        }
+        TabData d;
+        d.gridLayout = tabLayout;
+        d.tabContainer = tab;
+        _tabs.push_back(std::make_pair(group, d));
     }
     assert(tabLayout);
     return tabLayout;
@@ -77,11 +129,17 @@ void
 TabGroup::removeTab(KnobGroup* group)
 {
     int i = 0;
-    for (std::vector<boost::weak_ptr<KnobGroup> >::iterator it = _tabs.begin(); it != _tabs.end(); ++it, ++i) {
-        if (it->lock().get() == group) {
+    for (std::vector<std::pair< boost::weak_ptr<KnobGroup>,TabData > >::iterator it = _tabs.begin();
+         it != _tabs.end(); ++it) {
+        boost::shared_ptr<KnobGroup> k = it->first.lock();
+        if (!k) {
+            continue;
+        }
+        if (k.get() == group) {
             _tabWidget->removeTab(i);
             _tabs.erase(it);
             break;
         }
     }
+
 }

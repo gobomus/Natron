@@ -51,7 +51,7 @@
 #include "Engine/ViewerInstance.h"
 
 #define kTrackBaseName "track"
-#define TRACKER_MAX_TRACKS_FOR_PARTIAL_VIEWER_UPDATE 10
+#define TRACKER_MAX_TRACKS_FOR_PARTIAL_VIEWER_UPDATE 8
 
 /// Parameters definitions
 
@@ -146,6 +146,8 @@
 #define kTrackerParamCorrelation "correlation"
 #define kTrackerParamCorrelationLabel "Correlation"
 #define kTrackerParamCorrelationHint "The correlation score obtained after tracking each frame"
+
+#define TRACE_LIB_MV 1
 
 using namespace Natron;
 
@@ -933,6 +935,9 @@ class TrackArgsLibMV
     boost::shared_ptr<mv::AutoTrack> _libmvAutotrack;
     boost::shared_ptr<FrameAccessorImpl> _fa;
     std::vector<boost::shared_ptr<TrackMarkerAndOptions> > _tracks;
+    
+    //Store the format size because LibMV internally has a top-down Y axis
+    double _formatWidth,_formatHeight;
     mutable QMutex _autoTrackMutex;
     
 public:
@@ -948,6 +953,8 @@ public:
     , _libmvAutotrack()
     , _fa()
     , _tracks()
+    , _formatWidth(0)
+    , _formatHeight(0)
     {
         
     }
@@ -961,7 +968,9 @@ public:
                    ViewerInstance* viewer,
                    const boost::shared_ptr<mv::AutoTrack>& autoTrack,
                    const boost::shared_ptr<FrameAccessorImpl>& fa,
-                   const std::vector<boost::shared_ptr<TrackMarkerAndOptions> >& tracks)
+                   const std::vector<boost::shared_ptr<TrackMarkerAndOptions> >& tracks,
+                   double formatWidth,
+                   double formatHeight)
     : _start(start)
     , _end(end)
     , _isForward(isForward)
@@ -972,6 +981,8 @@ public:
     , _libmvAutotrack(autoTrack)
     , _fa(fa)
     , _tracks(tracks)
+    , _formatWidth(formatWidth)
+    , _formatHeight(formatHeight)
     {
         
     }
@@ -993,6 +1004,18 @@ public:
         _fa = other._fa;
         _centerViewer = other._centerViewer;
         _tracks = other._tracks;
+        _formatWidth = other._formatWidth;
+        _formatHeight = other._formatHeight;
+    }
+    
+    double getFormatHeight() const
+    {
+        return _formatHeight;
+    }
+    
+    double getFormatWidth() const
+    {
+        return _formatWidth;
     }
     
     QMutex* getAutoTrackMutex() const
@@ -1124,10 +1147,25 @@ static void updateBbox(const Natron::Point& p, RectD* bbox)
     bbox->y2 = std::max(p.x, bbox->y2);
 }
 
+static double invertYCoordinate(double yIn, double formatHeight)
+{
+    return formatHeight - 1 - yIn;
+}
+
+static void convertLibMVRegionToRectI(const mv::Region& region, int formatHeight, RectI* roi)
+{
+    roi->x1 = region.min(0);
+    roi->x2 = region.max(0);
+    roi->y1 = invertYCoordinate(region.max(1),formatHeight);
+    roi->y2 = invertYCoordinate(region.min(1),formatHeight);
+}
+
+
 /**
  * @brief Set keyframes on knobs from Marker data
  **/
 static void setKnobKeyframesFromMarker(const mv::Marker& mvMarker,
+                                       int formatHeight,
                                        const libmv::TrackRegionResult* result,
                                        const boost::shared_ptr<TrackMarker>& natronMarker)
 {
@@ -1149,16 +1187,16 @@ static void setKnobKeyframesFromMarker(const mv::Marker& mvMarker,
     
     Natron::Point topLeftCorner,topRightCorner,btmRightCorner,btmLeftCorner;
     topLeftCorner.x = mvMarker.patch.coordinates(0,0) - center.x;
-    topLeftCorner.y = mvMarker.patch.coordinates(0,1) - center.y;
+    topLeftCorner.y = invertYCoordinate(mvMarker.patch.coordinates(0,1) - center.y,formatHeight);
     
     topRightCorner.x = mvMarker.patch.coordinates(1,0) - center.x;
-    topRightCorner.y = mvMarker.patch.coordinates(1,1) - center.y;
+    topRightCorner.y = invertYCoordinate(mvMarker.patch.coordinates(1,1) - center.y,formatHeight);
     
     btmRightCorner.x = mvMarker.patch.coordinates(2,0) - center.x;
-    btmRightCorner.y = mvMarker.patch.coordinates(2,1) - center.y;
+    btmRightCorner.y = invertYCoordinate(mvMarker.patch.coordinates(2,1) - center.y,formatHeight);
     
     btmLeftCorner.x = mvMarker.patch.coordinates(3,0) - center.x;
-    btmLeftCorner.y = mvMarker.patch.coordinates(3,1) - center.y;
+    btmLeftCorner.y = invertYCoordinate(mvMarker.patch.coordinates(3,1) - center.y,formatHeight);
     
     boost::shared_ptr<KnobDouble> pntTopLeftKnob = natronMarker->getPatternTopLeftKnob();
     boost::shared_ptr<KnobDouble> pntTopRightKnob = natronMarker->getPatternTopRightKnob();
@@ -1175,6 +1213,7 @@ static void setKnobKeyframesFromMarker(const mv::Marker& mvMarker,
 static void updateLibMvTrackMinimal(const TrackMarker& marker,
                                     int time,
                                     bool forward,
+                                    int formatHeight,
                                     mv::Marker* mvMarker)
 {
     boost::shared_ptr<KnobDouble> searchWindowBtmLeftKnob = marker.getSearchWindowBottomLeftKnob();
@@ -1187,6 +1226,7 @@ static void updateLibMvTrackMinimal(const TrackMarker& marker,
     } else {
         mvMarker->source = mv::Marker::TRACKED;
     }
+    mvMarker->frame = time;
     mvMarker->center(0) = centerKnob->getValueAtTime(time, 0);
     mvMarker->center(1) = centerKnob->getValueAtTime(time, 1);
     
@@ -1201,10 +1241,11 @@ static void updateLibMvTrackMinimal(const TrackMarker& marker,
     offset.x = offsetKnob->getValueAtTime(time,0);
     offset.y = offsetKnob->getValueAtTime(time,1);
     
+    //See natronTrackerToLibMVTracker below for coordinates system
     mvMarker->search_region.min(0) = searchWndBtmLeft.x + mvMarker->center(0) + offset.x;
-    mvMarker->search_region.min(1) = searchWndTopRight.y + mvMarker->center(1) + offset.y;
+    mvMarker->search_region.min(1) = invertYCoordinate(searchWndTopRight.y + mvMarker->center(1) + offset.y,formatHeight);
     mvMarker->search_region.max(0) = searchWndTopRight.x + mvMarker->center(0) + offset.x;
-    mvMarker->search_region.max(1) = searchWndBtmLeft.y + mvMarker->center(1) + offset.y;
+    mvMarker->search_region.max(1) = invertYCoordinate(searchWndBtmLeft.y + mvMarker->center(1) + offset.y,formatHeight);
 }
 
 /// Converts a Natron track marker to the one used in LibMV. This is expensive: many calls to getValue are made
@@ -1213,6 +1254,7 @@ static void natronTrackerToLibMVTracker(bool trackChannels[3],
                                         int trackIndex,
                                         int time,
                                         bool forward,
+                                        double formatHeight,
                                         mv::Marker* mvMarker)
 {
     boost::shared_ptr<KnobDouble> searchWindowBtmLeftKnob = marker.getSearchWindowBottomLeftKnob();
@@ -1279,22 +1321,53 @@ static void natronTrackerToLibMVTracker(bool trackChannels[3],
     updateBbox(br, &patternBbox);
     updateBbox(bl, &patternBbox);
     
+    // The search-region is laid out as such:
+    //
+    //    +----------> x
+    //    |
+    //    |   (min.x, min.y)           (max.x, min.y)
+    //    |        +-------------------------+
+    //    |        |                         |
+    //    |        |                         |
+    //    |        |                         |
+    //    |        +-------------------------+
+    //    v   (min.x, max.y)           (max.x, max.y)
+    //
     mvMarker->search_region.min(0) = searchWndBtmLeft.x + mvMarker->center(0) + offset.x;
-    mvMarker->search_region.min(1) = searchWndTopRight.y + mvMarker->center(1) + offset.y;
+    mvMarker->search_region.min(1) = invertYCoordinate(searchWndTopRight.y + mvMarker->center(1) + offset.y,formatHeight);
     mvMarker->search_region.max(0) = searchWndTopRight.x + mvMarker->center(0) + offset.x;
-    mvMarker->search_region.max(1) = searchWndBtmLeft.y + mvMarker->center(1) + offset.y;
+    mvMarker->search_region.max(1) = invertYCoordinate(searchWndBtmLeft.y + mvMarker->center(1) + offset.y,formatHeight);
     
+    
+    // The patch is a quad (4 points); generally in 2D or 3D (here 2D)
+    //
+    //    +----------> x
+    //    |\.
+    //    | \.
+    //    |  z (z goes into screen)
+    //    |
+    //    |     r0----->r1
+    //    |      ^       |
+    //    |      |   .   |
+    //    |      |       V
+    //    |     r3<-----r2
+    //    |              \.
+    //    |               \.
+    //    v                normal goes away (right handed).
+    //    y
+    //
+    // Each row is one of the corners coordinates; either (x, y) or (x, y, z).
     mvMarker->patch.coordinates(0,0) = tl.x + mvMarker->center(0);
-    mvMarker->patch.coordinates(0,1) = tl.y + mvMarker->center(1);
+    mvMarker->patch.coordinates(0,1) = invertYCoordinate(tl.y + mvMarker->center(1),formatHeight);
     
     mvMarker->patch.coordinates(1,0) = tr.x + mvMarker->center(0);
-    mvMarker->patch.coordinates(1,1) = tr.y + mvMarker->center(1);
+    mvMarker->patch.coordinates(1,1) = invertYCoordinate(tr.y + mvMarker->center(1),formatHeight);
     
     mvMarker->patch.coordinates(2,0) = br.x + mvMarker->center(0);
-    mvMarker->patch.coordinates(2,1) = br.y + mvMarker->center(1);
+    mvMarker->patch.coordinates(2,1) = invertYCoordinate(br.y + mvMarker->center(1),formatHeight);
     
     mvMarker->patch.coordinates(3,0) = bl.x + mvMarker->center(0);
-    mvMarker->patch.coordinates(3,1) = bl.y + mvMarker->center(1);
+    mvMarker->patch.coordinates(3,1) = invertYCoordinate(bl.y + mvMarker->center(1),formatHeight);
 }
 
 /*
@@ -1319,7 +1392,9 @@ static bool trackStepLibMV(int trackIndex, const TrackArgsLibMV& args, int time)
     if (track->mvMarker.source == mv::Marker::MANUAL) {
         // This is a user keyframe or the first frame, we do not track it
         assert(time == args.getStart() || track->natronMarker->isUserKeyframe(track->mvMarker.frame));
-        
+#ifdef TRACE_LIB_MV
+        qDebug() << QThread::currentThread() << "TrackStep:" << time << "is a keyframe";
+#endif
 #ifdef DEBUG
         {
             // Make sure the Marker belongs to the AutoTrack
@@ -1336,17 +1411,29 @@ static bool trackStepLibMV(int trackIndex, const TrackArgsLibMV& args, int time)
         track->mvMarker.reference_frame = track->natronMarker->getReferenceFrame(time, args.getForward());
         assert(track->mvMarker.reference_frame != track->mvMarker.frame);
         
+#ifdef TRACE_LIB_MV
+        qDebug() << QThread::currentThread() << ">>>> Tracking marker" << trackIndex << "at frame" << time <<
+        "with reference frame" << track->mvMarker.reference_frame;
+#endif
+        
         // Do the actual tracking
         libmv::TrackRegionResult result;
         if (!autoTrack->TrackMarker(&track->mvMarker, &result, &track->mvOptions) || !result.is_usable()) {
+#ifdef TRACE_LIB_MV
+            qDebug() << QThread::currentThread() << "Tracking FAILED for track" << trackIndex << "at frame" << time;
+#endif
             return false;
         }
         
         //Ok the tracking has succeeded, now the marker is in this state:
         //the source is TRACKED, the search_window has been offset by the center delta,  the center has been offset
         
+#ifdef TRACE_LIB_MV
+        qDebug() << QThread::currentThread() << "Tracking SUCCESS for track" << trackIndex << "at frame" << time;
+#endif
+        
         //Extract the marker to the knob keyframes
-        setKnobKeyframesFromMarker(track->mvMarker, &result, track->natronMarker);
+        setKnobKeyframesFromMarker(track->mvMarker, args.getFormatHeight(), &result, track->natronMarker);
         
         //Add the marker to the autotrack
         {
@@ -1357,7 +1444,7 @@ static bool trackStepLibMV(int trackIndex, const TrackArgsLibMV& args, int time)
     
     //Refresh the marker for next iteration
     int nextFrame = args.getForward() ? time + 1 : time - 1;
-    updateLibMvTrackMinimal(*track->natronMarker, nextFrame, args.getForward(), &track->mvMarker);
+    updateLibMvTrackMinimal(*track->natronMarker, nextFrame, args.getForward(), args.getFormatHeight(), &track->mvMarker);
     
     return true;
 }
@@ -1385,10 +1472,10 @@ struct TrackerContextPrivate
     boost::weak_ptr<KnobDouble> preBlurSigma;
     boost::weak_ptr<KnobInt> referenceFrame;
     
-    boost::weak_ptr<KnobDouble> searchWindowBtmLeft,searchWindowTopRight;
+    /*boost::weak_ptr<KnobDouble> searchWindowBtmLeft,searchWindowTopRight;
     boost::weak_ptr<KnobDouble> patternTopLeft,patternTopRight,patternBtmRight,patternBtmLeft;
     boost::weak_ptr<KnobDouble> center,offset,weight,correlation;
-    boost::weak_ptr<KnobChoice> motionModel;
+    boost::weak_ptr<KnobChoice> motionModel;*/
     
     
     mutable QMutex trackerContextMutex;
@@ -1413,17 +1500,6 @@ struct TrackerContextPrivate
     , useNormalizedIntensities()
     , preBlurSigma()
     , referenceFrame()
-    , searchWindowBtmLeft()
-    , searchWindowTopRight()
-    , patternTopLeft()
-    , patternTopRight()
-    , patternBtmRight()
-    , patternBtmLeft()
-    , center()
-    , offset()
-    , weight()
-    , correlation()
-    , motionModel()
     , trackerContextMutex()
     , markers()
     , selectedMarkers()
@@ -1542,11 +1618,13 @@ struct TrackerContextPrivate
         
         
         //// Per-track knobs
-        boost::shared_ptr<KnobGroup> patternGroup = Natron::createKnob<KnobGroup>(effect, "Pattern-Window", 1 , false);
+        /*boost::shared_ptr<KnobGroup> patternGroup = Natron::createKnob<KnobGroup>(effect, "Pattern-Window", 1 , false);
         patternGroup->setAsTab();
         patternGroup->setDefaultValue(false);
+        patternGroup->setSecretByDefault(true);
         boost::shared_ptr<KnobGroup> searchWindowGroup = Natron::createKnob<KnobGroup>(effect, "Search-Window", 1 , false);
         searchWindowGroup->setAsTab();
+        searchWindowGroup->setSecretByDefault(true);
         searchWindowGroup->setDefaultValue(false);
         
         settingsPage->addKnob(patternGroup);
@@ -1633,6 +1711,7 @@ struct TrackerContextPrivate
         centerKnob->setHintToolTip(kTrackerParamCenterHint);
         centerKnob->setIsPersistant(false);
         centerKnob->setEvaluateOnChange(false);
+        centerKnob->setSecretByDefault(true);
         settingsPage->addKnob(centerKnob);
 
        
@@ -1645,6 +1724,7 @@ struct TrackerContextPrivate
         offsetKnob->setHintToolTip(kTrackerParamOffsetHint);
         offsetKnob->setIsPersistant(false);
         offsetKnob->setEvaluateOnChange(false);
+        offsetKnob->setSecretByDefault(true);
         settingsPage->addKnob(offsetKnob);
 
         offset = offsetKnob;
@@ -1660,6 +1740,7 @@ struct TrackerContextPrivate
         weightKnob->setMaximum(1.);
         weightKnob->setEvaluateOnChange(false);
         weightKnob->setDefaultValue(1.);
+        weightKnob->setSecretByDefault(true);
         settingsPage->addKnob(weightKnob);
         weight = weightKnob;
         knobs.push_back(weightKnob);
@@ -1676,6 +1757,7 @@ struct TrackerContextPrivate
         correlationKnob->setIsPersistant(false);
         correlationKnob->setAllDimensionsEnabled(false);
         correlationKnob->setEvaluateOnChange(false);
+        correlationKnob->setSecretByDefault(true);
         settingsPage->addKnob(correlationKnob);
         correlation = correlationKnob;
         knobs.push_back(correlationKnob);
@@ -1694,12 +1776,13 @@ struct TrackerContextPrivate
         motionModelKnob->setMaximum(1.);
         motionModelKnob->setIsPersistant(false);
         motionModelKnob->setDefaultValue(4);
+        motionModelKnob->setSecretByDefault(true);
         motionModelKnob->setEvaluateOnChange(false);
         settingsPage->addKnob(motionModelKnob);
         motionModel = motionModelKnob;
         knobs.push_back(motionModelKnob);
         perTrackKnobs.push_back(motionModelKnob);
-        
+        */
         
     }
     
@@ -1742,6 +1825,10 @@ struct TrackerContextPrivate
             --beginSelectionCounter;
         }
     }
+    
+    void linkMarkerKnobsToGuiKnobs(const std::list<boost::shared_ptr<TrackMarker> >& markers,
+                                   bool multipleTrackSelected,
+                                   bool slave);
     
     
 };
@@ -1828,7 +1915,7 @@ TrackerContext::goToNextKeyFrame(int time)
     }
 }
 
-boost::shared_ptr<KnobDouble>
+/*boost::shared_ptr<KnobDouble>
 TrackerContext::getSearchWindowBottomLeftKnob() const
 {
     return _imp->searchWindowBtmLeft.lock();
@@ -1892,7 +1979,7 @@ boost::shared_ptr<KnobChoice>
 TrackerContext::getMotionModelKnob() const
 {
     return _imp->motionModel.lock();
-}
+}*/
 
 boost::shared_ptr<TrackMarker>
 TrackerContext::getMarkerByName(const std::string & name) const
@@ -2189,15 +2276,19 @@ class FrameAccessorImpl : public mv::FrameAccessor
     mutable QMutex _cacheMutex;
     FrameAccessorCache _cache;
     bool _enabledChannels[3];
+    int _formatHeight;
     
 public:
     
     FrameAccessorImpl(const TrackerContext* context,
-                      bool enabledChannels[3])
+                      bool enabledChannels[3],
+                      int formatHeight)
     : _context(context)
     , _trackerInput()
     , _cacheMutex()
     , _cache()
+    , _enabledChannels()
+    , _formatHeight(formatHeight)
     {
         _trackerInput = context->getNode()->getInput(0);
         assert(_trackerInput);
@@ -2354,15 +2445,24 @@ FrameAccessorImpl::GetImage(int /*clip*/,
         QMutexLocker k(&_cacheMutex);
         std::pair<FrameAccessorCache::iterator,FrameAccessorCache::iterator> range = _cache.equal_range(key);
         for (FrameAccessorCache::iterator it = range.first; it != range.second; ++it) {
-            if (it->second.bounds.isNull() ||
-                (region && region->min(0) >= it->second.bounds.x1 && region->min(1) <= it->second.bounds.y2 &&
-                 region->max(0) <= it->second.bounds.x2 && region->max(1) >= it->second.bounds.y1)) {
+            if (region) {
+                RectI roi;
+                convertLibMVRegionToRectI(*region,_formatHeight, &roi);
+                if (roi.x1 >= it->second.bounds.x1 && roi.x2 <= it->second.bounds.x2 &&
+                    roi.y1 >= it->second.bounds.y1 && roi.y2 <= it->second.bounds.y2) {
                     // LibMV is kinda dumb on this we must necessarily copy the data either via CopyFrom or the
                     // assignment constructor
+#ifdef TRACE_LIB_MV
+                    qDebug() << QThread::currentThread() << "FrameAccessor::GetImage():" << "Found cached image at frame" << frame << "with RoI x1="
+                    << region->min(0) << "y1=" << region->max(1) << "x2=" << region->max(0) << "y2=" << region->min(1);
+#endif
                     destination->CopyFrom<float>(*it->second.image);
                     ++it->second.referenceCount;
                     return (mv::FrameAccessor::Key)it->second.image.get();
                 }
+            } else if (it->second.bounds.isNull()) {
+                
+            }
         }
     }
     
@@ -2373,10 +2473,7 @@ FrameAccessorImpl::GetImage(int /*clip*/,
     RectI roi;
     RectD precomputedRoD;
     if (region) {
-        roi.x1 = region->min(0);
-        roi.x2 = region->max(0);
-        roi.y1 = region->max(1);
-        roi.y2 = region->min(1);
+        convertLibMVRegionToRectI(*region,_formatHeight, &roi);
     } else {
         bool isProjectFormat;
         Natron::StatusEnum stat = _trackerInput->getLiveInstance()->getRegionOfDefinition_public(_trackerInput->getHashValue(), frame, scale, 0, &precomputedRoD, &isProjectFormat);
@@ -2424,6 +2521,10 @@ FrameAccessorImpl::GetImage(int /*clip*/,
     ImageList planes;
     EffectInstance::RenderRoIRetCode stat = _trackerInput->getLiveInstance()->renderRoI(args, &planes);
     if (stat != EffectInstance::eRenderRoIRetCodeOk || planes.empty()) {
+#ifdef TRACE_LIB_MV
+        qDebug() << QThread::currentThread() << "FrameAccessor::GetImage():" << "Failed to call renderRoI on input at frame" << frame << "with RoI x1="
+        << roi.x1 << "y1=" << roi.y1 << "x2=" << roi.x2 << "y2=" << roi.y2;
+#endif
         return (mv::FrameAccessor::Key)0;
     }
     
@@ -2454,6 +2555,10 @@ FrameAccessorImpl::GetImage(int /*clip*/,
         QMutexLocker k(&_cacheMutex);
         _cache.insert(std::make_pair(key,entry));
     }
+#ifdef TRACE_LIB_MV
+    qDebug() << QThread::currentThread() << "FrameAccessor::GetImage():" << "Rendered frame" << frame << "with RoI x1="
+    << roi.x1 << "y1=" << roi.y1 << "x2=" << roi.x2 << "y2=" << roi.y2;
+#endif
     return (mv::FrameAccessor::Key)entry.image.get();
 }
 
@@ -2514,9 +2619,16 @@ TrackerContext::trackMarkers(const std::list<boost::shared_ptr<TrackMarker> >& m
     enabledChannels[1] = _imp->enableTrackGreen.lock()->getValue();
     enabledChannels[2] = _imp->enableTrackBlue.lock()->getValue();
     
+    double formatWidth,formatHeight;
+    Format f;
+    getNode()->getApp()->getProject()->getProjectDefaultFormat(&f);
+    formatWidth = f.width();
+    formatHeight = f.height();
+    
     /// The accessor and its cache is local to a track operation, it is wiped once the whole sequence track is finished.
-    boost::shared_ptr<FrameAccessorImpl> accessor(new FrameAccessorImpl(this, enabledChannels));
+    boost::shared_ptr<FrameAccessorImpl> accessor(new FrameAccessorImpl(this, enabledChannels, formatHeight));
     boost::shared_ptr<mv::AutoTrack> trackContext(new mv::AutoTrack(accessor.get()));
+    
     
     
     std::vector<boost::shared_ptr<TrackMarkerAndOptions> > trackAndOptions;
@@ -2547,12 +2659,12 @@ TrackerContext::trackMarkers(const std::list<boost::shared_ptr<TrackMarker> >& m
             
             if (*it2 == start) {
                 isStartingTimeKeyframe = true;
-                natronTrackerToLibMVTracker(enabledChannels, *t->natronMarker, trackIndex, *it2, forward, &t->mvMarker);
+                natronTrackerToLibMVTracker(enabledChannels, *t->natronMarker, trackIndex, *it2, forward, formatHeight, &t->mvMarker);
                 assert(t->mvMarker.source == mv::Marker::MANUAL);
                 trackContext->AddMarker(t->mvMarker);
             } else {
                 mv::Marker marker;
-                natronTrackerToLibMVTracker(enabledChannels, *t->natronMarker, trackIndex, *it2, forward, &marker);
+                natronTrackerToLibMVTracker(enabledChannels, *t->natronMarker, trackIndex, *it2, forward, formatHeight, &marker);
                 assert(marker.source == mv::Marker::MANUAL);
                 trackContext->AddMarker(marker);
             }
@@ -2562,14 +2674,14 @@ TrackerContext::trackMarkers(const std::list<boost::shared_ptr<TrackMarker> >& m
         
         if (!isStartingTimeKeyframe) {
             // Also add a marker for the start time if it has not yet been added
-            natronTrackerToLibMVTracker(enabledChannels, *t->natronMarker, trackIndex, start, forward, &t->mvMarker);
+            natronTrackerToLibMVTracker(enabledChannels, *t->natronMarker, trackIndex, start, forward, formatHeight, &t->mvMarker);
             assert(t->mvMarker.source != mv::Marker::MANUAL);
             
             // Force its reference frame to the "start" so we do not track it since the user started on this frame
             t->mvMarker.reference_frame = start;
             
             // Set knob values at this time with a 0 correlation score
-            setKnobKeyframesFromMarker(t->mvMarker, NULL, t->natronMarker);
+            setKnobKeyframesFromMarker(t->mvMarker, formatHeight, NULL, t->natronMarker);
             
             trackContext->AddMarker(t->mvMarker);
         }
@@ -2584,7 +2696,7 @@ TrackerContext::trackMarkers(const std::list<boost::shared_ptr<TrackMarker> >& m
     /*
      Launch tracking in the scheduler thread.
      */
-    TrackArgsLibMV args(start, end, forward, getNode()->getApp()->getTimeLine(), updateViewer, centerViewer, viewer, trackContext, accessor, trackAndOptions);
+    TrackArgsLibMV args(start, end, forward, getNode()->getApp()->getTimeLine(), updateViewer, centerViewer, viewer, trackContext, accessor, trackAndOptions,formatWidth,formatHeight);
     _imp->scheduler.track(args);
 }
 
@@ -2594,13 +2706,20 @@ TrackerContext::trackSelectedMarkers(int start, int end, bool forward, bool upda
     std::list<boost::shared_ptr<TrackMarker> > markers;
     {
         QMutexLocker k(&_imp->trackerContextMutex);
-        for (std::list<boost::shared_ptr<TrackMarker> >::iterator it = _imp->selectedMarkers.begin(); it != _imp->selectedMarkers.end(); ++it) {
+        for (std::list<boost::shared_ptr<TrackMarker> >::iterator it = _imp->selectedMarkers.begin();
+             it != _imp->selectedMarkers.end(); ++it) {
             if ((*it)->isEnabled()) {
                 markers.push_back(*it);
             }
         }
     }
     trackMarkers(markers,start,end,forward,updateViewer, centerViewer, viewer);
+}
+
+bool
+TrackerContext::isCurrentlyTracking() const
+{
+    return _imp->scheduler.isWorking();
 }
 
 void
@@ -2753,6 +2872,86 @@ TrackerContext::isMarkerSelected(const boost::shared_ptr<TrackMarker>& marker) c
 }
 
 void
+TrackerContextPrivate::linkMarkerKnobsToGuiKnobs(const std::list<boost::shared_ptr<TrackMarker> >& markers,
+                                                 bool multipleTrackSelected,
+                                                 bool slave)
+{
+    std::list<boost::shared_ptr<TrackMarker> >::const_iterator next = markers.begin();
+    if (!markers.empty()) {
+        ++next;
+    }
+    for (std::list<boost::shared_ptr<TrackMarker> >::const_iterator it = markers.begin() ; it!= markers.end(); ++it) {
+        const std::list<boost::shared_ptr<KnobI> >& trackKnobs = (*it)->getKnobs();
+        for (std::list<boost::shared_ptr<KnobI> >::const_iterator it2 = trackKnobs.begin(); it2 != trackKnobs.end(); ++it2) {
+            
+            // Find the knob in the TrackerContext knobs
+            boost::shared_ptr<KnobI> found;
+            for (std::list<boost::weak_ptr<KnobI> >::iterator it3 = perTrackKnobs.begin(); it3 != perTrackKnobs.end(); ++it3) {
+                boost::shared_ptr<KnobI> k = it3->lock();
+                if (k->getName() == (*it2)->getName()) {
+                    found = k;
+                    break;
+                }
+            }
+            
+            if (!found) {
+                continue;
+            }
+            
+            //Clone current state only for the last marker
+            if (next == markers.end()) {
+                found->cloneAndUpdateGui(it2->get());
+            }
+            
+            //Slave internal knobs
+            assert((*it2)->getDimension() == found->getDimension());
+            for (int i = 0; i < (*it2)->getDimension(); ++i) {
+                if (slave) {
+                    (*it2)->slaveTo(i, found, i);
+                } else {
+                    (*it2)->unSlave(i, !multipleTrackSelected);
+                }
+            }
+            
+            if (!slave) {
+                QObject::disconnect((*it2)->getSignalSlotHandler().get(), SIGNAL(keyFrameSet(SequenceTime,int,int,bool)),
+                                    _publicInterface, SLOT(onSelectedKnobCurveChanged()));
+                QObject::disconnect((*it2)->getSignalSlotHandler().get(), SIGNAL(keyFrameRemoved(SequenceTime,int,int)),
+                                    _publicInterface, SLOT(onSelectedKnobCurveChanged()));
+                QObject::disconnect((*it2)->getSignalSlotHandler().get(), SIGNAL(keyFrameMoved(int,int,int)),
+                                    _publicInterface, SLOT(onSelectedKnobCurveChanged()));
+                QObject::disconnect((*it2)->getSignalSlotHandler().get(), SIGNAL(animationRemoved(int)),
+                                    _publicInterface, SLOT(onSelectedKnobCurveChanged()));
+                QObject::disconnect((*it2)->getSignalSlotHandler().get(), SIGNAL(derivativeMoved(SequenceTime,int)),
+                                    _publicInterface, SLOT(onSelectedKnobCurveChanged()));
+                
+                QObject::disconnect((*it2)->getSignalSlotHandler().get(), SIGNAL(keyFrameInterpolationChanged(SequenceTime,int)),
+                                    _publicInterface, SLOT(onSelectedKnobCurveChanged()));
+                
+            } else {
+                QObject::connect((*it2)->getSignalSlotHandler().get(), SIGNAL(keyFrameSet(SequenceTime,int,int,bool)),
+                                 _publicInterface, SLOT(onSelectedKnobCurveChanged()));
+                QObject::connect((*it2)->getSignalSlotHandler().get(), SIGNAL(keyFrameRemoved(SequenceTime,int,int)),
+                                 _publicInterface, SLOT(onSelectedKnobCurveChanged()));
+                QObject::connect((*it2)->getSignalSlotHandler().get(), SIGNAL(keyFrameMoved(int,int,int)),
+                                 _publicInterface, SLOT(onSelectedKnobCurveChanged()));
+                QObject::connect((*it2)->getSignalSlotHandler().get(), SIGNAL(animationRemoved(int)),
+                                 _publicInterface, SLOT(onSelectedKnobCurveChanged()));
+                QObject::connect((*it2)->getSignalSlotHandler().get(), SIGNAL(derivativeMoved(SequenceTime,int)),
+                                 _publicInterface, SLOT(onSelectedKnobCurveChanged()));
+                
+                QObject::connect((*it2)->getSignalSlotHandler().get(), SIGNAL(keyFrameInterpolationChanged(SequenceTime,int)),
+                                 _publicInterface, SLOT(onSelectedKnobCurveChanged()));
+            }
+            
+        }
+        if (next != markers.end()) {
+            ++next;
+        }
+    } // for (std::list<boost::shared_ptr<TrackMarker> >::const_iterator it = markers() ; it!=markers(); ++it)
+}
+
+void
 TrackerContext::endSelection(TrackSelectionReason reason)
 {
     assert(QThread::currentThread() == qApp->thread());
@@ -2780,123 +2979,17 @@ TrackerContext::endSelection(TrackSelectionReason reason)
         bool selectionIsDirty = _imp->selectedMarkers.size() > 1;
         bool selectionEmpty = _imp->selectedMarkers.empty();
         
-        {
-            std::list<boost::shared_ptr<TrackMarker> >::const_iterator next = _imp->markersToUnslave.begin();
-            if (!_imp->markersToUnslave.empty()) {
-                ++next;
-            }
-            for (std::list<boost::shared_ptr<TrackMarker> >::const_iterator it = _imp->markersToUnslave.begin() ; it!=_imp->markersToUnslave.end(); ++it) {
-                const std::list<boost::shared_ptr<KnobI> >& trackKnobs = (*it)->getKnobs();
-                for (std::list<boost::shared_ptr<KnobI> >::const_iterator it2 = trackKnobs.begin(); it2 != trackKnobs.end(); ++it2) {
-                    
-                    // Find the knob in the TrackerContext knobs
-                    boost::shared_ptr<KnobI> found;
-                    for (std::list<boost::weak_ptr<KnobI> >::iterator it3 = _imp->perTrackKnobs.begin(); it3 != _imp->perTrackKnobs.end(); ++it3) {
-                        boost::shared_ptr<KnobI> k = it3->lock();
-                        if (k->getName() == (*it2)->getName()) {
-                            found = k;
-                            break;
-                        }
-                    }
-                    
-                    if (!found) {
-                        continue;
-                    }
-                    
-                    //Clone current state only for the last marker
-                    if (next == _imp->markersToSlave.end()) {
-                        found->cloneAndUpdateGui(it2->get());
-                    }
-                    
-                    //Slave internal knobs of the bezier
-                    assert((*it2)->getDimension() == found->getDimension());
-                    for (int i = 0; i < (*it2)->getDimension(); ++i) {
-                        (*it2)->unSlave(i, !selectionIsDirty);
-                    }
-                    
-                    QObject::disconnect((*it2)->getSignalSlotHandler().get(), SIGNAL(keyFrameSet(SequenceTime,int,int,bool)),
-                                        this, SLOT(onSelectedKnobCurveChanged()));
-                    QObject::disconnect((*it2)->getSignalSlotHandler().get(), SIGNAL(keyFrameRemoved(SequenceTime,int,int)),
-                                        this, SLOT(onSelectedKnobCurveChanged()));
-                    QObject::disconnect((*it2)->getSignalSlotHandler().get(), SIGNAL(keyFrameMoved(int,int,int)),
-                                        this, SLOT(onSelectedKnobCurveChanged()));
-                    QObject::disconnect((*it2)->getSignalSlotHandler().get(), SIGNAL(animationRemoved(int)),
-                                        this, SLOT(onSelectedKnobCurveChanged()));
-                    QObject::disconnect((*it2)->getSignalSlotHandler().get(), SIGNAL(derivativeMoved(SequenceTime,int)),
-                                        this, SLOT(onSelectedKnobCurveChanged()));
-                    
-                    QObject::disconnect((*it2)->getSignalSlotHandler().get(), SIGNAL(keyFrameInterpolationChanged(SequenceTime,int)),
-                                        this, SLOT(onSelectedKnobCurveChanged()));
-                    
-                    
-                }
-                if (next != _imp->markersToUnslave.end()) {
-                    ++next;
-                }
-            } // for (std::list<boost::shared_ptr<TrackMarker> >::const_iterator it = _imp->markersToUnslave() ; it!=_imp->markersToUnslave(); ++it)
-            _imp->markersToUnslave.clear();
-        }
         
-        {
-            std::list<boost::shared_ptr<TrackMarker> >::const_iterator next = _imp->markersToSlave.begin();
-            if (!_imp->markersToSlave.empty()) {
-                ++next;
-            }
-            
-            
-            for (std::list<boost::shared_ptr<TrackMarker> >::const_iterator it = _imp->markersToSlave.begin() ; it!=_imp->markersToSlave.end(); ++it) {
-                const std::list<boost::shared_ptr<KnobI> >& trackKnobs = (*it)->getKnobs();
-                for (std::list<boost::shared_ptr<KnobI> >::const_iterator it2 = trackKnobs.begin(); it2 != trackKnobs.end(); ++it2) {
-                    
-                    // Find the knob in the TrackerContext knobs
-                    boost::shared_ptr<KnobI> found;
-                    for (std::list<boost::weak_ptr<KnobI> >::iterator it3 = _imp->perTrackKnobs.begin(); it3 != _imp->perTrackKnobs.end(); ++it3) {
-                        boost::shared_ptr<KnobI> k = it3->lock();
-                        if (k->getName() == (*it2)->getName()) {
-                            found = k;
-                            break;
-                        }
-                    }
-                    
-                    if (!found) {
-                        continue;
-                    }
-                    
-                    //Clone current state only for the last marker
-                    if (next == _imp->markersToSlave.end()) {
-                        found->cloneAndUpdateGui(it2->get());
-                    }
-                    
-                    //Slave internal knobs of the bezier
-                    assert((*it2)->getDimension() == found->getDimension());
-                    for (int i = 0; i < (*it2)->getDimension(); ++i) {
-                        (*it2)->slaveTo(i, found, i);
-                    }
-                    
-                    QObject::connect((*it2)->getSignalSlotHandler().get(), SIGNAL(keyFrameSet(SequenceTime,int,int,bool)),
-                                     this, SLOT(onSelectedKnobCurveChanged()));
-                    QObject::connect((*it2)->getSignalSlotHandler().get(), SIGNAL(keyFrameRemoved(SequenceTime,int,int)),
-                                     this, SLOT(onSelectedKnobCurveChanged()));
-                    QObject::connect((*it2)->getSignalSlotHandler().get(), SIGNAL(keyFrameMoved(int,int,int)),
-                                     this, SLOT(onSelectedKnobCurveChanged()));
-                    QObject::connect((*it2)->getSignalSlotHandler().get(), SIGNAL(animationRemoved(int)),
-                                     this, SLOT(onSelectedKnobCurveChanged()));
-                    QObject::connect((*it2)->getSignalSlotHandler().get(), SIGNAL(derivativeMoved(SequenceTime,int)),
-                                     this, SLOT(onSelectedKnobCurveChanged()));
-                    
-                    QObject::connect((*it2)->getSignalSlotHandler().get(), SIGNAL(keyFrameInterpolationChanged(SequenceTime,int)),
-                                     this, SLOT(onSelectedKnobCurveChanged()));
-                    
-                    
-                }
-                if (next != _imp->markersToSlave.end()) {
-                    ++next;
-                }
-            } // for (std::list<boost::shared_ptr<TrackMarker> >::const_iterator it = _imp->markersToSlave.begin() ; it!=_imp->markersToSlave.end(); ++it)
-            _imp->markersToSlave.clear();
-        }
+        //_imp->linkMarkerKnobsToGuiKnobs(_imp->markersToUnslave, selectionIsDirty, false);
+        _imp->markersToUnslave.clear();
         
-
+        
+        
+        //_imp->linkMarkerKnobsToGuiKnobs(_imp->markersToSlave, selectionIsDirty, true);
+        _imp->markersToSlave.clear();
+        
+        
+        
         
         for (std::list<boost::weak_ptr<KnobI> >::iterator it = _imp->perTrackKnobs.begin(); it != _imp->perTrackKnobs.end(); ++it) {
             boost::shared_ptr<KnobI> k = it->lock();
@@ -3053,6 +3146,9 @@ TrackScheduler<TrackArgsType>::run()
             trackIndexes.push_back(i);
         }
         
+        int lastValidFrame = isForward ? start - 1 : start + 1;
+
+        
         bool reportProgress = numTracks > 1 || framesCount > 1;
         if (reportProgress) {
             emit_trackingStarted();
@@ -3070,11 +3166,19 @@ TrackScheduler<TrackArgsType>::run()
                                           cur));
             future.waitForFinished();
             
+            bool failure = false;
             for (QFuture<bool>::const_iterator it = future.begin(); it != future.end(); ++it) {
                 if (!(*it)) {
+                    failure = true;
                     break;
                 }
             }
+            if (failure) {
+                break;
+            }
+            
+            lastValidFrame = cur;
+
             
             double progress;
             if (isForward) {
@@ -3085,11 +3189,14 @@ TrackScheduler<TrackArgsType>::run()
                 progress = (double)(start - cur) / framesCount;
             }
             
+            
             ///Ok all tracks are finished now for this frame, refresh viewer if needed
             if (isUpdateViewerOnTrackingEnabled && viewer) {
                 //This will not refresh the viewer since we blocked it explicitly
                 timeline->seekFrame(cur, true, 0, Natron::eTimelineChangeReasonUserSeek);
                 
+                ///Beyond TRACKER_MAX_TRACKS_FOR_PARTIAL_VIEWER_UPDATE it becomes more costly to render all partial rectangles
+                ///than just render the whole viewer RoI
                 if (numTracks < TRACKER_MAX_TRACKS_FOR_PARTIAL_VIEWER_UPDATE) {
                     std::list<RectD> updateRects;
                     curArgs.getRedrawAreasNeeded(cur, &updateRects);
@@ -3138,7 +3245,7 @@ TrackScheduler<TrackArgsType>::run()
         }
         if (isUpdateViewerOnTrackingEnabled) {
             //Refresh all viewers to the current frame
-            timeline->seekFrame(cur, true, 0, Natron::eTimelineChangeReasonUserSeek);
+            timeline->seekFrame(lastValidFrame, true, 0, Natron::eTimelineChangeReasonUserSeek);
         }
         
         ///Flag that we're no longer working

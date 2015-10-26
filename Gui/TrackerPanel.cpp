@@ -1825,12 +1825,20 @@ TrackerPanel::onCenterKnobValueChanged(const boost::shared_ptr<TrackMarker>& mar
     if (reason == Natron::eValueChangedReasonNatronGuiEdited) {
         return;
     }
-    int col = dimension == 0 ? COL_CENTER_X : COL_CENTER_Y;
-    TableItem* item = getItemAt(marker, col);
-    if (!item) {
-        return;
+    
+    boost::shared_ptr<KnobDouble> centerKnob = marker->getCenterKnob();
+    for (int i = 0; i < centerKnob->getDimension(); ++i) {
+        if (dimension == -1 || i == dimension) {
+            int col = i == 0 ? COL_CENTER_X : COL_CENTER_Y;
+            TableItem* item = getItemAt(marker, col);
+            if (!item) {
+                continue;
+            }
+            double v = centerKnob->getValue(i);
+            item->setData(Qt::DisplayRole, v);
+        }
     }
-    item->setData(Qt::DisplayRole, marker->getCenterKnob()->getValue(dimension));
+    
 }
 
 void
@@ -1839,16 +1847,21 @@ TrackerPanel::onOffsetKnobValueChanged(const boost::shared_ptr<TrackMarker>& mar
     if (reason == Natron::eValueChangedReasonNatronGuiEdited) {
         return;
     }
-    int col = dimension == 0 ? COL_OFFSET_X : COL_OFFSET_Y;
-    TableItem* item = getItemAt(marker, col);
-    if (!item) {
-        return;
+    boost::shared_ptr<KnobDouble> offsetKnob = marker->getOffsetKnob();
+    for (int i = 0; i < offsetKnob->getDimension(); ++i) {
+        if (dimension == -1 || i == dimension) {
+            int col = i == 0 ? COL_OFFSET_X : COL_OFFSET_Y;
+            TableItem* item = getItemAt(marker, col);
+            if (!item) {
+                continue;
+            }
+            item->setData(Qt::DisplayRole, offsetKnob->getValue(i));
+        }
     }
-    item->setData(Qt::DisplayRole, marker->getOffsetKnob()->getValue(dimension));
 }
 
 void
-TrackerPanel::onCorrelationKnobValueChanged(const boost::shared_ptr<TrackMarker> &marker,int dimension, int reason)
+TrackerPanel::onCorrelationKnobValueChanged(const boost::shared_ptr<TrackMarker> &marker,int /*dimension*/, int reason)
 {
     if (reason == Natron::eValueChangedReasonNatronGuiEdited) {
         return;
@@ -1857,11 +1870,11 @@ TrackerPanel::onCorrelationKnobValueChanged(const boost::shared_ptr<TrackMarker>
     if (!item) {
         return;
     }
-    item->setData(Qt::DisplayRole, marker->getCorrelationKnob()->getValue(dimension));
+    item->setData(Qt::DisplayRole, marker->getCorrelationKnob()->getValue(0));
 }
 
 void
-TrackerPanel::onWeightKnobValueChanged(const boost::shared_ptr<TrackMarker> &marker,int dimension, int reason)
+TrackerPanel::onWeightKnobValueChanged(const boost::shared_ptr<TrackMarker> &marker,int /*dimension*/, int reason)
 {
     if (reason == Natron::eValueChangedReasonNatronGuiEdited) {
         return;
@@ -1870,11 +1883,11 @@ TrackerPanel::onWeightKnobValueChanged(const boost::shared_ptr<TrackMarker> &mar
     if (!item) {
         return;
     }
-    item->setData(Qt::DisplayRole, marker->getWeightKnob()->getValue(dimension));
+    item->setData(Qt::DisplayRole, marker->getWeightKnob()->getValue(0));
 }
 
 void
-TrackerPanel::onMotionModelKnobValueChanged(const boost::shared_ptr<TrackMarker> &marker,int dimension, int reason)
+TrackerPanel::onMotionModelKnobValueChanged(const boost::shared_ptr<TrackMarker> &marker,int /*dimension*/, int reason)
 {
     if (reason == Natron::eValueChangedReasonNatronGuiEdited) {
         return;
@@ -1887,7 +1900,7 @@ TrackerPanel::onMotionModelKnobValueChanged(const boost::shared_ptr<TrackMarker>
     if (!w) {
         return;
     }
-    w->setCurrentIndex_no_emit(marker->getMotionModelKnob()->getValue(dimension));
+    w->setCurrentIndex_no_emit(marker->getMotionModelKnob()->getValue(0));
 }
 
 void
