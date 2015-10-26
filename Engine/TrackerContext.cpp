@@ -2068,10 +2068,12 @@ TrackerContext::getNextMarker(const boost::shared_ptr<TrackMarker>& marker, bool
         if (_imp->markers[i] == marker) {
             if (i < (_imp->markers.size() - 1)) {
                 return _imp->markers[i + 1];
+            } else if (!loop) {
+                return boost::shared_ptr<TrackMarker>();
             }
         }
     }
-    return (_imp->markers.size() == 0 || !loop) ? boost::shared_ptr<TrackMarker>() : _imp->markers[0];
+    return (_imp->markers.size() == 0 || !loop || _imp->markers[0] == marker) ? boost::shared_ptr<TrackMarker>() : _imp->markers[0];
 }
 
 void
@@ -2111,7 +2113,7 @@ TrackerContext::removeMarker(const boost::shared_ptr<TrackMarker>& marker)
         for (std::vector<boost::shared_ptr<TrackMarker> >::iterator it = _imp->markers.begin(); it != _imp->markers.end(); ++it) {
             if (*it == marker) {
                 _imp->markers.erase(it);
-                return;
+                break;
             }
         }
     }

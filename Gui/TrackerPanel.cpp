@@ -873,8 +873,9 @@ TrackerPanel::removeRow(int row)
     if (row < 0 || row >= (int)_imp->items.size()) {
         return;
     }
-    
+    blockSelection();
     _imp->model->removeRows(row);
+    unblockSelection();
     TrackItems::iterator it = _imp->items.begin();
     std::advance(it, row);
     _imp->items.erase(it);
@@ -1340,7 +1341,9 @@ TrackerPanelPrivate::selectionToMarkers(const QItemSelection& selection, std::li
         
         boost::shared_ptr<TrackMarker> marker = items[indexes[i].row()].marker.lock();
         if (marker) {
-            markers->push_back(marker);
+            if (std::find(markers->begin(), markers->end(), marker) == markers->end()) {
+                markers->push_back(marker);
+            }
         }
     }
 }
@@ -1497,15 +1500,17 @@ TrackerPanel::selectInternal(const std::list<boost::shared_ptr<TrackMarker> >& m
             _imp->keys[*it] = k;
         }
         _imp->node.lock()->getNode()->getApp()->getTimeLine()->addMultipleKeyframeIndicatorsAdded(keysToAdd, true);
+        
+        boost::shared_ptr<TrackerContext> context = getContext();
+        assert(context);
+        context->beginEditSelection();
+        context->clearSelection(selectionReason);
+        context->addTracksToSelection(markers, selectionReason);
+        context->endEditSelection(selectionReason);
     }
     
     
-    boost::shared_ptr<TrackerContext> context = getContext();
-    assert(context);
-    context->beginEditSelection();
-    context->clearSelection(selectionReason);
-    context->addTracksToSelection(markers, selectionReason);
-    context->endEditSelection(selectionReason);
+
     
     --_imp->selectionRecursion;
 }

@@ -143,6 +143,7 @@ private:
         for (int i = 0;i < nbItems; ++i) {
             TrackSerialization s;
             ar & boost::serialization::make_nvp("Item",s);
+            _tracks.push_back(s);
         }
     }
     
