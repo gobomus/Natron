@@ -56,6 +56,7 @@ GCC_DIAG_UNUSED_LOCAL_TYPEDEFS_ON
 #include "Engine/ImageParams.h"
 #include "Engine/Knob.h"
 #include "Engine/KnobTypes.h"
+#include "Engine/KnobFile.h"
 #include "Engine/LibraryBinary.h"
 #include "Engine/Log.h"
 #include "Engine/Lut.h"
@@ -162,9 +163,20 @@ namespace { // protect local classes in anonymous namespace
             QMutexLocker k(&compsMutex);
             compsAvailable = other.compsAvailable;
         }
-
+        
     };
     
+    struct NativeTransformOverlayKnobs
+    {
+        boost::shared_ptr<KnobDouble> translate;
+        boost::shared_ptr<KnobDouble> scale;
+        boost::shared_ptr<KnobBool> scaleUniform;
+        boost::shared_ptr<KnobDouble> rotate;
+        boost::shared_ptr<KnobDouble> skewX;
+        boost::shared_ptr<KnobDouble> skewY;
+        boost::shared_ptr<KnobChoice> skewOrder;
+        boost::shared_ptr<KnobDouble> center;
+    };
 }
 
 
@@ -258,6 +270,7 @@ struct Node::Implementation
     , persistentMessageMutex()
     , guiPointer()
     , nativePositionOverlays()
+    , nativeTransformOverlays()
     , pluginPythonModuleMutex()
     , pluginPythonModule()
     , pluginPythonModuleVersion(0)
@@ -477,6 +490,7 @@ struct Node::Implementation
     boost::weak_ptr<NodeGuiI> guiPointer;
     
     std::list<boost::shared_ptr<KnobDouble> > nativePositionOverlays;
+    std::list<NativeTransformOverlayKnobs> nativeTransformOverlays;
     
     mutable QMutex pluginPythonModuleMutex;
     std::string pluginPythonModule;
@@ -522,6 +536,9 @@ struct Node::Implementation
      */
     int inputModifiedRecursion;
     std::set<int> inputsModified;
+    
+    //For readers, this is the name of the views in the file
+    std::vector<std::string> createdViews;
     
 };
 
@@ -1260,7 +1277,6 @@ Node::computeHashInternal(std::list<Natron::Node*>& marked)
     } // QWriteLocker l(&_imp->knobsAgeMutex);
     
     marked.push_back(this);
-    
     if (oldHash != newHash) {
         /*
          * We changed the node hash. That means all cache entries for this node with a different hash
@@ -1305,7 +1321,7 @@ Node::computeHashInternal(std::list<Natron::Node*>& marked)
         NodeList nodes = group->getNodes();
         for (NodeList::iterator it = nodes.begin(); it != nodes.end(); ++it) {
             assert(*it);
-            (*it)->incrementKnobsAge();
+            (*it)->incrementKnobsAge_internal();
             (*it)->computeHashInternal(marked);
         }
     }
@@ -1671,7 +1687,7 @@ Node::Implementation::restoreUserKnobsRecursive(const std::list<boost::shared_pt
                 if (isRegular->getUseHostOverlayHandle()) {
                     KnobDouble* isDbl = dynamic_cast<KnobDouble*>(knob.get());
                     if (isDbl) {
-                        isDbl->setHasNativeOverlayHandle(true);
+                        isDbl->setHasHostOverlayHandle(true);
                     }
                 }
                 
@@ -1859,6 +1875,22 @@ Node::setKnobsAge(U64 newAge)
 }
 
 void
+Node::incrementKnobsAge_internal()
+{
+    {
+        QWriteLocker l(&_imp->knobsAgeMutex);
+        ++_imp->knobsAge;
+        
+        ///if the age of an effect somehow reaches the maximum age (will never happen)
+        ///handle it by clearing the cache and resetting the age to 0.
+        if ( _imp->knobsAge == std::numeric_limits<U64>::max() ) {
+            appPTR->clearAllCaches();
+            _imp->knobsAge = 0;
+        }
+    }
+}
+
+void
 Node::incrementKnobsAge()
 {
     U32 newAge;
@@ -1904,7 +1936,7 @@ Node::hasOverlay() const
     
     boost::shared_ptr<NodeGuiI> nodeGui = getNodeGui();
     if (nodeGui) {
-        if (nodeGui->hasDefaultOverlay()) {
+        if (nodeGui->hasHostOverlay()) {
             return true;
         }
     }
@@ -2666,10 +2698,12 @@ Node::initializeKnobs(int renderScaleSupportPref)
                 }
                 
                 if (foundEnabled[0] && foundEnabled[1] && foundEnabled[2] && foundEnabled[3]) {
+                    
                     for (int i = 0; i < 4; ++i) {
                         if (foundEnabled[i]->getParentKnob() == mainPage) {
+                            //foundEnabled[i]->setAddNewLine(i == 3);
                             mainPage->removeKnob(foundEnabled[i].get());
-                            mainPage->addKnob(foundEnabled[i]);
+                            mainPage->insertKnob(i,foundEnabled[i]);
                         }
                         _imp->enabledChan[i] = foundEnabled[i];
                     }
@@ -2687,7 +2721,7 @@ Node::initializeKnobs(int renderScaleSupportPref)
                         foundEnabled[i]->setAddNewLine(i == 3);
                         foundEnabled[i]->setDefaultValue(pluginDefaultPref[i]);
                         foundEnabled[i]->setHintToolTip(channelHints[i]);
-                        mainPage->addKnob(foundEnabled[i]);
+                        mainPage->insertKnob(i,foundEnabled[i]);
                         _imp->enabledChan[i] = foundEnabled[i];
                     }
                 }
@@ -3278,10 +3312,10 @@ Node::initializeInputs()
     {
         QMutexLocker l(&_imp->inputsMutex);
         oldInputs = _imp->inputs;
-        if ((int)oldInputs.size() == inputCount) {
+        /*if ((int)oldInputs.size() == inputCount) {
             _imp->inputsInitialized = true;
             return;
-        }
+        }*/
         _imp->inputs.resize(inputCount);
         _imp->guiInputs.resize(inputCount);
         _imp->inputLabels.resize(inputCount);
@@ -3812,7 +3846,7 @@ Node::Implementation::ifGroupForceHashChangeOfInputs()
         std::list<Natron::Node* > inputsOutputs;
         isGrp->getInputsOutputs(&inputsOutputs);
         for (std::list<Natron::Node* >::iterator it = inputsOutputs.begin(); it != inputsOutputs.end(); ++it) {
-            (*it)->incrementKnobsAge();
+            (*it)->incrementKnobsAge_internal();
             (*it)->computeHash();
         }
     }
@@ -5587,7 +5621,9 @@ Node::endInputEdition(bool triggerRender)
         _imp->inputsModified.clear();
 
         if (hasChanged) {
-            forceRefreshAllInputRelatedData();
+            if (!getApp()->getProject()->isLoadingProject() && !getApp()->isCreatingPythonGroup()) {
+                forceRefreshAllInputRelatedData();
+            }
             refreshDynamicProperties();
         }
         
@@ -5660,6 +5696,38 @@ Node::onInputChanged(int inputNb)
         _imp->inputsModified.insert(inputNb);
     }
    
+    /*
+     If this is a group, also notify the output nodes of the GroupInput node inside the Group corresponding to
+     the this inputNb
+     */
+    NodeGroup* isGroup = dynamic_cast<NodeGroup*>(_imp->liveInstance.get());
+    if (isGroup) {
+        std::vector<NodePtr> groupInputs;
+        isGroup->getInputs(&groupInputs);
+        if (inputNb >= 0 && inputNb < (int)groupInputs.size() && groupInputs[inputNb]) {
+            std::map<Node*,int> inputOutputs;
+            groupInputs[inputNb]->getOutputsConnectedToThisNode(&inputOutputs);
+            for (std::map<Node*,int> ::iterator it = inputOutputs.begin(); it!=inputOutputs.end(); ++it) {
+                it->first->onInputChanged(it->second);
+            }
+        }
+    }
+    
+    /*
+     If this is an output node, notify the Group output nodes that their input have changed.
+     */
+    GroupOutput* isOutput = dynamic_cast<GroupOutput*>(_imp->liveInstance.get());
+    if (isOutput) {
+        NodeGroup* containerGroup = dynamic_cast<NodeGroup*>(isOutput->getNode()->getGroup().get());
+        assert(containerGroup);
+        if (containerGroup) {
+            std::map<Node*,int> groupOutputs;
+            containerGroup->getNode()->getOutputsConnectedToThisNode(&groupOutputs);
+            for (std::map<Node*,int> ::iterator it = groupOutputs.begin(); it!=groupOutputs.end(); ++it) {
+                it->first->onInputChanged(it->second);
+            }
+        }
+    }
     
     if (mustCallEndInputEdition) {
         endInputEdition(true);
@@ -5740,11 +5808,11 @@ Node::shouldDrawOverlay() const
 }
 
 void
-Node::drawDefaultOverlay(double time, double scaleX, double scaleY)
+Node::drawHostOverlay(double time, double scaleX, double scaleY)
 {
     boost::shared_ptr<NodeGuiI> nodeGui = getNodeGui();
     if (nodeGui) {
-        nodeGui->drawDefaultOverlay(time, scaleX, scaleY);
+        nodeGui->drawHostOverlay(time, scaleX, scaleY);
     }
 }
 
@@ -5829,11 +5897,11 @@ Node::onOverlayFocusLostDefault(double scaleX,double scaleY)
 }
 
 void
-Node::removeDefaultOverlay(KnobI* knob)
+Node::removePositionHostOverlay(KnobI* knob)
 {
     boost::shared_ptr<NodeGuiI> nodeGui = getNodeGui();
     if (nodeGui) {
-        nodeGui->removeDefaultOverlay(knob);
+        nodeGui->removePositionHostOverlay(knob);
     }
 }
 
@@ -5853,7 +5921,39 @@ Node::addDefaultPositionOverlay(const boost::shared_ptr<KnobDouble>& position)
 }
 
 void
-Node::initializeDefaultOverlays()
+Node::addTransformInteract(const boost::shared_ptr<KnobDouble>& translate,
+                          const boost::shared_ptr<KnobDouble>& scale,
+                          const boost::shared_ptr<KnobBool>& scaleUniform,
+                          const boost::shared_ptr<KnobDouble>& rotate,
+                          const boost::shared_ptr<KnobDouble>& skewX,
+                          const boost::shared_ptr<KnobDouble>& skewY,
+                          const boost::shared_ptr<KnobChoice>& skewOrder,
+                          const boost::shared_ptr<KnobDouble>& center)
+{
+    assert(QThread::currentThread() == qApp->thread());
+    if (appPTR->isBackground()) {
+        return;
+    }
+    boost::shared_ptr<NodeGuiI> nodeGui = getNodeGui();
+    if (!nodeGui) {
+        NativeTransformOverlayKnobs t;
+        t.translate = translate;
+        t.scale = scale;
+        t.scaleUniform = scaleUniform;
+        t.rotate = rotate;
+        t.skewX = skewX;
+        t.skewY = skewY;
+        t.skewOrder = skewOrder;
+        t.center = center;
+        _imp->nativeTransformOverlays.push_back(t);
+    } else {
+        nodeGui->addTransformInteract(translate, scale, scaleUniform, rotate, skewX, skewY, skewOrder, center);
+    }
+
+}
+
+void
+Node::initializeHostOverlays()
 {
     boost::shared_ptr<NodeGuiI> nodeGui = getNodeGui();
     if (!nodeGui) {
@@ -5864,6 +5964,11 @@ Node::initializeDefaultOverlays()
         nodeGui->addDefaultPositionInteract(*it);
     }
     _imp->nativePositionOverlays.clear();
+    for (std::list<NativeTransformOverlayKnobs> ::iterator it = _imp->nativeTransformOverlays.begin(); it != _imp->nativeTransformOverlays.end(); ++it)
+    {
+        nodeGui->addTransformInteract(it->translate, it->scale, it->scaleUniform, it->rotate, it->skewX, it->skewY, it->skewOrder, it->center);
+    }
+    _imp->nativeTransformOverlays.clear();
 }
 
 void
@@ -5942,10 +6047,10 @@ Node::getPluginPythonModuleVersion() const
 }
 
 bool
-Node::hasDefaultOverlayForParam(const KnobI* knob) const
+Node::hasHostOverlayForParam(const KnobI* knob) const
 {
     boost::shared_ptr<NodeGuiI> nodeGui = getNodeGui();
-    if (nodeGui && nodeGui->hasDefaultOverlayForParam(knob)) {
+    if (nodeGui && nodeGui->hasHostOverlayForParam(knob)) {
         return true;
     }
     return false;
@@ -5953,24 +6058,134 @@ Node::hasDefaultOverlayForParam(const KnobI* knob) const
 }
 
 bool
-Node::hasDefaultOverlay() const
+Node::hasHostOverlay() const
 {
     boost::shared_ptr<NodeGuiI> nodeGui = getNodeGui();
-    if (nodeGui && nodeGui->hasDefaultOverlay()) {
+    if (nodeGui && nodeGui->hasHostOverlay()) {
         return true;
     }
     return false;
 }
 
 void
-Node::setCurrentViewportForDefaultOverlays(OverlaySupport* viewPort)
+Node::setCurrentViewportForHostOverlays(OverlaySupport* viewPort)
 {
     boost::shared_ptr<NodeGuiI> nodeGui = getNodeGui();
-    if (nodeGui && nodeGui->hasDefaultOverlay()) {
-        nodeGui->setCurrentViewportForDefaultOverlays(viewPort);
+    if (nodeGui && nodeGui->hasHostOverlay()) {
+        nodeGui->setCurrentViewportForHostOverlays(viewPort);
     }
 }
 
+const std::vector<std::string>&
+Node::getCreatedViews() const
+{
+    assert(QThread::currentThread() == qApp->thread());
+    return _imp->createdViews;
+}
+
+void
+Node::refreshCreatedViews()
+{
+    boost::shared_ptr<KnobI> knob = getKnobByName(kReadOIIOAvailableViewsKnobName);
+    if (knob) {
+        refreshCreatedViews(knob.get());
+    }
+}
+
+void
+Node::refreshCreatedViews(KnobI* knob)
+{
+    assert(QThread::currentThread() == qApp->thread());
+    
+    KnobString* availableViewsKnob = dynamic_cast<KnobString*>(knob);
+    if (!availableViewsKnob) {
+        return;
+    }
+    QString value(availableViewsKnob->getValue().c_str());
+    QStringList views = value.split(',');
+    
+    _imp->createdViews.clear();
+    
+    const std::vector<std::string>& projectViews = getApp()->getProject()->getProjectViewNames();
+    QStringList qProjectViews;
+    for (std::size_t i = 0; i < projectViews.size(); ++i) {
+        qProjectViews.push_back(projectViews[i].c_str());
+    }
+    
+    QStringList missingViews;
+    for (QStringList::Iterator it = views.begin(); it!=views.end(); ++it) {
+        if (!qProjectViews.contains(*it,Qt::CaseInsensitive) && !it->isEmpty()) {
+            missingViews.push_back(*it);
+        }
+        _imp->createdViews.push_back(it->toStdString());
+    }
+    
+    if (!missingViews.isEmpty()) {
+        
+        
+        boost::shared_ptr<KnobI> fileKnob = getKnobByName(kOfxImageEffectFileParamName);
+        KnobFile* inputFileKnob = dynamic_cast<KnobFile*>(fileKnob.get());
+        if (inputFileKnob) {
+            
+            std::string filename = inputFileKnob->getValue();
+            
+            std::stringstream ss;
+            for (std::size_t i = 0; i < missingViews.size(); ++i) {
+                ss << missingViews[i].toStdString();
+                if (i < missingViews.size() - 1) {
+                    ss << ", ";
+                }
+            }
+            ss << std::endl;
+            ss << std::endl;
+            ss << QObject::tr("These views are in").toStdString() << ' ' << filename << ' '
+            << QObject::tr("but do not exist in the project.").toStdString() << std::endl;
+            ss << QObject::tr("Would you like to create them?").toStdString();
+            std::string question  = ss.str();
+            Natron::StandardButtonEnum rep = Natron::questionDialog("Views available", question, false, Natron::StandardButtons(Natron::eStandardButtonYes | Natron::eStandardButtonNo), Natron::eStandardButtonYes);
+            if (rep == Natron::eStandardButtonYes) {
+                std::vector<std::string> viewsToCreate;
+                for (QStringList::Iterator it = missingViews.begin(); it!=missingViews.end(); ++it) {
+                    viewsToCreate.push_back(it->toStdString());
+                }
+                getApp()->getProject()->createProjectViews(viewsToCreate);
+            }
+        }
+        
+     
+    }
+    
+    Q_EMIT availableViewsChanged();
+    
+}
+
+void
+Node::refreshIdentityState()
+{
+    double time = _imp->liveInstance->getCurrentTime();
+    RenderScale scale;
+    scale.x = scale.y = 1;
+    
+    double inputTime;
+    int inputNb;
+    
+    U64 hash = getHashValue();
+    RectD rod;
+    bool isProj;
+    (void)_imp->liveInstance->getRegionOfDefinition_public(hash, time, scale, 0, &rod, &isProj);
+    
+    RectI pixelRod;
+    rod.toPixelEnclosing(scale, _imp->liveInstance->getPreferredAspectRatio(), &pixelRod);
+    bool isIdentity = _imp->liveInstance->isIdentity_public(true, hash, time, scale, pixelRod, 0, &inputTime, &inputNb);
+    
+    
+    Q_EMIT identityChanged(isIdentity ? inputNb : -1);
+
+}
+
+/*
+ This is called AFTER the instanceChanged action has been called on the plug-in
+ */
 void
 Node::onEffectKnobValueChanged(KnobI* what,
                                Natron::ValueChangedReasonEnum reason)
@@ -6005,25 +6220,51 @@ Node::onEffectKnobValueChanged(KnobI* what,
             }
             replaceCustomDataInlabel(operation);
         }
-    } else if ( (what->getName() == kOfxImageEffectFileParamName) && _imp->liveInstance->isReader() ) {
-        ///Refresh the preview automatically if the filename changed
-        incrementKnobsAge(); //< since evaluate() is called after knobChanged we have to do this  by hand
-        //computePreviewImage( getApp()->getTimeLine()->currentFrame() );
+    } else if (what->getName() == kOfxImageEffectFileParamName) {
         
-        ///union the project frame range if not locked with the reader frame range
-        bool isLocked = getApp()->getProject()->isFrameRangeLocked();
-        if (!isLocked) {
-            double leftBound = INT_MIN,rightBound = INT_MAX;
-            _imp->liveInstance->getFrameRange_public(getHashValue(), &leftBound, &rightBound, true);
-    
-            if (leftBound != INT_MIN && rightBound != INT_MAX) {
-                bool isFileDialogPreviewReader = getScriptName().find(NATRON_FILE_DIALOG_PREVIEW_READER_NAME) != std::string::npos;
-                if (!isFileDialogPreviewReader) {
-                    getApp()->getProject()->unionFrameRangeWith(leftBound, rightBound);
+        if (_imp->liveInstance->isReader()) {
+            ///Refresh the preview automatically if the filename changed
+            incrementKnobsAge(); //< since evaluate() is called after knobChanged we have to do this  by hand
+            //computePreviewImage( getApp()->getTimeLine()->currentFrame() );
+            
+            ///union the project frame range if not locked with the reader frame range
+            bool isLocked = getApp()->getProject()->isFrameRangeLocked();
+            if (!isLocked) {
+                double leftBound = INT_MIN,rightBound = INT_MAX;
+                _imp->liveInstance->getFrameRange_public(getHashValue(), &leftBound, &rightBound, true);
+                
+                if (leftBound != INT_MIN && rightBound != INT_MAX) {
+                    bool isFileDialogPreviewReader = getScriptName().find(NATRON_FILE_DIALOG_PREVIEW_READER_NAME) != std::string::npos;
+                    if (!isFileDialogPreviewReader) {
+                        getApp()->getProject()->unionFrameRangeWith(leftBound, rightBound);
+                    }
+                }
+            }
+        } else if (_imp->liveInstance->isWriter()) {
+            /*
+             Check if the filename param has a %V in it, in which case make sure to hide the Views parameter
+             */
+            KnobOutputFile* fileParam = dynamic_cast<KnobOutputFile*>(what);
+            if (fileParam) {
+                std::string pattern = fileParam->getValue();
+                std::size_t foundViewPattern = pattern.find_first_of("%v");
+                if (foundViewPattern == std::string::npos) {
+                    foundViewPattern = pattern.find_first_of("%V");
+                }
+                if (foundViewPattern != std::string::npos) {
+                    //We found view pattern
+                    boost::shared_ptr<KnobI> viewsKnob = getKnobByName(kWriteOIIOParamViewsSelector);
+                    if (viewsKnob) {
+                        KnobChoice* viewsSelector = dynamic_cast<KnobChoice*>(viewsKnob.get());
+                        if (viewsSelector) {
+                            viewsSelector->setSecret(true);
+                        }
+                    }
                 }
             }
         }
-        
+    } else if (_imp->liveInstance->isReader() && what->getName() == kReadOIIOAvailableViewsKnobName) {
+        refreshCreatedViews(what);
     } else if ( what == _imp->refreshInfoButton.lock().get() ) {
         int maxinputs = getMaxInputCount();
         for (int i = 0; i < maxinputs; ++i) {
@@ -6068,6 +6309,7 @@ Node::onEffectKnobValueChanged(KnobI* what,
             isGrp->getNode()->initializeInputs();
         }
     }
+    
 }
 
 bool
@@ -6710,9 +6952,9 @@ Node::dequeueActions()
         QMutexLocker k(&_imp->nodeIsDequeuingMutex);
         _imp->nodeIsDequeuing = true;
     }
-    
+    bool hasChanged = false;
     if (_imp->liveInstance) {
-        _imp->liveInstance->dequeueValuesSet();
+        hasChanged |= _imp->liveInstance->dequeueValuesSet();
         NodeGroup* isGroup = dynamic_cast<NodeGroup*>(_imp->liveInstance.get());
         if (isGroup) {
             isGroup->dequeueConnexions();
@@ -6741,10 +6983,15 @@ Node::dequeueActions()
     }
     
     beginInputEdition();
+    hasChanged |= !inputChanges.empty();
     for (std::set<int>::iterator it = inputChanges.begin(); it!=inputChanges.end(); ++it) {
         onInputChanged(*it);
     }
     endInputEdition(true);
+    
+    if (hasChanged) {
+        refreshIdentityState();
+    }
 
     {
         QMutexLocker k(&_imp->nodeIsDequeuingMutex);
@@ -7064,6 +7311,8 @@ Node::refreshAllInputRelatedData(bool canChangeValues,const std::vector<boost::s
     }
     
     hasChanged |= refreshChannelSelectors(canChangeValues);
+    
+    refreshIdentityState();
 
     {
         QMutexLocker k(&_imp->pluginsPropMutex);

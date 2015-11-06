@@ -87,7 +87,8 @@ if [ ! -f $INSTALL_PATH/lib/pkgconfig/Magick++.pc ]; then
     fi
     tar xvf $SRC_PATH/$MAGICK_TAR || exit 1
     cd ImageMagick-* || exit 1
-    env CFLAGS="-DMAGICKCORE_EXCLUDE_DEPRECATED=1" CXXFLAGS="-I${INSTALL_PATH}/include -DMAGICKCORE_EXCLUDE_DEPRECATED=1"  ./configure --prefix=$INSTALL_PATH --with-magick-plus-plus=yes --with-quantum-depth=32 --without-dps --without-djvu --without-fftw --without-fpx --without-gslib --without-gvc --without-jbig --without-jpeg --without-lcms --with-lcms2 --without-openjp2 --without-lqr --without-lzma --without-openexr --with-pango --with-png --with-rsvg --without-tiff --without-webp --with-xml --without-zlib --without-bzlib --enable-static --disable-shared --enable-hdri --with-freetype --with-fontconfig --without-x --without-modules || exit 1
+    patch -p0 < $INC_PATH/patches/ImageMagick/pango-align-hack.diff || exit 1
+    env CFLAGS="-DMAGICKCORE_EXCLUDE_DEPRECATED=1" CXXFLAGS="-I${INSTALL_PATH}/include -DMAGICKCORE_EXCLUDE_DEPRECATED=1"  ./configure --prefix=$INSTALL_PATH --with-magick-plus-plus=yes --with-quantum-depth=32 --without-dps --without-djvu --without-fftw --without-fpx --without-gslib --without-gvc --without-jbig --without-jpeg --with-lcms --without-openjp2 --without-lqr --without-lzma --without-openexr --with-pango --with-png --with-rsvg --without-tiff --without-webp --with-xml --without-zlib --without-bzlib --enable-static --disable-shared --enable-hdri --with-freetype --with-fontconfig --without-x --without-modules || exit 1
     make -j${MKJOBS} || exit 1
     make install || exit 1
     mkdir -p $INSTALL_PATH/docs/imagemagick || exit 1
@@ -122,7 +123,7 @@ fi
 
 # Install oiio
 if [ "$REBUILD_OIIO" = "1" ]; then
-    rm -rf $INSTALL_PATH/lib/libOpenImage* $INSTALL_PATH/include/OpenImage* $INSTALL_PATH/bin/OpenImage*
+    rm -rf $INSTALL_PATH/lib/libOpenImage* $INSTALL_PATH/include/OpenImage* $INSTALL_PATH/bin/libOpenImage*
 fi
 if [ ! -f $INSTALL_PATH/bin/libOpenImageIO.dll ]; then
     cd $$TMP_BUILD_DIR || exit 1
@@ -136,7 +137,7 @@ if [ ! -f $INSTALL_PATH/bin/libOpenImageIO.dll ]; then
     patch -p1 -i ${OIIO_PATCHES}/workaround-ansidecl-h-PTR-define-conflict.patch || exit 1
     patch -p1 -i ${OIIO_PATCHES}/0001-MinGW-w64-include-winbase-h-early-for-TCHAR-types.patch  || exit 1
     patch -p1 -i ${OIIO_PATCHES}/0002-Also-link-to-opencv_videoio-library.patch  || exit 1
-
+    patch -p1 -i ${OIIO_PATCHES}/pre-1.5.21.patch || exit 1
     mkdir build || exit 1
     cd build || exit 1
     cmake -G"MSYS Makefiles" -DCMAKE_INSTALL_PREFIX=$INSTALL_PATH -DCMAKE_SHARED_LINKER_FLAGS=" -Wl,--export-all-symbols -Wl,--enable-auto-import " -DUSE_OPENSSL:BOOL=FALSE -DOPENEXR_HOME=$INSTALL_PATH -DILMBASE_HOME=$INSTALL_PATH -DTHIRD_PARTY_TOOLS_HOME=$INSTALL_PATH -DUSE_QT:BOOL=FALSE -DUSE_TBB:BOOL=FALSE -DUSE_PYTHON:BOOL=FALSE -DUSE_FIELD3D:BOOL=FALSE -DUSE_OPENJPEG:BOOL=TRUE  -DOIIO_BUILD_TESTS=0 -DOIIO_BUILD_TOOLS=0 -DLIBRAW_PATH=$INSTALL_PATH -DBOOST_ROOT=$INSTALL_PATH -DSTOP_ON_WARNING:BOOL=FALSE -DUSE_GIF:BOOL=TRUE -DUSE_FREETYPE:BOOL=TRUE -DFREETYPE_INCLUDE_PATH=$INSTALL_PATH/include/freetype2 -DOPENJPEG_INCLUDE_DIR=${INSTALL_PATH}/include/openjpeg-1.5  -DOPENJPEG_OPENJPEG_LIBRARIES=${INSTALL_PATH}/lib/libopenjpeg.dll.a -DUSE_FFMPEG:BOOL=FALSE -DUSE_OPENCV:BOOL=FALSE .. || exit 1

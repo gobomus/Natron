@@ -382,7 +382,7 @@ public:
 
     void initProjectGuiKnobs();
 
-    void updateViewersViewsMenu(int viewsCount);
+    void updateViewersViewsMenu(const std::vector<std::string>& viewNames);
 
     void setViewersCurrentView(int view);
 
@@ -590,6 +590,10 @@ public:
      * @param quitApp If true, the application will exit, otherwise the main window will stay active.
      **/
     bool abortProject(bool quitApp);
+    
+    void setGuiAboutToClose(bool about);
+    
+    void notifyGuiClosing();
     
     /*
      * @brief To be called by "main widgets" such as NodeGraph, Viewer etc... to determine if focus stealing is possible to have

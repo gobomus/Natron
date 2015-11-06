@@ -48,6 +48,7 @@
 #include "Engine/AppInstance.h"
 #include "Engine/EffectInstance.h"
 #include "Engine/Image.h"
+#include "Engine/KnobFile.h"
 #include "Engine/Node.h"
 #include "Engine/OpenGLViewerI.h"
 #include "Engine/Project.h"
@@ -233,9 +234,6 @@ struct OutputSchedulerThreadPrivate
     Natron::OutputEffectInstance* outputEffect; //< The effect used as output device
     RenderEngine* engine;
 
-    bool runningCallback;
-    QMutex runningCallbackMutex;
-    QWaitCondition runningCallbackCond;
     
     OutputSchedulerThreadPrivate(RenderEngine* engine,Natron::OutputEffectInstance* effect,OutputSchedulerThread::ProcessFrameModeEnum mode)
     : buf()
@@ -279,9 +277,6 @@ struct OutputSchedulerThreadPrivate
     , framesToRenderNotEmptyCond()
     , outputEffect(effect)
     , engine(engine)
-    , runningCallback(false)
-    , runningCallbackMutex()
-    , runningCallbackCond()
     {
        
     }
@@ -464,7 +459,6 @@ OutputSchedulerThread::OutputSchedulerThread(RenderEngine* engine,Natron::Output
     
     QObject::connect(this, SIGNAL(s_abortRenderingOnMainThread(bool,bool)), this, SLOT(abortRendering(bool,bool)));
     
-    QObject::connect(this, SIGNAL(s_executeCallbackOnMainThread(QString)), this, SLOT(onExecuteCallbackOnMainThread(QString)));
     
     setObjectName("Scheduler thread");
 }
@@ -858,7 +852,7 @@ OutputSchedulerThread::startRender()
                                                                scaleOne, true,
                                                                true,
                                                                false,
-                                                               _imp->outputEffect->getApp()->getMainView()) == eStatusFailed) {
+                                                               /*mainView*/0) == eStatusFailed) {
                 l.unlock();
                 abortRendering(false,false);
                 return;
@@ -906,7 +900,7 @@ OutputSchedulerThread::stopRender()
                                                            scaleOne, true,
                                                            !appPTR->isBackground(),
                                                                 false,
-                                                           _imp->outputEffect->getApp()->getMainView()));
+                                                           0 /*mainView*/));
            
         
     }
@@ -1159,7 +1153,12 @@ OutputSchedulerThread::run()
                 /////At this point the frame has been processed by the output device
                 
                 assert(!framesToRender.empty());
-                notifyFrameRendered(expectedTimeToRender, 0, 1, framesToRender.front().stats, eSchedulingPolicyOrdered);
+                {
+                    const BufferedFrame& frame = framesToRender.front();
+                    std::vector<int> views(1);
+                    views[0] = frame.view;
+                    notifyFrameRendered(expectedTimeToRender, frame.view, views, frame.stats, eSchedulingPolicyOrdered);
+                }
                 
                 ///////////
                 /// End of the loop, refresh bufferEmpty
@@ -1261,10 +1260,11 @@ OutputSchedulerThread::adjustNumberOfThreads(int* newNThreads, int *lastNThreads
 void
 OutputSchedulerThread::notifyFrameRendered(int frame,
                                            int viewIndex,
-                                           int viewsCount,
+                                           const std::vector<int>& viewsToRender,
                                            const RenderStatsPtr& stats,
                                            Natron::SchedulingPolicyEnum policy)
 {
+    assert(viewsToRender.size() > 0);
     
     double percentage ;
     double timeSpent;
@@ -1282,7 +1282,7 @@ OutputSchedulerThread::notifyFrameRendered(int frame,
     if (policy == eSchedulingPolicyFFA) {
         
         QMutexLocker l(&_imp->runArgsMutex);
-        if (viewIndex == viewsCount -1) {
+        if (viewIndex == viewsToRender[viewsToRender.size() - 1] || viewIndex == -1) {
             ++_imp->nFramesRendered;
         }
         U64 totalFrames = _imp->livingRunArgs.lastFrame - _imp->livingRunArgs.firstFrame + 1;
@@ -1352,7 +1352,7 @@ OutputSchedulerThread::notifyFrameRendered(int frame,
         appPTR->writeToOutputPipe(longMessage,kFrameRenderedStringShort + frameStr);
     }
     
-    if (viewIndex == viewsCount -1) {
+    if (viewIndex == viewsToRender[viewsToRender.size() - 1] || viewIndex == -1) {
         if (!stats) {
             _imp->engine->s_frameRendered(frame);
         } else {
@@ -1393,7 +1393,12 @@ OutputSchedulerThread::notifyFrameRendered(int frame,
             std::stringstream ss;
             ss << cb << "(" << frame << ",";
             std::string script = ss.str();
-            runCallbackWithVariables(script.c_str());
+            try {
+                runCallbackWithVariables(script.c_str());
+            } catch (const std::exception& e) {
+                notifyRenderFailure(e.what());
+                return;
+            }
             
         }
     }
@@ -1552,12 +1557,7 @@ OutputSchedulerThread::abortRendering(bool autoRestart,bool blocking)
                 _imp->processRunning = false;
                 _imp->processCondition.wakeOne();
             }
-            
-            {
-                QMutexLocker l3(&_imp->runningCallbackMutex);
-                _imp->runningCallback = false;
-                _imp->runningCallbackCond.wakeAll();
-            }
+
             
         } // QMutexLocker l2(&_imp->processMutex);
         ///If the scheduler is asleep waiting for the buffer to be filling up, we post a fake request
@@ -1729,7 +1729,11 @@ void
 OutputSchedulerThread::notifyRenderFailure(const std::string& errorMessage)
 {
     ///Abort all ongoing rendering
-    doAbortRenderingOnMainThread(false);
+    if (!appPTR->isBackground()) {
+        doAbortRenderingOnMainThread(false);
+    } else {
+        abortRendering(false, false);
+    }
     
     ///Handle failure: for viewers we make it black and don't display the error message which is irrelevant
     handleRenderFailure(errorMessage);
@@ -1814,34 +1818,7 @@ OutputSchedulerThread::getEngine() const
     return _imp->engine;
 }
 
-void
-OutputSchedulerThread::onExecuteCallbackOnMainThread(QString callback)
-{
-    assert(QThread::currentThread() == qApp->thread());
-    std::string err,output;
-    if (!Natron::interpretPythonScript(callback.toStdString(), &err, &output)) {
-        _imp->outputEffect->getApp()->appendToScriptEditor("Failed to run callback: " + err);
-    } else if (!output.empty()) {
-        _imp->outputEffect->getApp()->appendToScriptEditor(output);
-    }
-    
-    QMutexLocker k(&_imp->runningCallbackMutex);
-    _imp->runningCallback = false;
-    _imp->runningCallbackCond.wakeAll();
-}
 
-void
-OutputSchedulerThread::runCallback(const QString& callback)
-{
-    QMutexLocker k(&_imp->runningCallbackMutex);
-    _imp->runningCallback = true;
-    Q_EMIT s_executeCallbackOnMainThread(callback);
-    
-    while (_imp->runningCallback) {
-        _imp->runningCallbackCond.wait(&_imp->runningCallbackMutex);
-    }
-
-}
 void
 OutputSchedulerThread::runCallbackWithVariables(const QString& callback)
 {
@@ -1853,7 +1830,14 @@ OutputSchedulerThread::runCallbackWithVariables(const QString& callback)
         script.append(",");
         script.append(appID.c_str());
         script.append(")\n");
-        Q_EMIT s_executeCallbackOnMainThread(script);
+        
+        std::string err,output;
+        if (!Natron::interpretPythonScript(callback.toStdString(), &err, &output)) {
+            _imp->outputEffect->getApp()->appendToScriptEditor("Failed to run callback: " + err);
+            throw std::runtime_error(err);
+        } else if (!output.empty()) {
+            _imp->outputEffect->getApp()->appendToScriptEditor(output);
+        }
     }
 }
 
@@ -2053,7 +2037,12 @@ private:
             std::stringstream ss;
             ss << cb << "(" << time << ",";
             std::string script = ss.str();
-            _imp->scheduler->runCallbackWithVariables(script.c_str());
+            try {
+                _imp->scheduler->runCallbackWithVariables(script.c_str());
+            } catch (const std::exception &e) {
+                _imp->scheduler->notifyRenderFailure(e.what());
+                return;
+            }
 
         }
         
@@ -2070,16 +2059,91 @@ private:
             
             int mainView = 0;
             
+            std::vector<int> viewsToRender(viewsCount);
+            for (int i = 0; i < viewsCount; ++i) {
+                viewsToRender[i] = i;
+            }
             
             ///The effect is sequential (e.g: WriteFFMPEG), and thus cannot render multiple views, we have to choose one
             ///We pick the user defined main view in the project settings
             
             bool canOnlyHandleOneView = sequentiallity == Natron::eSequentialPreferenceOnlySequential || sequentiallity == Natron::eSequentialPreferencePreferSequential;
-            if (canOnlyHandleOneView) {
-                mainView = _imp->output->getApp()->getMainView();
-            }
-       
             
+            if (canOnlyHandleOneView) {
+                viewsCount = 1;
+                viewsToRender.clear();
+                viewsToRender.push_back(mainView);
+            }
+            
+            if (_imp->output->isViewAware()) {
+                //If the Writer is view aware, check if it wants to render all views at once or not
+                boost::shared_ptr<KnobI> outputFileNameKnob = _imp->output->getKnobByName(kOfxImageEffectFileParamName);
+                if (outputFileNameKnob) {
+                    KnobOutputFile* outputFileName = dynamic_cast<KnobOutputFile*>(outputFileNameKnob.get());
+                    assert(outputFileName);
+                    if (outputFileName) {
+                        std::string pattern = outputFileName->getValue();
+                        std::size_t foundViewPattern = pattern.find_first_of("%v");
+                        if (foundViewPattern == std::string::npos) {
+                            foundViewPattern = pattern.find_first_of("%V");
+                        }
+                        if (foundViewPattern == std::string::npos) {
+                            ///No view pattern
+                            ///all views will be overwritten to the same file
+                            ///If this is WriteOIIO, check the parameter "viewsSelector" to determine if the user wants to encode all
+                            ///views to a single file or not
+                            boost::shared_ptr<KnobI> viewsKnob = _imp->output->getKnobByName(kWriteOIIOParamViewsSelector);
+                            bool hasViewChoice = false;
+                            if (viewsKnob && !viewsKnob->getIsSecret()) {
+                                KnobChoice* viewsChoice = dynamic_cast<KnobChoice*>(viewsKnob.get());
+                                if (viewsChoice) {
+                                    hasViewChoice = true;
+                                    int viewChoice_i = viewsChoice->getValue();
+                                    if (viewChoice_i == 0) { // the "All" chocie
+                                        viewsToRender.clear();
+                                        viewsToRender.push_back(-1);
+                                    } else {
+                                        //The user has specified a view
+                                        viewsToRender.clear();
+                                        viewsToRender.push_back(viewChoice_i - 1);
+                                    }
+                                }
+                            }
+                            if (!hasViewChoice) {
+                                if (viewsToRender.size() > 1) {
+                                    QString message = QString(_imp->output->getNode()->getLabel_mt_safe().c_str()) + ' ' +
+                                    QObject::tr("does not support multi-view, only the first view in the project settings will be rendered.\n"
+                                                "Would you like to continue?");
+                                    Natron::StandardButtonEnum rep = Natron::questionDialog(tr("Multi-view support").toStdString(), message.toStdString(), false, Natron::StandardButtons(Natron::eStandardButtonOk | Natron::eStandardButtonCancel), Natron::eStandardButtonOk);
+                                    if (rep != Natron::eStandardButtonOk) {
+                                        _imp->scheduler->notifyRenderFailure("");
+                                        return;
+                                    }
+                                }
+                                //Render the main-view only...
+                                viewsToRender.clear();
+                                viewsToRender.push_back(0);
+                            }
+                        } else {
+                            ///The user wants to write each view into a separate file
+                            ///This will disregard the content of kWriteOIIOParamViewsSelector and the Writer
+                            ///should write one view per-file.
+                        }
+                    }
+                }
+            } else { // !isViewAware
+                if (viewsToRender.size() > 1) {
+                    QString message = QString(_imp->output->getNode()->getLabel_mt_safe().c_str()) + ' ' +
+                    QObject::tr("does not support multi-view, only the first view in the project settings will be rendered.\n"
+                                "Would you like to continue?");
+                    Natron::StandardButtonEnum rep = Natron::questionDialog(tr("Multi-view support").toStdString(), message.toStdString(), false, Natron::StandardButtons(Natron::eStandardButtonOk | Natron::eStandardButtonCancel), Natron::eStandardButtonOk);
+                    if (rep != Natron::eStandardButtonOk) {
+                        _imp->scheduler->notifyRenderFailure("");
+                        return;
+                    }
+                }
+
+            }
             
             // Do not catch exceptions: if an exception occurs here it is probably fatal, since
             // it comes from Natron itself. All exceptions from plugins are already caught
@@ -2103,13 +2167,9 @@ private:
             
             const double par = activeInputToRender->getPreferredAspectRatio();
             
-            for (int i = 0; i < viewsCount; ++i) {
-                if ( canOnlyHandleOneView && (i != mainView) ) {
-                    ///@see the warning in EffectInstance::evaluate
-                    continue;
-                }
-                
-                StatusEnum stat = activeInputToRender->getRegionOfDefinition_public(activeInputToRenderHash,time, scale, i, &rod, &isProjectFormat);
+            for (std::size_t view = 0; view < viewsToRender.size(); ++view) {
+        
+                StatusEnum stat = activeInputToRender->getRegionOfDefinition_public(activeInputToRenderHash,time, scale, viewsToRender[view], &rod, &isProjectFormat);
                 if (stat == eStatusFailed) {
                     break;
                 }
@@ -2123,7 +2183,7 @@ private:
                 int ptView;
                 bool processChannels[4];
                 NodePtr ptInput;
-                activeInputToRender->getComponentsNeededAndProduced_public(true, time, i, &neededComps, &processAll, &ptTime, &ptView, processChannels, &ptInput);
+                activeInputToRender->getComponentsNeededAndProduced_public(true, time, viewsToRender[view], &neededComps, &processAll, &ptTime, &ptView, processChannels, &ptInput);
                 
                 //Retrieve bitdepth only
                 activeInputToRender->getPreferredDepthAndComponents(-1, &components, &imageDepth);
@@ -2139,14 +2199,15 @@ private:
                 rod.toPixelEnclosing(scale, par, &renderWindow);
                 
                 FrameRequestMap request;
-                stat = EffectInstance::computeRequestPass(time, i, mipMapLevel, rod, outputNode, request);
+                stat = EffectInstance::computeRequestPass(time, viewsToRender[view], mipMapLevel, rod, outputNode, request);
                 if (stat == eStatusFailed) {
-                    break;
+                    _imp->scheduler->notifyRenderFailure("Error caught while rendering");
+                    return;
                 }
                 
                 ParallelRenderArgsSetter frameRenderArgs(activeInputToRender->getApp()->getProject().get(),
                                                          time,
-                                                         i,
+                                                         viewsToRender[view],
                                                          false,  // is this render due to user interaction ?
                                                          canOnlyHandleOneView, // is this sequential ?
                                                          true, // canAbort ?
@@ -2168,7 +2229,7 @@ private:
                 activeInputToRender->renderRoI( EffectInstance::RenderRoIArgs(time, //< the time at which to render
                                                                               scale, //< the scale at which to render
                                                                               mipMapLevel, //< the mipmap level (redundant with the scale)
-                                                                              i, //< the view to render
+                                                                              viewsToRender[view], //< the view to render
                                                                               false,
                                                                               renderWindow, //< the region of interest (in pixel coordinates)
                                                                               rod, // < any precomputed rod ? in canonical coordinates
@@ -2184,10 +2245,10 @@ private:
                 ///If we need sequential rendering, pass the image to the output scheduler that will ensure the sequential ordering
                 if (!renderDirectly) {
                     for (ImageList::iterator it = planes.begin(); it != planes.end(); ++it) {
-                        _imp->scheduler->appendToBuffer(time, i, stats, boost::dynamic_pointer_cast<BufferableObject>(*it));
+                        _imp->scheduler->appendToBuffer(time, viewsToRender[view], stats, boost::dynamic_pointer_cast<BufferableObject>(*it));
                     }
                 } else {
-                    _imp->scheduler->notifyFrameRendered(time, i, viewsCount, stats, eSchedulingPolicyFFA);
+                    _imp->scheduler->notifyFrameRendered(time, viewsToRender[view], viewsToRender, stats, eSchedulingPolicyFFA);
                 }
                 
             }
@@ -2380,7 +2441,7 @@ DefaultScheduler::aboutToStartRender()
         }
         
         std::string signatureError;
-        signatureError.append("The after render callback supports the following signature(s):\n");
+        signatureError.append("The beforeRender callback supports the following signature(s):\n");
         signatureError.append("- callback(thisNode, app)");
         if (args.size() != 2) {
             _effect->getApp()->appendToScriptEditor("Failed to run beforeRender callback: " + signatureError);
@@ -2394,7 +2455,11 @@ DefaultScheduler::aboutToStartRender()
         
         
         std::string script(cb + "(");
-        runCallbackWithVariables(script.c_str());
+        try {
+            runCallbackWithVariables(script.c_str());
+        } catch (const std::exception &e) {
+            notifyRenderFailure(e.what());
+        }
     }
 }
 
@@ -2445,7 +2510,11 @@ DefaultScheduler::onRenderStopped(bool aborted)
         } else {
             script += "False,";
         }
-        runCallbackWithVariables(script.c_str());
+        try {
+            runCallbackWithVariables(script.c_str());
+        } catch (...) {
+            //Ignore expcetions in callback since the render is finished anyway
+        }
     }
 
 }

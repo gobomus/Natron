@@ -43,6 +43,7 @@
 #include "Engine/RectD.h"
 #include "Engine/RectI.h"
 #include "Engine/RenderStats.h"
+#include "Engine/EngineFwd.h"
 
 // Various useful plugin IDs, @see EffectInstance::getPluginID()
 #define PLUGINID_OFX_MERGE        "net.sf.openfx.MergePlugin"
@@ -85,31 +86,10 @@
 
 #define kNatronTLSEffectPointerProperty "NatronTLSEffectPointerProperty"
 
-
 class QThread;
-class Hash64;
-class Format;
-class TimeLine;
-class OverlaySupport;
-class PluginMemory;
-class BlockingBackgroundRender;
-class NodeSerialization;
-class ViewerInstance;
-class RenderEngine;
-class BufferableObject;
-namespace Natron {
-class OutputEffectInstance;
-}
-namespace Transform {
-struct Matrix3x3;
-}
-
 
 namespace Natron {
-class Node;
-class ImageKey;
-class Image;
-class ImageParams;
+
 /**
  * @brief This is the base class for visual effects.
  * A live instance is always living throughout the lifetime of a Node and other copies are
@@ -637,6 +617,8 @@ public:
                                                                        const std::map<int, Natron::EffectInstance*> & reroutesMap,
                                                                        bool useTransforms, // roi functor specific
                                                                        unsigned int originalMipMapLevel, // roi functor specific
+                                                                       double time,
+                                                                       int view,
                                                                        const boost::shared_ptr<Natron::Node> & treeRoot,
                                                                        FrameRequestMap* requests,  // roi functor specific
                                                                        EffectInstance::InputImagesMap* inputImages, // render functor specific
@@ -654,7 +636,7 @@ public:
     /**
      * @breif Don't override this one, override onKnobValueChanged instead.
      **/
-    virtual void onKnobValueChanged_public(KnobI* k, Natron::ValueChangedReasonEnum reason, SequenceTime time, bool originatedFromMainThread) OVERRIDE FINAL;
+    virtual void onKnobValueChanged_public(KnobI* k, Natron::ValueChangedReasonEnum reason, double time, bool originatedFromMainThread) OVERRIDE FINAL;
 
     /**
      * @brief Returns a pointer to the first non disabled upstream node.
@@ -1336,7 +1318,7 @@ protected:
     virtual void knobChanged(KnobI* /*k*/,
                              Natron::ValueChangedReasonEnum /*reason*/,
                              int /*view*/,
-                             SequenceTime /*time*/,
+                             double /*time*/,
                              bool /*originatedFromMainThread*/)
     {
     }
@@ -1370,7 +1352,7 @@ protected:
 public:
 
     ///Doesn't do anything, instead we overriden onKnobValueChanged_public
-    virtual void onKnobValueChanged(KnobI* k, Natron::ValueChangedReasonEnum reason, SequenceTime time,
+    virtual void onKnobValueChanged(KnobI* k, Natron::ValueChangedReasonEnum reason, double time,
                                     bool originatedFromMainThread) OVERRIDE FINAL;
     Natron::StatusEnum beginSequenceRender_public(double first, double last,
                                                   double step, bool interactive, const RenderScale & scale,
@@ -1513,6 +1495,8 @@ public:
                                    std::map<int, EffectInstance*>* reroutesMap);
 
 protected:
+
+    virtual void refreshExtraStateAfterTimeChanged(double time)  OVERRIDE;
 
     /**
      * @brief Must be implemented to initialize any knob using the

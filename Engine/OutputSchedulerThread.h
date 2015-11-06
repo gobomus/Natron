@@ -226,7 +226,7 @@ public:
      **/
     void notifyFrameRendered(int frame,
                              int viewIndex,
-                             int viewsCount,
+                             const std::vector<int>& viewsToRender,
                              const RenderStatsPtr& stats,
                              Natron::SchedulingPolicyEnum policy);
 
@@ -313,7 +313,6 @@ public Q_SLOTS:
      **/
     void abortRendering(bool autoRestart, bool blocking);
     
-    void onExecuteCallbackOnMainThread(QString callback);
     
 Q_SIGNALS:
     
@@ -408,7 +407,6 @@ protected:
     
     RenderEngine* getEngine() const;
     
-    void runCallback(const QString& callback);
     
 
 private:

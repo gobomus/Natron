@@ -390,7 +390,9 @@ OfxEffectInstance::createOfxImageEffectInstance(OFX::Host::ImageEffect::ImageEff
         }
         
         
-        
+        if (isReader() && serialization && !serialization->isNull()) {
+            getNode()->refreshCreatedViews();
+        }
         // Check here that bitdepth and components given by getClipPreferences are supported by the effect.
         // If we don't, the following assert will crash at the beginning of EffectInstance::renderRoIInternal():
         // assert(isSupportedBitDepth(outputDepth) && isSupportedComponent(-1, outputComponents));
@@ -658,6 +660,18 @@ ofxExtractAllPartsOfGrouping(const QString & pluginIdentifier,
 
     } else if (pluginIdentifier.startsWith("com.NewBlue.Titler")) {
         s = PLUGIN_GROUP_PAINT;
+
+    } else if (pluginIdentifier.startsWith("com.FXHOME.HitFilm")) {
+        // HitFilm uses grouping such as "HitFilm - Keying - Matte Enhancement"
+        s.replace(" - ", "/");
+
+    } else if (pluginIdentifier.startsWith("com.redgiantsoftware.Universe") && s.startsWith("Universe ")) {
+        // Red Giant Universe uses grouping such as "Universe Blur"
+        out.push_back("Universe");
+
+    } else if (pluginIdentifier.startsWith("com.NewBlue.") && s.startsWith("NewBlue ")) {
+        // NewBlueFX uses grouping such as "NewBlue Elements"
+        out.push_back("NewBlue");
 
     } else if ( (pluginIdentifier == "tuttle.avreader") ||
                (pluginIdentifier == "tuttle.avwriter") ||
@@ -1852,7 +1866,10 @@ OfxEffectInstance::beginSequenceRender(double first,
         
         ///Take the preferences lock so that it cannot be modified throughout the action.
         QReadLocker preferencesLocker(_preferencesLock);
-        stat = effectInstance()->beginRenderAction(first, last, step, interactive, scale, isSequentialRender, isRenderResponseToUserInteraction, draftMode, view);
+        stat = effectInstance()->beginRenderAction(first, last, step,
+                                                   interactive, scale,
+                                                   isSequentialRender, isRenderResponseToUserInteraction,
+                                                   /*openGLRender=*/false, draftMode, view);
     }
 
     if ( (stat != kOfxStatOK) && (stat != kOfxStatReplyDefault) ) {
@@ -1898,7 +1915,10 @@ OfxEffectInstance::endSequenceRender(double first,
         
         ///Take the preferences lock so that it cannot be modified throughout the action.
         QReadLocker preferencesLocker(_preferencesLock);
-        stat = effectInstance()->endRenderAction(first, last, step, interactive,scale, isSequentialRender, isRenderResponseToUserInteraction, draftMode, view);
+        stat = effectInstance()->endRenderAction(first, last, step,
+                                                 interactive, scale,
+                                                 isSequentialRender, isRenderResponseToUserInteraction,
+                                                 /*openGLRender=*/false, draftMode, view);
     }
 
     if ( (stat != kOfxStatOK) && (stat != kOfxStatReplyDefault) ) {
@@ -1996,6 +2016,7 @@ OfxEffectInstance::render(const RenderActionArgs& args)
                                      args.mappedScale,
                                      args.isSequentialRender,
                                      args.isRenderResponseToUserInteraction,
+                                     /*openGLRender=*/false,
                                      args.draftMode,
                                      args.view,
                                      viewsCount,
@@ -2381,7 +2402,7 @@ void
 OfxEffectInstance::redrawOverlayInteract()
 {
     assert(_overlayInteract);
-    _overlayInteract->redraw();
+    (void)_overlayInteract->redraw();
 }
 
 std::string
@@ -2408,7 +2429,7 @@ void
 OfxEffectInstance::knobChanged(KnobI* k,
                                Natron::ValueChangedReasonEnum reason,
                                int view,
-                               SequenceTime time,
+                               double time,
                                bool originatedFromMainThread)
 {
     if (!_initialized) {

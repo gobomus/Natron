@@ -87,9 +87,6 @@ GCC_DIAG_UNUSED_LOCAL_TYPEDEFS_ON
 // http://www.davidrevoy.com/article182/calibrating-wacom-stylus-pressure-on-krita
 #define ROTO_PRESSURE_LEVELS 512
 
-#ifndef M_PI
-#define M_PI        3.14159265358979323846264338327950288   /* pi             */
-#endif
 
 using namespace Natron;
 
@@ -527,7 +524,7 @@ RotoDrawableItem::rotoKnobChanged(const boost::shared_ptr<KnobI>& knob, Natron::
         type = eRotoStrokeTypeSolid;
     }
 
-    if (reason == Natron::eValueChangedReasonSlaveRefresh) {
+    if (reason == Natron::eValueChangedReasonSlaveRefresh && knob != _imp->center && knob != _imp->cloneCenter) {
         getContext()->s_breakMultiStroke();
     }
     
@@ -856,9 +853,7 @@ RotoDrawableItem::refreshNodesConnections()
         }
     } //if (_imp->effectNode &&  type != eRotoStrokeTypeEraser)
     
-    if (connectionChanged && (type == eRotoStrokeTypeClone || type == eRotoStrokeTypeReveal)) {
-        resetCloneTransformCenter();
-    }
+    
 }
 
 void
@@ -878,35 +873,6 @@ RotoDrawableItem::resetNodesThreadSafety()
     
 }
 
-void
-RotoDrawableItem::resetCloneTransformCenter()
-{
-    
-    RotoStrokeType type;
-    RotoStrokeItem* isStroke = dynamic_cast<RotoStrokeItem*>(this);
-    if (isStroke) {
-        type = isStroke->getBrushType();
-    } else {
-        type = eRotoStrokeTypeSolid;
-    }
-    if (type != eRotoStrokeTypeReveal && type != eRotoStrokeTypeClone) {
-        return;
-    }
-    boost::shared_ptr<KnobI> resetCenterKnob = _imp->effectNode->getKnobByName(kTransformParamResetCenter);
-    KnobButton* resetCenter = dynamic_cast<KnobButton*>(resetCenterKnob.get());
-    if (!resetCenter) {
-        return;
-    }
-    boost::shared_ptr<KnobI> centerKnob = _imp->effectNode->getKnobByName(kTransformParamCenter);
-    KnobDouble* center = dynamic_cast<KnobDouble*>(centerKnob.get());
-    if (!center) {
-        return;
-    }
-    resetCenter->evaluateValueChange(0, resetCenter->getCurrentTime(), Natron::eValueChangedReasonUserEdited);
-    double x = center->getValue(0);
-    double y = center->getValue(1);
-    _imp->cloneCenter->setValues(x, y, Natron::eValueChangedReasonNatronGuiEdited);
-}
 
 
 void
@@ -1372,6 +1338,17 @@ RotoDrawableItem::getKnobs() const
     return _imp->knobs;
 }
 
+boost::shared_ptr<KnobI>
+RotoDrawableItem::getKnobByName(const std::string& name) const
+{
+    for (std::list<boost::shared_ptr<KnobI> >::const_iterator it = _imp->knobs.begin(); it != _imp->knobs.end(); ++it) {
+        if ((*it)->getName() == name) {
+            return *it;
+        }
+    }
+    return boost::shared_ptr<KnobI>();
+}
+
 
 void
 RotoDrawableItem::getTransformAtTime(double time,Transform::Matrix3x3* matrix) const
@@ -1383,7 +1360,7 @@ RotoDrawableItem::getTransformAtTime(double time,Transform::Matrix3x3* matrix) c
     double skewX = _imp->skewX->getValueAtTime(time, 0);
     double skewY = _imp->skewY->getValueAtTime(time, 0);
     double rot = _imp->rotate->getValueAtTime(time, 0);
-    rot = rot * M_PI / 180.0;
+    rot = Transform::toRadians(rot);
     double centerX = _imp->center->getValueAtTime(time, 0);
     double centerY = _imp->center->getValueAtTime(time, 1);
     bool skewOrderYX = _imp->skewOrder->getValueAtTime(time) == 1;

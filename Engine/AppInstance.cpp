@@ -832,7 +832,9 @@ AppInstance::createNodeInternal(const QString & pluginID,
         if (ofxPlugin) {
             
             try {
-                ofxDesc = Natron::OfxHost::getPluginContextAndDescribe(ofxPlugin,&ctx);
+                //  Should this method be in AppManager?
+                // ofxDesc = appPTR->getPluginContextAndDescribe(ofxPlugin, &ctx);
+                ofxDesc = appPTR->getPluginContextAndDescribe(ofxPlugin,&ctx);
             } catch (const std::exception& e) {
                 errorDialog(tr("Error while creating node").toStdString(), tr("Failed to create an instance of ").toStdString()
                             + pluginID.toStdString() + ": " + e.what(), false);
@@ -888,13 +890,18 @@ AppInstance::createNodeInternal(const QString & pluginID,
     if (addToProject) {
         //Add the node to the project before loading it so it is present when the python script that registers a variable of the name
         //of the node works
-        group->addNode(node);
+        assert(group);
+        if (group) {
+            group->addNode(node);
+        }
     }
     assert(node);
     try {
         node->load(multiInstanceParentName, serialization,dontLoadName, userEdited, addToProject, fixedName,paramValues);
     } catch (const std::exception & e) {
-        group->removeNode(node);
+        if (group) {
+            group->removeNode(node);
+        }
         std::string title("Error while creating node");
         std::string message = title + " " + foundPluginID + ": " + e.what();
         qDebug() << message.c_str();
@@ -902,7 +909,9 @@ AppInstance::createNodeInternal(const QString & pluginID,
 
         return boost::shared_ptr<Natron::Node>();
     } catch (...) {
-        group->removeNode(node);
+        if (group) {
+            group->removeNode(node);
+        }
         std::string title("Error while creating node");
         std::string message = title + " " + foundPluginID;
         qDebug() << message.c_str();
@@ -1276,12 +1285,6 @@ Natron::ViewerColorSpaceEnum
 AppInstance::getDefaultColorSpaceForBitDepth(Natron::ImageBitDepthEnum bitdepth) const
 {
     return _imp->_currentProject->getDefaultColorSpaceForBitDepth(bitdepth);
-}
-
-int
-AppInstance::getMainView() const
-{
-    return _imp->_currentProject->getProjectMainView();
 }
 
 void

@@ -767,7 +767,9 @@ EffectInstance::getImage(int inputNb,
         if ( inputImg && !pixelRoI.intersects( inputImg->getBounds() ) ) {
             //The RoI requested does not intersect with the bounds of the input image, return a NULL image.
 #ifdef DEBUG
-            qDebug() << getNode()->getScriptName_mt_safe().c_str() << ": The RoI requested to the roto mask does not intersect with the bounds of the input image";
+            RectI inputBounds = inputImg->getBounds();
+            qDebug() << getNode()->getScriptName_mt_safe().c_str() << ": The RoI requested to the roto mask does not intersect with the bounds of the input image: Pixel RoI x1=" << pixelRoI.x1 << "y1=" << pixelRoI.y1 << "x2=" << pixelRoI.x2 << "y2=" << pixelRoI.y2 <<
+            "Bounds x1=" << inputBounds.x1 << "y1=" << inputBounds.y1 << "x2=" << inputBounds.x2 << "y2=" << inputBounds.y2;
 #endif
 
             return ImagePtr();
@@ -1646,6 +1648,8 @@ EffectInstance::renderInputImagesForRoI(const FrameViewRequest* request,
                               reroutesMap,
                               useTransforms,
                               mipMapLevel,
+                              time,
+                              view,
                               NodePtr(),
                               0,
                               inputImages,
@@ -2484,24 +2488,7 @@ EffectInstance::evaluate(KnobI* knob,
         /*if this is a button and it is a render button,we're safe to assume the plug-ins wants to start rendering.*/
         if (button) {
             if ( button->isRenderButton() ) {
-                std::string sequentialNode;
-                if ( node->hasSequentialOnlyNodeUpstream(sequentialNode) ) {
-                    if (node->getApp()->getProject()->getProjectViewsCount() > 1) {
-                        Natron::StandardButtonEnum answer =
-                            Natron::questionDialog( QObject::tr("Render").toStdString(),
-                                                    sequentialNode + QObject::tr(" can only "
-                                                                                 "render in sequential mode. Due to limitations in the "
-                                                                                 "OpenFX standard, %1"
-                                                                                 " will not be able "
-                                                                                 "to render all the views of the project. "
-                                                                                 "Only the main view of the project will be rendered. You can "
-                                                                                 "change the main view in the project settings. Would you like "
-                                                                                 "to continue ?").arg(NATRON_APPLICATION_NAME).toStdString(), false );
-                        if (answer != Natron::eStandardButtonYes) {
-                            return;
-                        }
-                    }
-                }
+                
                 AppInstance::RenderWork w;
                 w.writer = dynamic_cast<OutputEffectInstance*>(this);
                 w.firstFrame = INT_MIN;
@@ -2518,6 +2505,7 @@ EffectInstance::evaluate(KnobI* knob,
     ///increments the knobs age following a change
     if (!button && isSignificant) {
         node->incrementKnobsAge();
+        node->refreshIdentityState();
     }
 
 
@@ -2534,7 +2522,7 @@ EffectInstance::evaluate(KnobI* knob,
         }
     }
 
-    getNode()->refreshPreviewsRecursivelyDownstream(time);
+    node->refreshPreviewsRecursivelyDownstream(time);
 } // evaluate
 
 bool
@@ -2698,7 +2686,7 @@ EffectInstance::onKnobSlaved(KnobI* slave,
 void
 EffectInstance::setCurrentViewportForOverlays_public(OverlaySupport* viewport)
 {
-    getNode()->setCurrentViewportForDefaultOverlays(viewport);
+    getNode()->setCurrentViewportForHostOverlays(viewport);
     setCurrentViewportForOverlays(viewport);
 }
 
@@ -2715,7 +2703,7 @@ EffectInstance::drawOverlay_public(double time,
 {
     ///cannot be run in another thread
     assert( QThread::currentThread() == qApp->thread() );
-    if ( !hasOverlay() && !getNode()->hasDefaultOverlay() ) {
+    if ( !hasOverlay() && !getNode()->hasHostOverlay() ) {
         return;
     }
 
@@ -2723,7 +2711,7 @@ EffectInstance::drawOverlay_public(double time,
 
     _imp->setDuringInteractAction(true);
     drawOverlay(time, scaleX, scaleY);
-    getNode()->drawDefaultOverlay(time, scaleX, scaleY);
+    getNode()->drawHostOverlay(time, scaleX, scaleY);
     _imp->setDuringInteractAction(false);
 }
 
@@ -2737,7 +2725,7 @@ EffectInstance::onOverlayPenDown_public(double time,
 {
     ///cannot be run in another thread
     assert( QThread::currentThread() == qApp->thread() );
-    if ( !hasOverlay()  && !getNode()->hasDefaultOverlay() ) {
+    if ( !hasOverlay()  && !getNode()->hasHostOverlay() ) {
         return false;
     }
 
@@ -2766,7 +2754,7 @@ EffectInstance::onOverlayPenMotion_public(double time,
 {
     ///cannot be run in another thread
     assert( QThread::currentThread() == qApp->thread() );
-    if ( !hasOverlay()  && !getNode()->hasDefaultOverlay() ) {
+    if ( !hasOverlay()  && !getNode()->hasHostOverlay() ) {
         return false;
     }
 
@@ -2794,7 +2782,7 @@ EffectInstance::onOverlayPenUp_public(double time,
 {
     ///cannot be run in another thread
     assert( QThread::currentThread() == qApp->thread() );
-    if ( !hasOverlay()  && !getNode()->hasDefaultOverlay() ) {
+    if ( !hasOverlay()  && !getNode()->hasHostOverlay() ) {
         return false;
     }
     bool ret;
@@ -2821,7 +2809,7 @@ EffectInstance::onOverlayKeyDown_public(double time,
 {
     ///cannot be run in another thread
     assert( QThread::currentThread() == qApp->thread() );
-    if ( !hasOverlay()  && !getNode()->hasDefaultOverlay() ) {
+    if ( !hasOverlay()  && !getNode()->hasHostOverlay() ) {
         return false;
     }
 
@@ -2849,7 +2837,7 @@ EffectInstance::onOverlayKeyUp_public(double time,
 {
     ///cannot be run in another thread
     assert( QThread::currentThread() == qApp->thread() );
-    if ( !hasOverlay()  && !getNode()->hasDefaultOverlay() ) {
+    if ( !hasOverlay()  && !getNode()->hasHostOverlay() ) {
         return false;
     }
 
@@ -2878,7 +2866,7 @@ EffectInstance::onOverlayKeyRepeat_public(double time,
 {
     ///cannot be run in another thread
     assert( QThread::currentThread() == qApp->thread() );
-    if ( !hasOverlay()  && !getNode()->hasDefaultOverlay() ) {
+    if ( !hasOverlay()  && !getNode()->hasHostOverlay() ) {
         return false;
     }
 
@@ -2904,7 +2892,7 @@ EffectInstance::onOverlayFocusGained_public(double time,
 {
     ///cannot be run in another thread
     assert( QThread::currentThread() == qApp->thread() );
-    if ( !hasOverlay() && !getNode()->hasDefaultOverlay() ) {
+    if ( !hasOverlay() && !getNode()->hasHostOverlay() ) {
         return false;
     }
 
@@ -2930,7 +2918,7 @@ EffectInstance::onOverlayFocusLost_public(double time,
 {
     ///cannot be run in another thread
     assert( QThread::currentThread() == qApp->thread() );
-    if ( !hasOverlay() && !getNode()->hasDefaultOverlay() ) {
+    if ( !hasOverlay() && !getNode()->hasHostOverlay() ) {
         return false;
     }
     bool ret;
@@ -3018,7 +3006,7 @@ EffectInstance::isIdentity_public(bool useIdentityCache, // only set to true whe
 
     bool ret = false;
     boost::shared_ptr<RotoDrawableItem> rotoItem = getNode()->getAttachedRotoItem();
-    if ( rotoItem && !rotoItem->isActivated(time) ) {
+    if ((rotoItem && !rotoItem->isActivated(time)) || getNode()->isNodeDisabled() || !getNode()->hasAtLeastOneChannelToProcess() ) {
         ret = true;
         *inputNb = getNode()->getPreferredInput();
         *inputTime = time;
@@ -3026,11 +3014,6 @@ EffectInstance::isIdentity_public(bool useIdentityCache, // only set to true whe
         ret = true;
         *inputNb = 0;
         *inputTime = time;
-    } else if ( getNode()->isNodeDisabled() || !getNode()->hasAtLeastOneChannelToProcess() ) {
-        ret = true;
-        *inputTime = time;
-        *inputNb = -1;
-        *inputNb = getNode()->getPreferredInput();
     } else {
         /// Don't call isIdentity if plugin is sequential only.
         if (getSequentialPreference() != Natron::eSequentialPreferenceOnlySequential) {
@@ -3790,7 +3773,7 @@ EffectInstance::isMaskEnabled(int inputNb) const
 void
 EffectInstance::onKnobValueChanged(KnobI* /*k*/,
                                    Natron::ValueChangedReasonEnum /*reason*/,
-                                   SequenceTime /*time*/,
+                                   double /*time*/,
                                    bool /*originatedFromMainThread*/)
 {
 }
@@ -3903,7 +3886,7 @@ EffectInstance::redrawOverlayInteract()
 void
 EffectInstance::onKnobValueChanged_public(KnobI* k,
                                           Natron::ValueChangedReasonEnum reason,
-                                          SequenceTime time,
+                                          double time,
                                           bool originatedFromMainThread)
 {
     NodePtr node = getNode();
@@ -3951,7 +3934,7 @@ EffectInstance::onKnobValueChanged_public(KnobI* k,
     if (QThread::currentThread() == qApp->thread() &&
         originatedFromMainThread) { //< change didnt occur in main-thread in the first, palce don't attempt to draw the overlay
         
-        if (hasOverlay() && getNode()->shouldDrawOverlay() && !getNode()->hasDefaultOverlayForParam(k)) {
+        if (hasOverlay() && getNode()->shouldDrawOverlay() && !getNode()->hasHostOverlayForParam(k)) {
             // Some plugins (e.g. by digital film tools) forget to set kOfxInteractPropSlaveToParam.
             // Most hosts trigger a redraw if the plugin has an active overlay.
             //if (isOverlaySlaveParam(k)) {
@@ -4444,4 +4427,11 @@ EffectInstance::checkOFXClipPreferences_public(double time,
     } else {
         checkOFXClipPreferences(time, scale, reason, forceGetClipPrefAction);
     }
+}
+
+void
+EffectInstance::refreshExtraStateAfterTimeChanged(double time)
+{
+    KnobHolder::refreshExtraStateAfterTimeChanged(time);
+    getNode()->refreshIdentityState();
 }
