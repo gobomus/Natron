@@ -63,6 +63,7 @@
 #include "Gui/Splitter.h"
 #include "Gui/TabWidget.h"
 #include "Gui/ToolButton.h"
+#include "Gui/ScriptEditor.h"
 #include "Gui/ViewerGL.h"
 #include "Gui/ViewerTab.h"
 
@@ -142,6 +143,9 @@ void
 Gui::reloadStylesheet()
 {
     loadStyleSheet();
+    if (_imp->_scriptEditor) {
+        _imp->_scriptEditor->reloadHighlighter();
+    }
 }
 
 void
@@ -1053,21 +1057,21 @@ Gui::saveProject()
     if (project->hasProjectBeenSavedByUser()) {
         
         
-        QString projectName = project->getProjectName();
+        QString projectFilename = project->getProjectFilename();
         QString projectPath = project->getProjectPath();
         
-        if (!_imp->checkProjectLockAndWarn(projectPath,projectName)) {
+        if (!_imp->checkProjectLockAndWarn(projectPath, projectFilename)) {
             return false;
         }
 
-        bool ret = project->saveProject(projectPath, projectName, 0);
+        bool ret = project->saveProject(projectPath, projectFilename, 0);
 
         ///update the open recents
         if (!projectPath.endsWith('/')) {
             projectPath.append('/');
         }
         if (ret) {
-            QString file = projectPath + projectName;
+            QString file = projectPath + projectFilename;
             updateRecentFiles(file);
         }
         return ret;
@@ -1112,7 +1116,7 @@ void
 Gui::saveAndIncrVersion()
 {
     QString path = _imp->_appInstance->getProject()->getProjectPath();
-    QString name = _imp->_appInstance->getProject()->getProjectName();
+    QString name = _imp->_appInstance->getProject()->getProjectFilename();
     int currentVersion = 0;
     int positionToInsertVersion;
     bool mustAppendFileExtension = false;
@@ -1359,7 +1363,7 @@ Gui::saveWarning()
 {
     if ( !_imp->_appInstance->getProject()->isSaveUpToDate() ) {
         Natron::StandardButtonEnum ret =  Natron::questionDialog(NATRON_APPLICATION_NAME, tr("Save changes to ").toStdString() +
-                                                                 _imp->_appInstance->getProject()->getProjectName().toStdString() + " ?",
+                                                                 _imp->_appInstance->getProject()->getProjectFilename().toStdString() + " ?",
                                                                  false,
                                                                  Natron::StandardButtons(Natron::eStandardButtonSave | Natron::eStandardButtonDiscard | Natron::eStandardButtonCancel), Natron::eStandardButtonSave);
         if ( (ret == Natron::eStandardButtonEscape) || (ret == Natron::eStandardButtonCancel) ) {

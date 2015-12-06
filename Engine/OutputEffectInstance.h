@@ -31,58 +31,42 @@
 #endif
 
 #include "Global/Macros.h"
-//#include "Global/GlobalDefines.h"
-//#include "Global/KeySymbols.h"
-//
-#include "Engine/EffectInstance.h"
-//#include "Engine/ImageComponents.h"
-//#include "Engine/ImageLocker.h"
-//#include "Engine/Knob.h" // for KnobHolder
-//#include "Engine/ParallelRenderArgs.h"
-//#include "Engine/RectD.h"
-//#include "Engine/RectI.h"
-//#include "Engine/RenderStats.h"
 
+#include "Engine/EffectInstance.h"
+#include "Engine/EngineFwd.h"
 
 
 class QThread;
-class Hash64;
-class Format;
-class TimeLine;
-class OverlaySupport;
-class PluginMemory;
-class BlockingBackgroundRender;
-class NodeSerialization;
-class ViewerInstance;
-class RenderEngine;
-class BufferableObject;
-namespace Natron {
-class OutputEffectInstance;
-}
-namespace Transform {
-struct Matrix3x3;
-}
 
 
 namespace Natron {
-class Node;
-class ImageKey;
-class Image;
-class ImageParams;
-
 
 class OutputEffectInstance
     : public Natron::EffectInstance
 {
+    
+    struct RenderSequenceArgs
+    {
+        BlockingBackgroundRender* renderController;
+        int firstFrame;
+        int lastFrame;
+        int frameStep;
+        bool useStats;
+        bool blocking;
+        std::vector<int> viewsToRender;
+    };
+
+    
     SequenceTime _writerCurrentFrame; /*!< for writers only: indicates the current frame
                                          It avoids snchronizing all viewers in the app to the render*/
     SequenceTime _writerFirstFrame;
     SequenceTime _writerLastFrame;
     mutable QMutex* _outputEffectDataLock;
-    BlockingBackgroundRender* _renderController; //< pointer to a blocking renderer
+    std::list<RenderSequenceArgs> _renderSequenceRequests;
     RenderEngine* _engine;
     std::list<double> _timeSpentPerFrameRendered;
-
+    
+    
 public:
 
     OutputEffectInstance(boost::shared_ptr<Node> node);
@@ -114,15 +98,13 @@ public:
      * @brief Starts rendering of all the sequence available, from start to end.
      * This function is meant to be called for on-disk renderer only (i.e: not viewers).
      **/
-    void renderFullSequence(bool enableRenderStats, BlockingBackgroundRender* renderController, int first, int last);
+    void renderFullSequence(bool isBlocking, bool enableRenderStats, BlockingBackgroundRender* renderController, int first, int last, int frameStep);
 
     void notifyRenderFinished();
 
     void renderCurrentFrame(bool canAbort);
 
     void renderCurrentFrameWithRenderStats(bool canAbort);
-
-    void renderFromCurrentFrameUsingCurrentDirection(bool enableRenderStats);
 
     bool ifInfiniteclipRectToProjectDefault(RectD* rod) const;
 
@@ -153,7 +135,11 @@ public:
     virtual void reportStats(int time, int view, double wallTime, const std::map<boost::shared_ptr<Natron::Node>, NodeRenderStats > & stats);
 
 protected:
+    
+    void createWriterPath();
 
+    void launchRenderSequence(const RenderSequenceArgs& args);
+    
     /**
      * @brief Creates the engine that will control the output rendering
      **/

@@ -422,6 +422,12 @@ DockablePanel::DockablePanel(Gui* gui ,
     _imp->_horizLayout = new QHBoxLayout(_imp->_horizContainer);
     _imp->_horizLayout->setContentsMargins(0, 3, 3, 0);
     _imp->_horizLayout->setSpacing(2);
+    
+    _imp->_rightContainer = new QWidget(_imp->_horizContainer);
+    _imp->_rightContainerLayout = new QVBoxLayout(_imp->_rightContainer);
+    _imp->_rightContainerLayout->setSpacing(0);
+    _imp->_rightContainerLayout->setContentsMargins(0, 0, 0, 0);
+    
     if (isEffect) {
         _imp->_verticalColorBar = new VerticalColorBar(_imp->_horizContainer);
         _imp->_verticalColorBar->setColor(currentColor);
@@ -438,7 +444,8 @@ DockablePanel::DockablePanel(Gui* gui ,
         _imp->_tabWidget->setSizePolicy(QSizePolicy::Ignored,QSizePolicy::Preferred);
     }
     QObject::connect(_imp->_tabWidget, SIGNAL(currentChanged(int)), this, SLOT(onPageIndexChanged(int)));
-    _imp->_horizLayout->addWidget(_imp->_tabWidget);
+    _imp->_rightContainerLayout->addWidget(_imp->_tabWidget);
+    _imp->_horizLayout->addWidget(_imp->_rightContainer);
     _imp->_mainLayout->addWidget(_imp->_horizContainer);
 
     if (createDefaultPage) {
@@ -564,6 +571,18 @@ DockablePanel::setUserPageActiveIndex()
     }
 }
 
+void
+DockablePanel::setPageActiveIndex(const boost::shared_ptr<KnobPage>& page)
+{
+    for (int i = 0; i < _imp->_tabWidget->count(); ++i) {
+        if (_imp->_tabWidget->tabText(i) == page->getLabel().c_str()) {
+            _imp->_tabWidget->setCurrentIndex(i);
+            _imp->refreshPagesSecretness();
+            break;
+        }
+    }
+}
+
 int
 DockablePanel::getPagesCount() const
 {
@@ -669,15 +688,16 @@ DockablePanel::initializeKnobsInternal()
 
     RotoPanel* roto = initializeRotoPanel();
     if (roto) {
-        _imp->_mainLayout->addWidget(roto);
+        _imp->_rightContainerLayout->addWidget(roto);
     }
     assert(!_imp->_trackerPanel);
     _imp->_trackerPanel = initializeTrackerPanel();
     if (_imp->_trackerPanel) {
         _imp->_mainLayout->addWidget(_imp->_trackerPanel);
     }
-    
-    initializeExtraGui(_imp->_mainLayout);
+
+
+    initializeExtraGui(_imp->_rightContainerLayout);
     
     NodeSettingsPanel* isNodePanel = dynamic_cast<NodeSettingsPanel*>(this);
     if (isNodePanel) {
@@ -697,6 +717,32 @@ TrackerPanel*
 DockablePanel::getTrackerPanel() const
 {
     return _imp->_trackerPanel;
+}
+
+void
+DockablePanel::refreshTabWidgetMaxHeight()
+{
+    /*
+     Make the tab widget have the same height across all tabs to avoid the
+     layout being adjusted everytimes the user switches from tab to tab
+     */
+    
+    //Disabled for now - it leads to bad behaviour if the Node tab is bigger than the main actual tab
+#if 0
+    if (_imp->_tabWidget && !_imp->_useScrollAreasForTabs) {
+        //Compute the tab maximum height
+        int maxHeight = -1;
+        for (int i = 0; i < _imp->_tabWidget->count(); ++i) {
+            QWidget* w = _imp->_tabWidget->widget(i);
+            if (w) {
+                maxHeight = std::max(w->sizeHint().height(),maxHeight);
+            }
+        }
+        if (maxHeight > 0) {
+            _imp->_tabWidget->setFixedHeight(maxHeight);
+        }
+    }
+#endif
 }
 
 void
@@ -953,7 +999,9 @@ DockablePanel::minimizeOrMaximize(bool toggled)
         Q_EMIT maximized();
     }
     _imp->_tabWidget->setVisible(!_imp->_minimized);
-    _imp->_verticalColorBar->setVisible(!_imp->_minimized);
+    if (_imp->_verticalColorBar) {
+        _imp->_verticalColorBar->setVisible(!_imp->_minimized);
+    }
     std::vector<QWidget*> _panels;
     for (int i = 0; i < _imp->_container->count(); ++i) {
         if ( QWidget * myItem = dynamic_cast <QWidget*>( _imp->_container->itemAt(i) ) ) {
@@ -1027,7 +1075,7 @@ DockablePanel::deleteKnobGui(const boost::shared_ptr<KnobI>& knob)
 {
     KnobPage* isPage = dynamic_cast<KnobPage*>(knob.get());
     if (isPage && _imp->_pagesEnabled) {
-        PageMap::iterator found = _imp->_pages.find(isPage->getDescription().c_str());
+        PageMap::iterator found = _imp->_pages.find(isPage->getLabel().c_str());
         if (found != _imp->_pages.end()) {
             if (_imp->_tabWidget) {
                 int index = _imp->_tabWidget->indexOf(found->second.tab);
@@ -1063,7 +1111,7 @@ DockablePanel::deleteKnobGui(const boost::shared_ptr<KnobI>& knob)
             
             assert(isParentPage || isParentGroup);
             if (isParentPage) {
-                PageMap::iterator page = _imp->_pages.find(isParentPage->getDescription().c_str());
+                PageMap::iterator page = _imp->_pages.find(isParentPage->getLabel().c_str());
                 assert(page != _imp->_pages.end());
                 TabGroup* groupAsTab = page->second.groupAsTab;
                 if (groupAsTab) {
@@ -1164,7 +1212,8 @@ DockablePanel::getUndoStack() const
 bool
 DockablePanel::isClosed() const
 {
-    QMutexLocker l(&_imp->_isClosedMutex); return _imp->_isClosed;
+    QMutexLocker l(&_imp->_isClosedMutex);
+    return _imp->_isClosed;
 }
 
 bool
@@ -1406,7 +1455,7 @@ DockablePanel::onManageUserParametersActionTriggered()
 void
 DockablePanel::setKeyOnAllParameters()
 {
-    int time = getGui()->getApp()->getTimeLine()->currentFrame();
+    double time = getGui()->getApp()->getTimeLine()->currentFrame();
 
     AddKeysCommand::KeysToAddList keys;
     for (std::map<boost::weak_ptr<KnobI>,KnobGui*>::iterator it = _imp->_knobs.begin(); it != _imp->_knobs.end(); ++it) {
@@ -1569,25 +1618,29 @@ DockablePanel::onHideUnmodifiedButtonClicked(bool checked)
 }
 
 void
-DockablePanel::scanForNewKnobs()
+DockablePanel::scanForNewKnobs(bool restorePageIndex)
 {
     
+  
     std::list<KnobPage*> userPages;
     getUserPages(userPages);
     
+    QString curTabName;
+    
     if (_imp->_pagesEnabled) {
-        boost::shared_ptr<KnobPage> page = getUserPageKnob();
-        userPages.push_back(page.get());
-        for (std::list<KnobPage*>::iterator it = userPages.begin(); it != userPages.end(); ++it) {
-            PageMap::iterator foundPage = _imp->_pages.find((*it)->getDescription().c_str());
-            if (foundPage != _imp->_pages.end()) {
-                foundPage->second.currentRow = 0;
-                std::vector<boost::shared_ptr<KnobI> > children = (*it)->getChildren();
-                for (std::vector<boost::shared_ptr<KnobI> >::iterator it2 = children.begin(); it2 != children.end(); ++it2) {
-                    deleteKnobGui(*it2);
-                }
-            }
+        
+        if (restorePageIndex) {
+            curTabName = _imp->_tabWidget->tabText(_imp->_tabWidget->currentIndex());
         }
+        
+        boost::shared_ptr<KnobPage> page = getUserPageKnob();
+        if (page) {
+            userPages.push_back(page.get());
+        }
+        for (std::list<KnobPage*>::iterator it = userPages.begin(); it != userPages.end(); ++it) {
+            deleteKnobGui((*it)->shared_from_this());
+        }
+        
     } else {
         
         std::vector<boost::shared_ptr<KnobI> > knobs = _imp->_holder->getKnobs();
@@ -1598,11 +1651,54 @@ DockablePanel::scanForNewKnobs()
     }
     
     _imp->initializeKnobVector(_imp->_holder->getKnobs(),NULL);
-    NodeSettingsPanel* isNodePanel = dynamic_cast<NodeSettingsPanel*>(this);
-    /*if (isNodePanel) {
-        isNodePanel->getNode()->getNode()->declarePythonFields();
-    }*/
     
+    
+    ///Refresh pages order
+    if (_imp->_pagesEnabled) {
+        std::list<std::pair<QWidget*,QString> > orderedPages;
+        const std::vector<boost::shared_ptr<KnobI> >& knobs = _imp->_holder->getKnobs();
+        
+        std::list<KnobPage*> pages;
+        for (std::vector<boost::shared_ptr<KnobI> >::const_iterator it = knobs.begin(); it != knobs.end(); ++it) {
+            KnobPage* isPage = dynamic_cast<KnobPage*>(it->get());
+            if (isPage) {
+                pages.push_back(isPage);
+            }
+        }
+        for (std::list<KnobPage*>::iterator it = pages.begin(); it!=pages.end(); ++it) {
+            
+            PageMap::iterator foundPage = _imp->_pages.find((*it)->getLabel().c_str());
+            if (foundPage != _imp->_pages.end()) {
+                if ((*it)->getChildren().size() > 0) {
+                    foundPage->second.tab->show();
+                    orderedPages.push_back(std::make_pair(foundPage->second.tab,foundPage->first));
+                } else {
+                    foundPage->second.tab->hide();
+                }
+            }
+            
+        }
+        
+        
+        _imp->_tabWidget->clear();
+        
+        
+        int index = 0;
+        int i = 0;
+        for (std::list<std::pair<QWidget*,QString> >::iterator it = orderedPages.begin(); it!=orderedPages.end(); ++it,++i) {
+            _imp->_tabWidget->addTab(it->first, it->second);
+            if (restorePageIndex && it->second == curTabName) {
+                index = i;
+            }
+        }
+        
+        if (index >= 0 && index < int(orderedPages.size())) {
+            _imp->_tabWidget->setCurrentIndex(index);
+        }
+    }
+    
+    NodeSettingsPanel* isNodePanel = dynamic_cast<NodeSettingsPanel*>(this);
+
     
     ///Refresh the curve editor with potential new animated knobs
     if (isNodePanel) {
@@ -1618,9 +1714,15 @@ DockablePanel::scanForNewKnobs()
 
 
 boost::shared_ptr<KnobPage>
-DockablePanel::getUserPageKnob() const
+DockablePanel::getOrCreateUserPageKnob() const
 {
     return _imp->_holder->getOrCreateUserPageKnob();
+}
+
+boost::shared_ptr<KnobPage>
+DockablePanel::getUserPageKnob() const
+{
+    return _imp->_holder->getUserPageKnob();
 }
 
 void

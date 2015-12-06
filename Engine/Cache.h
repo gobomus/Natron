@@ -38,12 +38,11 @@
 #include "Global/MemoryInfo.h"
 GCC_DIAG_OFF(deprecated)
 #include <QtCore/QMutex>
+#include <QtCore/QThread>
 #include <QtCore/QWaitCondition>
 #include <QtCore/QMutexLocker>
 #include <QtCore/QObject>
-#include <QtCore/QTextStream>
 #include <QtCore/QBuffer>
-#include <QtCore/QThreadPool>
 #include <QtCore/QRunnable>
 GCC_DIAG_ON(deprecated)
 #if !defined(Q_MOC_RUN) && !defined(SBK_RUN)
@@ -994,7 +993,7 @@ public:
     /**
      * @brief To be called by a CacheEntry on allocation.
      **/
-    virtual void notifyEntryAllocated(int time,
+    virtual void notifyEntryAllocated(double time,
                                       std::size_t size,
                                       Natron::StorageModeEnum storage) const OVERRIDE FINAL
     {
@@ -1016,7 +1015,7 @@ public:
     /**
      * @brief To be called by a CacheEntry on destruction.
      **/
-    virtual void notifyEntryDestroyed(int time,
+    virtual void notifyEntryDestroyed(double time,
                                       std::size_t size,
                                       Natron::StorageModeEnum storage) const OVERRIDE FINAL
     {
@@ -1051,7 +1050,7 @@ public:
      **/
     virtual void notifyEntryStorageChanged(Natron::StorageModeEnum oldStorage,
                                            Natron::StorageModeEnum newStorage,
-                                           int time,
+                                           double time,
                                            std::size_t size) const OVERRIDE FINAL
     {
         if (_tearingDown) {
@@ -1149,22 +1148,26 @@ public:
 
     std::size_t getMaximumSize() const
     {
-        QMutexLocker k(&_sizeLock); return _maximumCacheSize;
+        QMutexLocker k(&_sizeLock);
+        return _maximumCacheSize;
     }
 
     std::size_t getMaximumMemorySize() const
     {
-        QMutexLocker k(&_sizeLock); return _maximumInMemorySize;
+        QMutexLocker k(&_sizeLock);
+        return _maximumInMemorySize;
     }
 
     std::size_t getMemoryCacheSize() const
     {
-        QMutexLocker k(&_sizeLock); return _memoryCacheSize;
+        QMutexLocker k(&_sizeLock);
+        return _memoryCacheSize;
     }
 
     std::size_t getDiskCacheSize() const
     {
-        QMutexLocker k(&_sizeLock); return _diskCacheSize;
+        QMutexLocker k(&_sizeLock);
+        return _diskCacheSize;
     }
 
     CacheSignalEmitter* activateSignalEmitter() const

@@ -25,17 +25,16 @@
 #include <Python.h>
 // ***** END PYTHON BLOCK *****
 
+#include "Global/Macros.h"
+
 #if !defined(Q_MOC_RUN) && !defined(SBK_RUN)
 #include <boost/weak_ptr.hpp>
 #endif
-
-#include "Global/Macros.h"
 
 CLANG_DIAG_OFF(deprecated)
 CLANG_DIAG_OFF(uninitialized)
 #include <QtCore/QTimer>
 #include <QtCore/QMutex>
-
 #include <QGraphicsItem>
 #include <QGraphicsLineItem>
 #include <QGraphicsPixmapItem>
@@ -48,13 +47,8 @@ CLANG_DIAG_ON(deprecated)
 CLANG_DIAG_ON(uninitialized)
 
 #include "Gui/NodeGraphUndoRedo.h" // NodeGuiPtr
+#include "Gui/GuiFwd.h"
 
-class NodeGraph;
-class Gui;
-class NodeCollection;
-struct NodeClipBoard;
-class NodeGuiSerialization;
-class ViewerTab;
 
 #define NATRON_CACHE_SIZE_TEXT_REFRESH_INTERVAL_MS 1000
 
@@ -153,40 +147,18 @@ public:
     }
 };
 
-class SelectionRectangle
-    : public QGraphicsRectItem
+
+
+
+class NodeGraphPrivate
 {
 public:
-
-    SelectionRectangle(QGraphicsItem* parent = 0)
-        : QGraphicsRectItem(parent)
-    {
-    }
-
-    virtual void paint(QPainter *painter,
-                       const QStyleOptionGraphicsItem */*option*/,
-                       QWidget */*widget*/) OVERRIDE FINAL
-    {
-        QRectF r = rect();
-        QColor color(16,84,200,20);
-
-        painter->setBrush(color);
-        painter->drawRect(r);
-        double w = painter->pen().widthF();
-        painter->fillRect(QRect(r.x() + w,r.y() + w,r.width() - w,r.height() - w),color);
-    }
-};
-
-
-struct NodeGraphPrivate
-{
     NodeGraph* _publicInterface;
     
     boost::weak_ptr<NodeCollection> group;
     
     QPoint _lastMousePos;
-    QPointF _lastNodeDragStartPoint;
-    QPoint _lastSelectionStartPoint;
+    QPointF _lastSelectionStartPointScene;
     EventStateEnum _evtState;
     NodeGuiPtr _magnifiedNode;
     double _nodeSelectedScaleBeforeMagnif;
@@ -202,7 +174,8 @@ struct NodeGraphPrivate
     QString _lastNodeCreatedName;
     QGraphicsItem* _root; ///< this is the parent of all items in the graph
     QGraphicsItem* _nodeRoot; ///< this is the parent of all nodes
-    QGraphicsTextItem* _cacheSizeText;
+    QGraphicsSimpleTextItem* _cacheSizeText;
+    bool cacheSizeHidden;
     QTimer _refreshCacheTextTimer;
     Navigator* _navigator;
     QUndoStack* _undoStack;
@@ -223,7 +196,7 @@ struct NodeGraphPrivate
     
     std::map<NodeGuiPtr,NodeGuiList> _nodesWithinBDAtPenDown;
     
-    QGraphicsRectItem* _selectionRect;
+    QRectF _selectionRect;
     bool _bendPointsVisible;
     bool _knobLinksVisible;
     double _accumDelta;
@@ -234,6 +207,11 @@ struct NodeGraphPrivate
     ViewerTab* lastSelectedViewer;
     
     QPixmap unlockIcon;
+    
+    ///True when the graph is rendered from the getFullSceneScreenShot() function
+    bool isDoingPreviewRender;
+    
+    QTimer autoScrollTimer;
     
     NodeGraphPrivate(NodeGraph* p,
                      const boost::shared_ptr<NodeCollection>& group);

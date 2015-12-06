@@ -53,7 +53,7 @@ TrackerNode::getPluginLabel() const
 }
 
 std::string
-TrackerNode::getDescription() const
+TrackerNode::getPluginDescription() const
 {
     return "Track a 2D point using LibMV from the Blender open-source software.";
 }

@@ -54,7 +54,7 @@ struct RotoPaintPrivate
 };
 
 std::string
-RotoPaint::getDescription() const
+RotoPaint::getPluginDescription() const
 {
     return "RotoPaint is a vector based free-hand drawing node that helps for tasks such as rotoscoping, matting, etc...";
 }
@@ -102,7 +102,7 @@ RotoNode::getPluginLabel() const
 }
 
 std::string
-RotoNode::getDescription() const
+RotoNode::getPluginDescription() const
 {
     return "Create masks and shapes";
 }
@@ -177,8 +177,8 @@ RotoPaint::initializeKnobs()
     
     boost::shared_ptr<KnobBool> premultKnob = Natron::createKnob<KnobBool>(this, "Premultiply", 1, false);
     premultKnob->setName("premultiply");
-    premultKnob->setHintToolTip("When checked, the red, green and blue channels in output of this node are premultiplied by the alpha mask "
-                                "produced by the shapes and strokes. This will result in the pixels outside of the shapes and paint strokes "
+    premultKnob->setHintToolTip("When checked, the red, green and blue channels in output of this node are premultiplied by the alpha channel."
+                                " This will result in the pixels outside of the shapes and paint strokes "
                                 "being black and transparant.");
     premultKnob->setDefaultValue(false);
     premultKnob->setAnimationEnabled(false);
@@ -394,10 +394,8 @@ RotoPaint::render(const RenderActionArgs& args)
             }
         }
         
-        const boost::shared_ptr<RotoDrawableItem>& firstStrokeItem = items.back();
-        assert(firstStrokeItem);
-        boost::shared_ptr<Node> bottomMerge = firstStrokeItem->getMergeNode();
-                
+        boost::shared_ptr<Node> bottomMerge = roto->getRotoPaintBottomMergeNode();
+        
         
         RenderingFlagSetter flagIsRendering(bottomMerge.get());
 

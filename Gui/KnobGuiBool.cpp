@@ -109,7 +109,7 @@ void
 KnobGuiBool::createWidget(QHBoxLayout* layout)
 {
     _checkBox = new Bool_CheckBox( layout->parentWidget() );
-    onLabelChanged();
+    onLabelChangedInternal();
     //_checkBox->setFixedSize(NATRON_MEDIUM_BUTTON_SIZE, NATRON_MEDIUM_BUTTON_SIZE);
     QObject::connect( _checkBox, SIGNAL( clicked(bool) ), this, SLOT( onCheckBoxStateChanged(bool) ) );
     QObject::connect( this, SIGNAL( labelClicked(bool) ), this, SLOT( onLabelClicked(bool) ) );
@@ -164,9 +164,9 @@ KnobGuiBool::reflectAnimationLevel(int /*dimension*/,
 }
 
 void
-KnobGuiBool::onLabelChanged()
+KnobGuiBool::onLabelChangedInternal()
 {
-    const std::string& label = _knob.lock()->getDescription();
+    const std::string& label = _knob.lock()->getLabel();
     if (label == "R" || label == "r" || label == "red") {
         QColor color;
         color.setRgbF(0.851643,0.196936,0.196936);
@@ -191,6 +191,9 @@ KnobGuiBool::onLabelChanged()
 void
 KnobGuiBool::onLabelClicked(bool b)
 {
+    if (_checkBox->getReadOnly()) {
+        return;
+    }
     _checkBox->setChecked(b);
     pushUndoCommand( new KnobUndoCommand<bool>(this,_knob.lock()->getValue(0),b, 0, false) );
 }
@@ -220,14 +223,14 @@ KnobGuiBool::setEnabled()
 
     bool b = knob->isEnabled(0)  && knob->getExpression(0).empty();
 
-    _checkBox->setEnabled(b);
+    _checkBox->setReadOnly(!b);
 }
 
 void
 KnobGuiBool::setReadOnly(bool readOnly,
                           int /*dimension*/)
 {
-    _checkBox->setEnabled(!readOnly);
+    _checkBox->setReadOnly(readOnly);
 }
 
 void
@@ -248,7 +251,7 @@ KnobGuiBool::reflectExpressionState(int /*dimension*/,
 {
     bool isEnabled = _knob.lock()->isEnabled(0);
     _checkBox->setAnimation(3);
-    _checkBox->setEnabled(!hasExpr && isEnabled);
+    _checkBox->setReadOnly(hasExpr || !isEnabled);
 }
 
 void

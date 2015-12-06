@@ -92,9 +92,11 @@ SOURCES += \
     DopeSheetEditorUndoRedo.cpp \
     DopeSheetHierarchyView.cpp \
     DopeSheetEditor.cpp \
+    DotGui.cpp \
     Edge.cpp \
     EditExpressionDialog.cpp \
     EditScriptDialog.cpp \
+    ExportGroupTemplateDialog.cpp \
     FloatingWidget.cpp \
     QtEnumConvert.cpp \
     Gui.cpp \
@@ -156,6 +158,7 @@ SOURCES += \
     NodeGraph45.cpp \
     NodeGraphPrivate.cpp \
     NodeGraphPrivate10.cpp \
+    NodeGraphTextItem.cpp \
     NodeGraphUndoRedo.cpp \
     NodeGui.cpp \
     NodeGuiSerialization.cpp \
@@ -184,6 +187,7 @@ SOURCES += \
     SerializableWindow.cpp \
     ShortCutEditor.cpp \
     SpinBox.cpp \
+    SpinBoxValidator.cpp \
     SplashScreen.cpp \
     Splitter.cpp \
     TabGroup.cpp \
@@ -243,19 +247,22 @@ HEADERS += \
     DopeSheetEditorUndoRedo.h \
     DopeSheetHierarchyView.h \
     DopeSheetEditor.h \
+    DotGui.h \
     Edge.h \
     EditExpressionDialog.h \
     EditScriptDialog.h \
+    ExportGroupTemplateDialog.h \
     FileTypeMainWindow_win.h \
     FloatingWidget.h \
     QtEnumConvert.h \
     GroupBoxLabel.h \
     Gui.h \
-    GuiDefines.h \
     GuiApplicationManager.h \
     GuiApplicationManagerPrivate.h \
     GuiAppInstance.h \
     GuiAppWrapper.h \
+    GuiDefines.h \
+    GuiFwd.h \
     GuiMacros.h \
     GuiPrivate.h \
     GlobalGuiWrapper.h \
@@ -290,6 +297,7 @@ HEADERS += \
     NodeCreationDialog.h \
     NodeGraph.h \
     NodeGraphPrivate.h \
+    NodeGraphTextItem.h \
     NodeGraphUndoRedo.h \
     NodeGui.h \
     NodeGuiSerialization.h \
@@ -320,6 +328,7 @@ HEADERS += \
     SerializableWindow.h \
     ShortCutEditor.h \
     SpinBox.h \
+    SpinBoxValidator.h \
     SplashScreen.h \
     Splitter.h \
     TabGroup.h \

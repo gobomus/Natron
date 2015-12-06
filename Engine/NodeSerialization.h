@@ -63,7 +63,8 @@ GCC_DIAG_ON(unused-parameter)
 #define NODE_SERIALIZATION_INTRODUCES_PYTHON_MODULE_VERSION 11
 #define NODE_SERIALIZATION_INTRODUCES_CACHE_ID 12
 #define NODE_SERIALIZATION_SERIALIZE_PYTHON_MODULE_ALWAYS 13
-#define NODE_SERIALIZATION_INTRODUCES_TRACKER_CONTEXT 14
+#define NODE_SERIALIZATION_SERIALIZE_PAGE_INDEX 14
+#define NODE_SERIALIZATION_INTRODUCES_TRACKER_CONTEXT 15
 #define NODE_SERIALIZATION_CURRENT_VERSION NODE_SERIALIZATION_INTRODUCES_TRACKER_CONTEXT
 
 
@@ -111,9 +112,19 @@ public:
         return _nodeLabel;
     }
     
+    void setNodeLabel(const std::string& s)
+    {
+        _nodeLabel = s;
+    }
+    
     const std::string & getNodeScriptName() const
     {
         return _nodeScriptName;
+    }
+    
+    void setNodeScriptName(const std::string &s)
+    {
+        _nodeScriptName = s;
     }
     
     const std::string & getCacheID() const
@@ -208,6 +219,11 @@ public:
     {
         return _multiInstanceParentName;
     }
+    
+    const std::list<std::string>& getPagesOrdered() const
+    {
+        return _pagesIndexes;
+    }
 
     const std::list<boost::shared_ptr<GroupKnobSerialization> >& getUserPages() const
     {
@@ -244,6 +260,7 @@ private:
     boost::shared_ptr<Natron::Node> _node;
     std::string _multiInstanceParentName;
     std::list<boost::shared_ptr<GroupKnobSerialization> > _userPages;
+    std::list<std::string> _pagesIndexes;
     
     ///If this node is a group or a multi-instance, this is the children
     std::list< boost::shared_ptr<NodeSerialization> > _children;
@@ -292,6 +309,12 @@ private:
             ar & boost::serialization::make_nvp("item",**it);
         }
        
+        int pageSizes = (int)_pagesIndexes.size();
+        ar & boost::serialization::make_nvp("PagesCount",pageSizes);
+        for (std::list<std::string>::const_iterator it = _pagesIndexes.begin(); it!= _pagesIndexes.end(); ++it) {
+            ar & boost::serialization::make_nvp("name",*it);
+        }
+        
         int nodesCount = (int)_children.size();
         ar & boost::serialization::make_nvp("Children",nodesCount);
         
@@ -390,6 +413,17 @@ private:
                 boost::shared_ptr<GroupKnobSerialization> s(new GroupKnobSerialization());
                 ar & boost::serialization::make_nvp("item",*s);
                 _userPages.push_back(s);
+            }
+            if (version >= NODE_SERIALIZATION_SERIALIZE_PAGE_INDEX) {
+                int count;
+                ar & boost::serialization::make_nvp("PagesCount",count);
+                for (int i = 0; i < count; ++i) {
+                    std::string name;
+                    ar & boost::serialization::make_nvp("name",name);
+                    _pagesIndexes.push_back(name);
+                }
+            } else {
+                _pagesIndexes.push_back(NATRON_USER_MANAGED_KNOBS_PAGE);
             }
         }
         

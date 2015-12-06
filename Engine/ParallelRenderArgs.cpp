@@ -29,6 +29,7 @@
 #include "Engine/EffectInstance.h"
 #include "Engine/Image.h"
 #include "Engine/Node.h"
+#include "Engine/NodeGroup.h"
 #include "Engine/RotoContext.h"
 #include "Engine/RotoDrawableItem.h"
 
@@ -278,11 +279,13 @@ Natron::EffectInstance::RenderRoIRetCode EffectInstance::treeRecurseFunctor(bool
                                 }
                                 
                                 RectI inputRoIPixelCoords;
-                                roi.toPixelEnclosing(useScaleOneInputs ? 0 : originalMipMapLevel, inputPar, &inputRoIPixelCoords);
+                                const unsigned int upstreamMipMapLevel = useScaleOneInputs ? 0 : originalMipMapLevel;
+                                const RenderScale& upstreamScale = useScaleOneInputs ? scaleOne : scale;
+                                roi.toPixelEnclosing(upstreamMipMapLevel, inputPar, &inputRoIPixelCoords);
                                 
                                 EffectInstance::RenderRoIArgs inArgs(f, //< time
-                                                                     useScaleOneInputs ? scaleOne : scale, //< scale
-                                                                     useScaleOneInputs ? 0 : originalMipMapLevel, //< mipmapLevel (redundant with the scale)
+                                                                     upstreamScale, //< scale
+                                                                     upstreamMipMapLevel, //< mipmapLevel (redundant with the scale)
                                                                      viewIt->first, //< view
                                                                      byPassCache,
                                                                      inputRoIPixelCoords, //< roi in pixel coordinates
@@ -391,12 +394,8 @@ Natron::StatusEnum Natron::EffectInstance::getInputsRoIsFunctor(bool useTransfor
         
         ///Set up global data specific for this frame view, this is the first time it has been requested so far
         
-        {
-            FrameViewRequest tmpFvRequest;
-            std::pair<NodeFrameViewRequestData::iterator,bool> ret = nodeRequest->frames.insert(std::make_pair(frameView, tmpFvRequest));
-            assert(ret.second);
-            fvRequest = &ret.first->second;
-        }
+        
+        fvRequest = &nodeRequest->frames[frameView];
         
         ///Get the RoD
         Natron::StatusEnum stat = effect->getRegionOfDefinition_public(nodeRequest->nodeHash, time, nodeRequest->mappedScale, view, &fvRequest->globalData.rod, &fvRequest->globalData.isProjectFormat);
@@ -573,14 +572,15 @@ EffectInstance::computeRequestPass(double time,
 const FrameViewRequest*
 NodeFrameRequest::getFrameViewRequest(double time, int view) const
 {
-    FrameViewPair p;
-    p.time = time;
-    p.view = view;
-    NodeFrameViewRequestData::const_iterator found = frames.find(p);
-    if (found == frames.end()) {
-        return 0;
+
+    for (NodeFrameViewRequestData::const_iterator it = frames.begin(); it != frames.end();++it) {
+        if (it->first.time == time) {
+            if (it->first.view == -1 || it->first.view == view) {
+                return &it->second;
+            }
+        }
     }
-    return &found->second;
+    return 0;
 }
 
 
@@ -595,4 +595,191 @@ NodeFrameRequest::getFrameViewCanonicalRoI(double time, int view, RectD* roi) co
     }
     *roi = fv->finalData.finalRoi;
     return true;
+}
+
+
+/**
+ * @brief Builds a list with all nodes upstream of the given node (including this node) and all its dependencies through expressions as well (which
+ * also may be recursive)
+ **/
+static void getAllUpstreamNodesRecursiveWithDependencies(const boost::shared_ptr<Natron::Node>& node, std::list<boost::shared_ptr<Natron::Node> >& finalNodes)
+{
+    if (std::find(finalNodes.begin(), finalNodes.end(), node) != finalNodes.end()) {
+        return;
+    }
+    
+    finalNodes.push_back(node);
+    
+    node->getLiveInstance()->getAllExpressionDependenciesRecursive(finalNodes);
+   
+    if (!node->isNodeCreated()) {
+        return;
+    }
+    int maxInputs = node->getMaxInputCount();
+    for (int i = 0; i < maxInputs; ++i) {
+        boost::shared_ptr<Natron::Node> inputNode = node->getInput(i);
+        if (inputNode) {
+            getAllUpstreamNodesRecursiveWithDependencies(inputNode, finalNodes);
+        }
+    }
+    
+}
+
+
+ParallelRenderArgsSetter::ParallelRenderArgsSetter(double time,
+                                                   int view,
+                                                   bool isRenderUserInteraction,
+                                                   bool isSequential,
+                                                   bool canAbort,
+                                                   U64 renderAge,
+                                                   const boost::shared_ptr<Natron::Node>& treeRoot,
+                                                   const FrameRequestMap* request,
+                                                   int textureIndex,
+                                                   const TimeLine* timeline,
+                                                   const boost::shared_ptr<Natron::Node>& activeRotoPaintNode,
+                                                   bool isAnalysis,
+                                                   bool draftMode,
+                                                   bool viewerProgressReportEnabled,
+                                                   const boost::shared_ptr<RenderStats>& stats)
+:  argsMap()
+{
+    assert(treeRoot);
+    
+    bool doNanHandling = appPTR->getCurrentSettings()->isNaNHandlingEnabled();
+    
+    getAllUpstreamNodesRecursiveWithDependencies(treeRoot, nodes);
+    
+    for (std::list<boost::shared_ptr<Natron::Node> >::iterator it = nodes.begin(); it != nodes.end(); ++it) {
+        assert(*it);
+        
+        Natron::EffectInstance* liveInstance = (*it)->getLiveInstance();
+        assert(liveInstance);
+        bool duringPaintStrokeCreation = activeRotoPaintNode && (*it)->isDuringPaintStrokeCreation();
+        Natron::RenderSafetyEnum safety = (*it)->getCurrentRenderThreadSafety();
+        
+        std::list<boost::shared_ptr<Natron::Node> > rotoPaintNodes;
+        boost::shared_ptr<RotoContext> roto = (*it)->getRotoContext();
+        if (roto) {
+            roto->getRotoPaintTreeNodes(&rotoPaintNodes);
+        }
+        
+        {
+            U64 nodeHash = 0;
+            bool hashSet = false;
+            boost::shared_ptr<NodeFrameRequest> nodeRequest;
+            if (request) {
+                FrameRequestMap::const_iterator foundRequest = request->find(*it);
+                if (foundRequest != request->end()) {
+                    nodeRequest = foundRequest->second;
+                    nodeHash = nodeRequest->nodeHash;
+                    hashSet = true;
+                }
+            }
+            if (!hashSet) {
+                nodeHash = (*it)->getHashValue();
+            }
+            
+            liveInstance->setParallelRenderArgsTLS(time, view, isRenderUserInteraction, isSequential, canAbort, nodeHash,
+                                                   renderAge,treeRoot, nodeRequest,textureIndex, timeline, isAnalysis,duringPaintStrokeCreation, rotoPaintNodes, safety, doNanHandling, draftMode, viewerProgressReportEnabled, stats);
+        }
+        for (std::list<boost::shared_ptr<Natron::Node> >::iterator it2 = rotoPaintNodes.begin(); it2 != rotoPaintNodes.end(); ++it2) {
+            
+            boost::shared_ptr<NodeFrameRequest> childRequest;
+            U64 nodeHash = 0;
+            bool hashSet = false;
+            if (request) {
+                FrameRequestMap::const_iterator foundRequest = request->find(*it2);
+                if (foundRequest != request->end()) {
+                    childRequest = foundRequest->second;
+                    nodeHash = childRequest->nodeHash;
+                    hashSet = true;
+                }
+            }
+            if (!hashSet) {
+                nodeHash = (*it2)->getHashValue();
+            }
+            
+            (*it2)->getLiveInstance()->setParallelRenderArgsTLS(time, view, isRenderUserInteraction, isSequential, canAbort, nodeHash, renderAge, treeRoot, childRequest, textureIndex, timeline, isAnalysis, activeRotoPaintNode && (*it2)->isDuringPaintStrokeCreation(), NodeList(), (*it2)->getCurrentRenderThreadSafety(), doNanHandling, draftMode, viewerProgressReportEnabled,stats);
+        }
+        
+        if ((*it)->isMultiInstance()) {
+            
+            ///If the node has children, set the thread-local storage on them too, even if they do not render, it can be useful for expressions
+            ///on parameters.
+            std::list<boost::shared_ptr<Natron::Node> > children;
+            (*it)->getChildrenMultiInstance(&children);
+            for (std::list<boost::shared_ptr<Natron::Node> >::iterator it2 = children.begin(); it2!=children.end(); ++it2) {
+                
+                boost::shared_ptr<NodeFrameRequest> childRequest;
+                U64 nodeHash = 0;
+                bool hashSet = false;
+                if (request) {
+                    FrameRequestMap::const_iterator foundRequest = request->find(*it2);
+                    if (foundRequest != request->end()) {
+                        childRequest = foundRequest->second;
+                        nodeHash = childRequest->nodeHash;
+                        hashSet = true;
+                    }
+                }
+                if (!hashSet) {
+                    nodeHash = (*it2)->getHashValue();
+                }
+                
+                assert(*it2);
+                Natron::EffectInstance* childLiveInstance = (*it2)->getLiveInstance();
+                assert(childLiveInstance);
+                Natron::RenderSafetyEnum childSafety = (*it2)->getCurrentRenderThreadSafety();
+                childLiveInstance->setParallelRenderArgsTLS(time, view, isRenderUserInteraction, isSequential, canAbort, nodeHash, renderAge,treeRoot, childRequest, textureIndex, timeline, isAnalysis, false, std::list<boost::shared_ptr<Natron::Node> >(), childSafety, doNanHandling, draftMode, viewerProgressReportEnabled,stats);
+                
+            }
+        }
+        
+        
+       /* NodeGroup* isGrp = dynamic_cast<NodeGroup*>((*it)->getLiveInstance());
+        if (isGrp) {
+            isGrp->setParallelRenderArgs(time, view, isRenderUserInteraction, isSequential, canAbort,  renderAge, treeRoot, request, textureIndex, timeline, activeRotoPaintNode, isAnalysis, draftMode, viewerProgressReportEnabled,stats);
+        }*/
+        
+    }
+    
+}
+
+ParallelRenderArgsSetter::ParallelRenderArgsSetter(const std::map<boost::shared_ptr<Natron::Node>,ParallelRenderArgs >& args)
+: argsMap(args)
+{
+    for (std::map<boost::shared_ptr<Natron::Node>,ParallelRenderArgs >::iterator it = argsMap.begin(); it != argsMap.end(); ++it) {
+        it->first->getLiveInstance()->setParallelRenderArgsTLS(it->second);
+    }
+}
+
+ParallelRenderArgsSetter::~ParallelRenderArgsSetter()
+{
+    
+    for (NodeList::iterator it = nodes.begin(); it != nodes.end(); ++it) {
+        if (!(*it) || !(*it)->getLiveInstance()) {
+            continue;
+        }
+        (*it)->getLiveInstance()->invalidateParallelRenderArgsTLS();
+        
+        if ((*it)->isMultiInstance()) {
+            
+            ///If the node has children, set the thread-local storage on them too, even if they do not render, it can be useful for expressions
+            ///on parameters.
+            NodeList children;
+            (*it)->getChildrenMultiInstance(&children);
+            for (NodeList::iterator it2 = children.begin(); it2!=children.end(); ++it2) {
+                (*it2)->getLiveInstance()->invalidateParallelRenderArgsTLS();
+                
+            }
+        }
+
+       /* NodeGroup* isGrp = dynamic_cast<NodeGroup*>((*it)->getLiveInstance());
+        if (isGrp) {
+            isGrp->invalidateParallelRenderArgs();
+        }*/
+    }
+    
+    for (std::map<boost::shared_ptr<Natron::Node>,ParallelRenderArgs >::iterator it = argsMap.begin(); it != argsMap.end(); ++it) {
+        it->first->getLiveInstance()->invalidateParallelRenderArgsTLS();
+    }
 }

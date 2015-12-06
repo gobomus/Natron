@@ -815,7 +815,7 @@ Bezier::addControlPoint(double x,
         _imp->setMustCopyGuiBezier(true);
     }
 
-    int keyframeTime;
+    double keyframeTime;
     ///if the curve is empty make a new keyframe at the current timeline's time
     ///otherwise re-use the time at which the keyframe was set on the first control point
     
@@ -901,7 +901,7 @@ Bezier::addControlPointAfterIndex(int index,
         
         
         ///we set the new control point position to be in the exact position the curve would have at each keyframe
-        std::set<int> existingKeyframes;
+        std::set<double> existingKeyframes;
         _imp->getKeyframeTimes(useGuiCurve,&existingKeyframes);
         
         BezierCPs::const_iterator prev,next,prevF,nextF;
@@ -944,7 +944,7 @@ Bezier::addControlPointAfterIndex(int index,
         }
         
         
-        for (std::set<int>::iterator it = existingKeyframes.begin(); it != existingKeyframes.end(); ++it) {
+        for (std::set<double>::iterator it = existingKeyframes.begin(); it != existingKeyframes.end(); ++it) {
             Point p0,p1,p2,p3;
             (*prev)->getPositionAtTime(useGuiCurve,*it, &p0.x, &p0.y);
             (*prev)->getRightBezierPointAtTime(useGuiCurve,*it, &p1.x, &p1.y);
@@ -1042,6 +1042,7 @@ Bezier::addControlPointAfterIndex(int index,
             setKeyframe(currentTime);
         }
         if (!useGuiCurve) {
+            QMutexLocker l(&itemMutex);
             copyInternalPointsToGuiPoints();
         }
     }
@@ -1325,9 +1326,9 @@ Bezier::movePointByIndexInternal(bool useGuiCurve,
         }
         
         if (rippleEdit) {
-            std::set<int> keyframes;
+            std::set<double> keyframes;
             _imp->getKeyframeTimes(useGuiCurve,&keyframes);
-            for (std::set<int>::iterator it2 = keyframes.begin(); it2 != keyframes.end(); ++it2) {
+            for (std::set<double>::iterator it2 = keyframes.begin(); it2 != keyframes.end(); ++it2) {
                 if (*it2 == time) {
                     continue;
                 }
@@ -1524,16 +1525,15 @@ Bezier::moveBezierPointInternal(BezierCP* cpParam,
             assert( cpIt != _imp->points.end() );
             cp = cpIt->get();
             assert(cp);
-            
-            if (useFeatherPoints()) {
-                BezierCPs::iterator fpIt = _imp->featherPoints.begin();
-                std::advance(fpIt, index);
-                assert(fpIt != _imp->featherPoints.end());
-                fp = fpIt->get();
-                assert(fp);
-            }
         } else {
             cp = cpParam;
+        }
+        if (useFeatherPoints()) {
+            BezierCPs::iterator fpIt = _imp->featherPoints.begin();
+            std::advance(fpIt, index);
+            assert(fpIt != _imp->featherPoints.end());
+            fp = fpIt->get();
+            assert(fp);
         }
         
         bool isOnKeyframe = false;
@@ -1630,9 +1630,9 @@ Bezier::moveBezierPointInternal(BezierCP* cpParam,
         }
         
         if (rippleEdit) {
-            std::set<int> keyframes;
+            std::set<double> keyframes;
             _imp->getKeyframeTimes(useGuiCurve,&keyframes);
-            for (std::set<int>::iterator it2 = keyframes.begin(); it2 != keyframes.end(); ++it2) {
+            for (std::set<double>::iterator it2 = keyframes.begin(); it2 != keyframes.end(); ++it2) {
                 if (*it2 == time) {
                     continue;
                 }
@@ -1772,9 +1772,9 @@ Bezier::setPointAtIndexInternal(bool setLeft,bool setRight,bool setPoint,bool fe
         }
         
         if (rippleEdit) {
-            std::set<int> keyframes;
+            std::set<double> keyframes;
             _imp->getKeyframeTimes(useGuiCurve,&keyframes);
-            for (std::set<int>::iterator it2 = keyframes.begin(); it2 != keyframes.end(); ++it2) {
+            for (std::set<double>::iterator it2 = keyframes.begin(); it2 != keyframes.end(); ++it2) {
                 if (setPoint) {
                     (*fp)->setPositionAtTime(useGuiCurve,*it2, x, y);
                     if (featherAndCp) {
@@ -2082,7 +2082,7 @@ Bezier::removeKeyframe(double time)
             }
         }
         
-        std::map<int,bool>::iterator found = _imp->isClockwiseOriented.find(time);
+        std::map<double,bool>::iterator found = _imp->isClockwiseOriented.find(time);
         if (found != _imp->isClockwiseOriented.end()) {
             _imp->isClockwiseOriented.erase(found);
         }
@@ -2127,10 +2127,12 @@ Bezier::removeAnimation()
 }
 
 void
-Bezier::moveKeyframe(int oldTime,int newTime)
+Bezier::moveKeyframe(double oldTime,double newTime)
 {
     assert(QThread::currentThread() == qApp->thread());
-    
+    if (oldTime == newTime) {
+        return;
+    }
     bool useFeather = useFeatherPoints();
     BezierCPs::iterator fp = _imp->featherPoints.begin();
     for (BezierCPs::iterator it = _imp->points.begin(); it != _imp->points.end(); ++it) {
@@ -2163,7 +2165,7 @@ Bezier::moveKeyframe(int oldTime,int newTime)
         QMutexLocker k(&itemMutex);
         bool foundOld;
         bool oldValue;
-        std::map<int,bool>::iterator foundOldIt = _imp->isClockwiseOriented.find(oldTime);
+        std::map<double,bool>::iterator foundOldIt = _imp->isClockwiseOriented.find(oldTime);
         foundOld = foundOldIt != _imp->isClockwiseOriented.end();
         if (foundOld) {
             oldValue = foundOldIt->first;
@@ -2308,36 +2310,96 @@ Bezier::evaluateFeatherPointsAtTime_DeCasteljau(bool useGuiPoints,
     } // for(it)
 }
 
+void
+Bezier::getMotionBlurSettings(const double time,
+                           double* startTime,
+                           double* endTime,
+                           double* timeStep) const
+{
+    *startTime = time, *timeStep = 1., *endTime = time;
+#ifdef NATRON_ROTO_ENABLE_MOTION_BLUR
+    
+    double motionBlurAmnt = getMotionBlurAmountKnob()->getValueAtTime(time);
+    if (isOpenBezier() || motionBlurAmnt == 0) {
+        return;
+    }
+    int nbSamples = std::floor(motionBlurAmnt * 10 + 0.5);
+    double shutterInterval = getShutterKnob()->getValueAtTime(time);
+    if (shutterInterval == 0) {
+        return;
+    }
+    int shutterType_i = getShutterTypeKnob()->getValueAtTime(time);
+    if (nbSamples != 0) {
+        *timeStep = shutterInterval / nbSamples;
+    }
+    if (shutterType_i == 0) { // centered
+        *startTime = time - shutterInterval / 2.;
+        *endTime = time + shutterInterval / 2.;
+    } else if (shutterType_i == 1) {// start
+        *startTime = time;
+        *endTime = time + shutterInterval;
+    } else if (shutterType_i == 2) { // end
+        *startTime = time - shutterInterval;
+        *endTime = time;
+    } else if (shutterType_i == 3) { // custom
+        *startTime = time + getShutterOffsetKnob()->getValueAtTime(time);
+        *endTime = *startTime + shutterInterval;
+    } else {
+        assert(false);
+    }
+    
+    
+#endif
+}
+
 RectD
 Bezier::getBoundingBox(double time) const
 {
+    double startTime = time, mbFrameStep = 1., endTime = time;
+#ifdef NATRON_ROTO_ENABLE_MOTION_BLUR
+    int mbType_i = getContext()->getMotionBlurTypeKnob()->getValue();
+    bool applyPerShapeMotionBlur = mbType_i == 0;
+    if (applyPerShapeMotionBlur) {
+        getMotionBlurSettings(time, &startTime, &endTime, &mbFrameStep);
+    }
+#endif
     
-    RectD bbox; // a very empty bbox
-    bbox.setupInfinity();
-    
-    Transform::Matrix3x3 transform;
-    getTransformAtTime(time, &transform);
-    
-    QMutexLocker l(&itemMutex);
-    bezierSegmentListBboxUpdate(false,_imp->points, _imp->finished, _imp->isOpenBezier, time, 0, transform , &bbox);
-    
-    
-    if (useFeatherPoints() && !_imp->isOpenBezier) {
-        bezierSegmentListBboxUpdate(false,_imp->featherPoints, _imp->finished, _imp->isOpenBezier, time, 0, transform, &bbox);
-        // EDIT: Partial fix, just pad the BBOX by the feather distance. This might not be accurate but gives at least something
-        // enclosing the real bbox and close enough
-        double featherDistance = getFeatherDistance(time);
-        bbox.x1 -= featherDistance;
-        bbox.x2 += featherDistance;
-        bbox.y1 -= featherDistance;
-        bbox.y2 += featherDistance;
-    } else if (_imp->isOpenBezier) {
-        double brushSize = getBrushSizeKnob()->getValueAtTime(time);
-        double halfBrushSize = brushSize / 2. + 1;
-        bbox.x1 -= halfBrushSize;
-        bbox.x2 += halfBrushSize;
-        bbox.y1 -= halfBrushSize;
-        bbox.y2 += halfBrushSize;
+    RectD bbox;
+    bool bboxSet = false;
+    for (double t = startTime; t <= endTime; t+= mbFrameStep) {
+        RectD subBbox; // a very empty bbox
+        subBbox.setupInfinity();
+        
+        Transform::Matrix3x3 transform;
+        getTransformAtTime(t, &transform);
+        
+        QMutexLocker l(&itemMutex);
+        bezierSegmentListBboxUpdate(false,_imp->points, _imp->finished, _imp->isOpenBezier, t, 0, transform , &subBbox);
+        
+        
+        if (useFeatherPoints() && !_imp->isOpenBezier) {
+            bezierSegmentListBboxUpdate(false,_imp->featherPoints, _imp->finished, _imp->isOpenBezier, t, 0, transform, &subBbox);
+            // EDIT: Partial fix, just pad the BBOX by the feather distance. This might not be accurate but gives at least something
+            // enclosing the real bbox and close enough
+            double featherDistance = getFeatherDistance(t);
+            subBbox.x1 -= featherDistance;
+            subBbox.x2 += featherDistance;
+            subBbox.y1 -= featherDistance;
+            subBbox.y2 += featherDistance;
+        } else if (_imp->isOpenBezier) {
+            double brushSize = getBrushSizeKnob()->getValueAtTime(t);
+            double halfBrushSize = brushSize / 2. + 1;
+            subBbox.x1 -= halfBrushSize;
+            subBbox.x2 += halfBrushSize;
+            subBbox.y1 -= halfBrushSize;
+            subBbox.y2 += halfBrushSize;
+        }
+        if (!bboxSet) {
+            bboxSet = true;
+            bbox = subBbox;
+        } else {
+            bbox.merge(subBbox);
+        }
     }
     return bbox;
 }
@@ -2780,7 +2842,7 @@ Bezier::load(const RotoItemSerialization & obj)
 }
 
 void
-Bezier::getKeyframeTimes(std::set<int> *times) const
+Bezier::getKeyframeTimes(std::set<double> *times) const
 {
     QMutexLocker l(&itemMutex);
 
@@ -2788,7 +2850,7 @@ Bezier::getKeyframeTimes(std::set<int> *times) const
 }
 
 void
-Bezier::getKeyframeTimesAndInterpolation(std::list<std::pair<int,Natron::KeyframeTypeEnum> > *keys) const
+Bezier::getKeyframeTimesAndInterpolation(std::list<std::pair<double,Natron::KeyframeTypeEnum> > *keys) const
 {
     QMutexLocker l(&itemMutex);
     if ( _imp->points.empty() ) {
@@ -2800,11 +2862,11 @@ Bezier::getKeyframeTimesAndInterpolation(std::list<std::pair<int,Natron::Keyfram
 int
 Bezier::getPreviousKeyframeTime(double time) const
 {
-    std::set<int> times;
+    std::set<double> times;
     QMutexLocker l(&itemMutex);
 
     _imp->getKeyframeTimes(true,&times);
-    for (std::set<int>::reverse_iterator it = times.rbegin(); it != times.rend(); ++it) {
+    for (std::set<double>::reverse_iterator it = times.rbegin(); it != times.rend(); ++it) {
         if (*it < time) {
             return *it;
         }
@@ -2816,11 +2878,11 @@ Bezier::getPreviousKeyframeTime(double time) const
 int
 Bezier::getNextKeyframeTime(double time) const
 {
-    std::set<int> times;
+    std::set<double> times;
     QMutexLocker l(&itemMutex);
 
     _imp->getKeyframeTimes(true,&times);
-    for (std::set<int>::iterator it = times.begin(); it != times.end(); ++it) {
+    for (std::set<double>::iterator it = times.begin(); it != times.end(); ++it) {
         if (*it > time) {
             return *it;
         }
@@ -2891,7 +2953,7 @@ Bezier::point_line_intersection(const Point &p1,
 bool
 Bezier::isFeatherPolygonClockwiseOrientedInternal(bool useGuiCurve,double time) const
 {
-    std::map<int,bool>::iterator it = _imp->isClockwiseOriented.find(time);
+    std::map<double,bool>::iterator it = _imp->isClockwiseOriented.find(time);
     if (it != _imp->isClockwiseOriented.end()) {
         return it->second;
     } else {
@@ -2953,14 +3015,14 @@ Bezier::refreshPolygonOrientation(bool useGuiCurve)
             return;
         }
     }
-    std::set<int> kfs;
+    std::set<double> kfs;
     getKeyframeTimes(&kfs);
     
     QMutexLocker k(&itemMutex);
     if (kfs.empty()) {
         computePolygonOrientation(useGuiCurve,0,true);
     } else {
-        for (std::set<int>::iterator it = kfs.begin(); it != kfs.end(); ++it) {
+        for (std::set<double>::iterator it = kfs.begin(); it != kfs.end(); ++it) {
             computePolygonOrientation(useGuiCurve,*it,false);
         }
     }

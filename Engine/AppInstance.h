@@ -36,10 +36,8 @@
 #include <QStringList>
 
 #include "Global/GlobalDefines.h"
+#include "Engine/RectD.h"
 #include "Engine/EngineFwd.h"
-
-class QFileInfo;
-class QMutex;
 
 struct AppInstancePrivate;
 
@@ -159,13 +157,14 @@ public:
     
     struct RenderRequest {
         QString writerName;
-        int firstFrame,lastFrame;
+        int firstFrame,lastFrame,frameStep;
     };
     
     struct RenderWork {
         Natron::OutputEffectInstance* writer;
         int firstFrame;
         int lastFrame;
+        int frameStep;
     };
     
     virtual void load(const CLArgs& cl);
@@ -261,6 +260,7 @@ public:
     virtual void notifyRenderProcessHandlerStarted(const QString & /*sequenceName*/,
                                                    int /*firstFrame*/,
                                                    int /*lastFrame*/,
+                                                   int /*frameStep*/,
                                                    const boost::shared_ptr<ProcessHandler> & /*process*/)
     {
     }
@@ -313,9 +313,11 @@ public:
     
   
     
-    void startWritersRendering(bool enableRenderStats,const std::list<RenderRequest>& writers);
-    void startWritersRendering(bool enableRenderStats,const std::list<RenderWork>& writers);
+    void startWritersRendering(bool enableRenderStats, bool doBlockingRender, const std::list<RenderRequest>& writers);
+    void startWritersRendering(bool enableRenderStats, bool doBlockingRender, const std::list<RenderWork>& writers);
 
+    void startRenderingBlockingFullSequence(bool enableRenderStats,const RenderWork& writerWork,bool renderInSeparateProcess,const QString& savePath);
+    
     virtual void startRenderingFullSequence(bool enableRenderStats,const RenderWork& writerWork,bool renderInSeparateProcess,const QString& savePath);
 
     virtual void clearViewersLastRenderedTexture() {}
@@ -331,6 +333,10 @@ public:
     bool wasProjectCreatedWithLowerCaseIDs() const;
     
     bool isCreatingPythonGroup() const;
+    
+    bool isCreatingNodeTree() const;
+    
+    void setIsCreatingNodeTree(bool b);
     
     virtual void appendToScriptEditor(const std::string& str);
     
@@ -369,8 +375,13 @@ public:
     
     virtual bool isDraftRenderEnabled() const { return false; }
     
-    virtual void setUserIsPainting(const boost::shared_ptr<Natron::Node>& /*rotopaintNode*/) {}
-    virtual boost::shared_ptr<Natron::Node> getIsUserPainting() const { return boost::shared_ptr<Natron::Node>(); }
+    virtual void setUserIsPainting(const boost::shared_ptr<Natron::Node>& /*rotopaintNode*/,
+                                   const boost::shared_ptr<RotoStrokeItem>& /*stroke*/,
+                                  bool /*isPainting*/) {}
+    
+    virtual void getActiveRotoDrawingStroke(boost::shared_ptr<Natron::Node>* /*node*/,
+                                            boost::shared_ptr<RotoStrokeItem>* /*stroke*/,
+                                            bool* /*isPainting*/) const { }
     
     virtual bool isRenderStatsActionChecked() const { return false; }
     
@@ -389,6 +400,22 @@ public:
     virtual AppInstance* newProject();
     
     virtual void* getOfxHostOSHandle() const { return NULL; }
+    
+    virtual void updateLastPaintStrokeData(int /*newAge*/,
+                                           const std::list<std::pair<Natron::Point,double> >& /*points*/,
+                                           const RectD& /*lastPointsBbox*/,
+                                           int /*strokeIndex*/) {}
+    
+    virtual void getLastPaintStrokePoints(std::list<std::list<std::pair<Natron::Point,double> > >* /*strokes*/, int* /*strokeIndex*/) const {}
+
+    virtual int getStrokeLastIndex() const { return -1; }
+    
+    virtual void getRenderStrokeData(RectD* /*lastStrokeMovementBbox*/, std::list<std::pair<Natron::Point,double> >* /*lastStrokeMovementPoints*/,
+                                     double */*distNextIn*/, boost::shared_ptr<Natron::Image>* /*strokeImage*/) const {}
+    
+    virtual void updateStrokeImage(const boost::shared_ptr<Natron::Image>& /*image*/, double /*distNextOut*/, bool /*setDistNextOut*/) {}
+    
+    virtual RectD getLastPaintStrokeBbox() const { return RectD(); }
     
 public Q_SLOTS:
     
@@ -412,12 +439,13 @@ Q_SIGNALS:
 
 protected:
     
-    virtual void onGroupCreationFinished(const boost::shared_ptr<Natron::Node>& node, bool requestedByLoad);
+    virtual void onGroupCreationFinished(const boost::shared_ptr<Natron::Node>& node, bool requestedByLoad, bool userEdited);
 
     virtual void createNodeGui(const boost::shared_ptr<Natron::Node>& /*node*/,
                                const boost::shared_ptr<Natron::Node>&  /*parentmultiinstance*/,
                                bool /*loadRequest*/,
                                bool /*autoConnect*/,
+                               bool /*userEdited*/,
                                double /*xPosHint*/,
                                double /*yPosHint*/,
                                bool /*pushUndoRedoCommand*/)
@@ -448,10 +476,27 @@ private:
     boost::shared_ptr<Natron::Node> createNodeFromPythonModule(Natron::Plugin* plugin,
                                                                const boost::shared_ptr<NodeCollection>& group,
                                                                bool requestedByLoad,
+                                                               bool userEdited,
                                                                const NodeSerialization & serialization);
     
     boost::scoped_ptr<AppInstancePrivate> _imp;
 };
 
+class CreatingNodeTreeFlag_RAII
+{
+    AppInstance* _app;
+public:
+    
+    CreatingNodeTreeFlag_RAII(AppInstance* app)
+    : _app(app)
+    {
+        app->setIsCreatingNodeTree(true);
+    }
+    
+    ~CreatingNodeTreeFlag_RAII()
+    {
+        _app->setIsCreatingNodeTree(false);
+    }
+};
 
 #endif // APPINSTANCE_H

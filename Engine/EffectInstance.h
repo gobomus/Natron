@@ -104,6 +104,7 @@ public:
 
 
     typedef std::map<Natron::ImageComponents, boost::weak_ptr<Natron::Node> > ComponentsAvailableMap;
+    typedef std::list<std::pair<Natron::ImageComponents, boost::weak_ptr<Natron::Node> > > ComponentsAvailableList;
     typedef std::map<int, std::vector<Natron::ImageComponents> > ComponentsNeededMap;
     typedef std::map<int, std::list< boost::shared_ptr<Natron::Image> > > InputImagesMap;
 
@@ -471,7 +472,7 @@ public:
      * @brief Must be implemented to give a desription of the effect that this node does. This is typically
      * what you'll see displayed when the user clicks the '?' button on the node's panel in the user interface.
      **/
-    virtual std::string getDescription() const WARN_UNUSED_RETURN = 0;
+    virtual std::string getPluginDescription() const WARN_UNUSED_RETURN = 0;
 
 
     /**
@@ -556,7 +557,7 @@ public:
      * @brief Sets render preferences for the rendering of a frame for the current thread.
      * This is thread local storage. This is NOT local to a call to renderRoI
      **/
-    void setParallelRenderArgsTLS(int time,
+    void setParallelRenderArgsTLS(double time,
                                   int view,
                                   bool isRenderUserInteraction,
                                   bool isSequential,
@@ -1278,7 +1279,7 @@ public:
                                       Natron::ImageComponents* planeBeingRendered,
                                       RectI* renderWindow) const;
 
-    bool getThreadLocalNeedeComponents(EffectInstance::ComponentsNeededMap* neededComps) const;
+    bool getThreadLocalNeededComponents(EffectInstance::ComponentsNeededMap* neededComps) const;
 
     /**
      * @brief Called when the associated node's hash has changed.
@@ -1779,19 +1780,19 @@ private:
                                                   const ParallelRenderArgs & frameArgs,
                                                   const RectToRender & rectToRender,
                                                   const std::map<boost::shared_ptr<Natron::Node>, ParallelRenderArgs > & frameTls,
-                                                  bool renderFullScaleThenDownscale,
-                                                  bool isSequentialRender,
-                                                  bool isRenderResponseToUserInteraction,
-                                                  int firstFrame, int lastFrame,
-                                                  int preferredInput,
-                                                  unsigned int mipMapLevel,
-                                                  unsigned int renderMappedMipMapLevel,
+                                                  const bool renderFullScaleThenDownscale,
+                                                  const bool isSequentialRender,
+                                                  const bool isRenderResponseToUserInteraction,
+                                                  const int firstFrame, const int lastFrame,
+                                                  const int preferredInput,
+                                                  const unsigned int mipMapLevel,
+                                                  const unsigned int renderMappedMipMapLevel,
                                                   const RectD & rod,
-                                                  double time,
-                                                  int view,
+                                                  const double time,
+                                                  const int view,
                                                   const double par,
-                                                  bool byPassCache,
-                                                  Natron::ImageBitDepthEnum outputClipPrefDepth,
+                                                  const bool byPassCache,
+                                                  const Natron::ImageBitDepthEnum outputClipPrefDepth,
                                                   const std::list<Natron::ImageComponents> & outputClipPrefsComps,
                                                   const ComponentsNeededMap & compsNeeded,
                                                   bool* processChannels,
@@ -1822,22 +1823,23 @@ private:
     RenderingFunctorRetEnum renderHandler(RenderArgs & args,
                                           const ParallelRenderArgs & frameArgs,
                                           const InputImagesMap & inputImages,
-                                          bool identity,
-                                          double identityTime,
+                                          const bool identity,
+                                          const double identityTime,
                                           Natron::EffectInstance* identityInput,
-                                          bool renderFullScaleThenDownscale,
-                                          bool isSequentialRender,
-                                          bool isRenderResponseToUserInteraction,
+                                          const unsigned int mipMapLevel,
+                                          const bool renderFullScaleThenDownscale,
+                                          const bool isSequentialRender,
+                                          const bool isRenderResponseToUserInteraction,
                                           const RectI & renderMappedRectToRender,
                                           const RectI & downscaledRectToRender,
-                                          bool byPassCache,
-                                          bool bitmapMarkedForRendering,
-                                          Natron::ImageBitDepthEnum outputClipPrefDepth,
+                                          const bool byPassCache,
+                                          const bool bitmapMarkedForRendering,
+                                          const Natron::ImageBitDepthEnum outputClipPrefDepth,
                                           const std::list<Natron::ImageComponents> & outputClipPrefsComps,
                                           bool* processChannels,
                                           const boost::shared_ptr<Natron::Image> & originalInputImage,
                                           const boost::shared_ptr<Natron::Image> & maskImage,
-                                          Natron::ImagePremultiplicationEnum originalImagePremultiplication,
+                                          const Natron::ImagePremultiplicationEnum originalImagePremultiplication,
                                           ImagePlanesToRender & planes);
 
     /**

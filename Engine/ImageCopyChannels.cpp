@@ -26,6 +26,8 @@
 
 #include <QDebug>
 
+//#define NATRON_COPY_CHANNELS_UNPREMULT
+
 using namespace Natron;
 
 template <typename PIX, int maxValue, int srcNComps, int dstNComps, bool doR, bool doG, bool doB, bool doA, bool premult, bool originalPremult>
@@ -130,6 +132,7 @@ Image::copyUnProcessedChannelsForPremult(const RectI& roi,
 #             endif
             }
             if (doA) {
+#ifdef        NATRON_COPY_CHANNELS_UNPREMULT
                 if (premult) {
                     if (dstAorig != 0) {
                         // unpremult, then premult
@@ -153,6 +156,7 @@ Image::copyUnProcessedChannelsForPremult(const RectI& roi,
                         }
                     }
                 }
+#             endif
                 if (dstNComps == 1 || dstNComps == 4) {
                     dst_pixels[dstNComps - 1] = srcA;
 #                 ifdef DEBUG
@@ -241,6 +245,7 @@ Image::copyUnProcessedChannelsForPremult(bool doR, bool doG, bool doB, bool doA,
 #             endif
             }
             if (doA) {
+#ifdef            NATRON_COPY_CHANNELS_UNPREMULT
                 if (premult) {
                     if (dstAorig != 0) {
                         // unpremult, then premult
@@ -264,6 +269,7 @@ Image::copyUnProcessedChannelsForPremult(bool doR, bool doG, bool doB, bool doA,
                         }
                     }
                 }
+#              endif
                 if (dstNComps == 1 || dstNComps == 4) {
                     dst_pixels[dstNComps - 1] = srcA;
 #                 ifdef DEBUG
@@ -502,6 +508,29 @@ Image::copyUnProcessedChannelsForDepth(bool premult,
     }
 }
 
+bool
+Image::canCallCopyUnPorcessedChannels(const bool* processChannels) const
+{
+    int numComp = getComponents().getNumComponents();
+    if (numComp == 0) {
+        return false;
+    }
+    bool doR = !processChannels[0];
+    bool doG = !processChannels[1];
+    bool doB = !processChannels[2];
+    bool doA = !processChannels[3];
+    if (numComp == 1 && !doA) { // 1 component is alpha
+        return false;
+    } else if (numComp == 2 && !doR && !doG) {
+        return false;
+    } else if (numComp == 3 && !doR && !doG && !doB) {
+        return false;
+    } else if (numComp == 4 && !doR && !doG && !doB && !doA) {
+        return false;
+    }
+    return true;
+}
+
 void
 Image::copyUnProcessedChannels(const RectI& roi,
                                Natron::ImagePremultiplicationEnum outputPremult,
@@ -509,11 +538,8 @@ Image::copyUnProcessedChannels(const RectI& roi,
                                const bool* processChannels,
                                const ImagePtr& originalImage)
 {
+    
     int numComp = getComponents().getNumComponents();
-    if (originalImage && getMipMapLevel() != originalImage->getMipMapLevel()) {
-        qDebug() << "WARNING: attempting to call copyUnProcessedChannels on images with different mipMapLevel";
-        return;
-    }
     if (numComp == 0) {
         return;
     }
@@ -528,6 +554,12 @@ Image::copyUnProcessedChannels(const RectI& roi,
     } else if (numComp == 3 && !doR && !doG && !doB) {
         return;
     } else if (numComp == 4 && !doR && !doG && !doB && !doA) {
+        return;
+    }
+    
+    
+    if (originalImage && getMipMapLevel() != originalImage->getMipMapLevel()) {
+        qDebug() << "WARNING: attempting to call copyUnProcessedChannels on images with different mipMapLevel";
         return;
     }
     

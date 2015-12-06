@@ -305,11 +305,11 @@ TrackMarker::TrackMarker(const boost::shared_ptr<TrackerContext>& context)
 , _imp(new TrackMarkerPrivate(context))
 {
     boost::shared_ptr<KnobSignalSlotHandler> handler = _imp->center->getSignalSlotHandler();
-    QObject::connect(handler.get(), SIGNAL(keyFrameSet(SequenceTime,int,int,bool)), this , SLOT(onCenterKeyframeSet(SequenceTime,int,int,bool)));
-    QObject::connect(handler.get(), SIGNAL(keyFrameRemoved(SequenceTime,int,int)), this , SLOT(onCenterKeyframeRemoved(SequenceTime,int,int)));
-    QObject::connect(handler.get(), SIGNAL(keyFrameMoved(int,int,int)), this , SLOT(onCenterKeyframeMoved(int,int,int)));
-    QObject::connect(handler.get(), SIGNAL(multipleKeyFramesSet(std::list<SequenceTime>, int, int)), this ,
-                     SLOT(onCenterKeyframesSet(std::list<SequenceTime>, int, int)));
+    QObject::connect(handler.get(), SIGNAL(keyFrameSet(double,int,int,bool)), this , SLOT(onCenterKeyframeSet(double,int,int,bool)));
+    QObject::connect(handler.get(), SIGNAL(keyFrameRemoved(double,int,int)), this , SLOT(onCenterKeyframeRemoved(double,int,int)));
+    QObject::connect(handler.get(), SIGNAL(keyFrameMoved(int,double,double)), this , SLOT(onCenterKeyframeMoved(int,double,double)));
+    QObject::connect(handler.get(), SIGNAL(multipleKeyFramesSet(std::list<double>, int, int)), this ,
+                     SLOT(onCenterKeyframesSet(std::list<double>, int, int)));
     QObject::connect(handler.get(), SIGNAL(animationRemoved(int)), this , SLOT(onCenterAnimationRemoved(int)));
     
     QObject::connect(handler.get(), SIGNAL(valueChanged(int,int)), this, SLOT(onCenterKnobValueChanged(int, int)));
@@ -735,7 +735,7 @@ TrackMarker::removeUserKeyframe(int time)
 }
 
 void
-TrackMarker::onCenterKeyframeSet(SequenceTime time,int /*dimension*/,int /*reason*/,bool added)
+TrackMarker::onCenterKeyframeSet(double time,int /*dimension*/,int /*reason*/,bool added)
 {
     if (added) {
         getContext()->s_keyframeSetOnTrackCenter(shared_from_this(),time);
@@ -743,20 +743,20 @@ TrackMarker::onCenterKeyframeSet(SequenceTime time,int /*dimension*/,int /*reaso
 }
 
 void
-TrackMarker::onCenterKeyframeRemoved(SequenceTime time,int /*dimension*/,int /*reason*/)
+TrackMarker::onCenterKeyframeRemoved(double time,int /*dimension*/,int /*reason*/)
 {
     getContext()->s_keyframeRemovedOnTrackCenter(shared_from_this(), time);
 }
 
 void
-TrackMarker::onCenterKeyframeMoved(int /*dimension*/,int oldTime,int newTime)
+TrackMarker::onCenterKeyframeMoved(int /*dimension*/,double oldTime,double newTime)
 {
     getContext()->s_keyframeRemovedOnTrackCenter(shared_from_this(), oldTime);
     getContext()->s_keyframeSetOnTrackCenter(shared_from_this(),newTime);
 }
 
 void
-TrackMarker::onCenterKeyframesSet(const std::list<SequenceTime>& keys, int /*dimension*/, int /*reason*/)
+TrackMarker::onCenterKeyframesSet(const std::list<double>& keys, int /*dimension*/, int /*reason*/)
 {
     getContext()->s_multipleKeyframesSetOnTrackCenter(shared_from_this(), keys);
 }
@@ -877,8 +877,7 @@ TrackMarker::getMarkerImage(int time, const RectI& roi) const
         return std::make_pair(ImagePtr(),roi);
     }
     
-    ParallelRenderArgsSetter frameRenderArgs(node->getApp()->getProject().get(),
-                                             time,
+    ParallelRenderArgsSetter frameRenderArgs(time,
                                              0, //<  view 0 (left)
                                              true, //<isRenderUserInteraction
                                              false, //isSequential
@@ -1472,12 +1471,6 @@ struct TrackerContextPrivate
     boost::weak_ptr<KnobDouble> preBlurSigma;
     boost::weak_ptr<KnobInt> referenceFrame;
     
-    /*boost::weak_ptr<KnobDouble> searchWindowBtmLeft,searchWindowTopRight;
-    boost::weak_ptr<KnobDouble> patternTopLeft,patternTopRight,patternBtmRight,patternBtmLeft;
-    boost::weak_ptr<KnobDouble> center,offset,weight,correlation;
-    boost::weak_ptr<KnobChoice> motionModel;*/
-    
-    
     mutable QMutex trackerContextMutex;
     std::vector<boost::shared_ptr<TrackMarker> > markers;
     std::list<boost::shared_ptr<TrackMarker> > selectedMarkers,markersToSlave,markersToUnslave;
@@ -1615,174 +1608,7 @@ struct TrackerContextPrivate
         transformPage->addKnob(referenceFrameKnob);
         referenceFrame = referenceFrameKnob;
         knobs.push_back(referenceFrameKnob);
-        
-        
-        //// Per-track knobs
-        /*boost::shared_ptr<KnobGroup> patternGroup = Natron::createKnob<KnobGroup>(effect, "Pattern-Window", 1 , false);
-        patternGroup->setAsTab();
-        patternGroup->setDefaultValue(false);
-        patternGroup->setSecretByDefault(true);
-        boost::shared_ptr<KnobGroup> searchWindowGroup = Natron::createKnob<KnobGroup>(effect, "Search-Window", 1 , false);
-        searchWindowGroup->setAsTab();
-        searchWindowGroup->setSecretByDefault(true);
-        searchWindowGroup->setDefaultValue(false);
-        
-        settingsPage->addKnob(patternGroup);
-        settingsPage->addKnob(searchWindowGroup);
-        
-        boost::shared_ptr<KnobDouble> sWndBtmLeft = Natron::createKnob<KnobDouble>(effect, kTrackerParamSearchWndBtmLeftLabel, 2, false);
-        sWndBtmLeft->setName(kTrackerParamSearchWndBtmLeft);
-        sWndBtmLeft->setHintToolTip(kTrackerParamSearchWndBtmLeftHint);
-        sWndBtmLeft->setDefaultValue(-25,0);
-        sWndBtmLeft->setDefaultValue(-25,1);
-        sWndBtmLeft->setMaximum(0, 1);
-        sWndBtmLeft->setEvaluateOnChange(false);
-        sWndBtmLeft->setIsPersistant(false);
-        searchWindowGroup->addKnob(sWndBtmLeft);
-        
-        searchWindowBtmLeft = sWndBtmLeft;
-        knobs.push_back(sWndBtmLeft);
-        perTrackKnobs.push_back(sWndBtmLeft);
-        
-        boost::shared_ptr<KnobDouble> sWndTopRight = Natron::createKnob<KnobDouble>(effect, kTrackerParamSearchWndTopRightLabel, 2, false);
-        sWndTopRight->setName(kTrackerParamSearchWndTopRight);
-        sWndTopRight->setHintToolTip(kTrackerParamSearchWndTopRightHint);
-        sWndTopRight->setDefaultValue(25,0);
-        sWndTopRight->setDefaultValue(25,1);
-        sWndTopRight->setMinimum(0, 0);
-        sWndTopRight->setMinimum(0, 1);
-        sWndTopRight->setEvaluateOnChange(false);
-        sWndTopRight->setIsPersistant(false);
-        searchWindowGroup->addKnob(sWndTopRight);
-        searchWindowTopRight = sWndTopRight;
-        knobs.push_back(sWndTopRight);
-        perTrackKnobs.push_back(sWndTopRight);
-        
-        boost::shared_ptr<KnobDouble> ptnTopLeft = Natron::createKnob<KnobDouble>(effect, kTrackerParamPatternTopLeftLabel, 2, false);
-        ptnTopLeft->setName(kTrackerParamPatternTopLeft);
-        ptnTopLeft->setHintToolTip(kTrackerParamPatternTopLeftHint);
-        ptnTopLeft->setDefaultValue(-15,0);
-        ptnTopLeft->setDefaultValue(15,1);
-        ptnTopLeft->setIsPersistant(false);
-        ptnTopLeft->setEvaluateOnChange(false);
-        patternGroup->addKnob(ptnTopLeft);
-        patternTopLeft = ptnTopLeft;
-        knobs.push_back(ptnTopLeft);
-        perTrackKnobs.push_back(ptnTopLeft);
-        
-        boost::shared_ptr<KnobDouble> ptnTopRight = Natron::createKnob<KnobDouble>(effect, kTrackerParamPatternTopRightLabel, 2, false);
-        ptnTopRight->setName(kTrackerParamPatternTopRight);
-        ptnTopRight->setHintToolTip(kTrackerParamPatternTopRightHint);
-        ptnTopRight->setDefaultValue(15,0);
-        ptnTopRight->setDefaultValue(15,1);
-        ptnTopRight->setIsPersistant(false);
-        ptnTopRight->setEvaluateOnChange(false);
-        patternGroup->addKnob(ptnTopRight);
-        patternTopRight = ptnTopRight;
-        knobs.push_back(ptnTopRight);
-        perTrackKnobs.push_back(ptnTopRight);
-        
-        boost::shared_ptr<KnobDouble> ptnBtmRight = Natron::createKnob<KnobDouble>(effect, kTrackerParamPatternBtmRightLabel, 2, false);
-        ptnBtmRight->setName(kTrackerParamPatternBtmRight);
-        ptnBtmRight->setHintToolTip(kTrackerParamPatternBtmRightHint);
-        ptnBtmRight->setDefaultValue(15,0);
-        ptnBtmRight->setDefaultValue(-15,1);
-        ptnBtmRight->setIsPersistant(false);
-        ptnBtmRight->setEvaluateOnChange(false);
-        patternGroup->addKnob(ptnBtmRight);
-        patternBtmRight = ptnBtmRight;
-        knobs.push_back(ptnBtmRight);
-        perTrackKnobs.push_back(ptnBtmRight);
-
-        
-        boost::shared_ptr<KnobDouble> ptnBtmLeft = Natron::createKnob<KnobDouble>(effect, kTrackerParamPatternBtmLeftLabel, 2, false);
-        ptnBtmLeft->setName(kTrackerParamPatternBtmLeft);
-        ptnBtmLeft->setHintToolTip(kTrackerParamPatternBtmLeftHint);
-        ptnBtmLeft->setDefaultValue(-15,0);
-        ptnBtmLeft->setDefaultValue(-15,1);
-        ptnBtmLeft->setEvaluateOnChange(false);
-        patternGroup->addKnob(ptnBtmLeft);
-        patternBtmLeft = ptnBtmLeft;
-        knobs.push_back(ptnBtmLeft);
-        perTrackKnobs.push_back(ptnBtmLeft);
-        
-        boost::shared_ptr<KnobDouble> centerKnob = Natron::createKnob<KnobDouble>(effect, kTrackerParamCenterLabel, 2, false);
-        centerKnob->setName(kTrackerParamCenter);
-        centerKnob->setHintToolTip(kTrackerParamCenterHint);
-        centerKnob->setIsPersistant(false);
-        centerKnob->setEvaluateOnChange(false);
-        centerKnob->setSecretByDefault(true);
-        settingsPage->addKnob(centerKnob);
-
-       
-        center = centerKnob;
-        knobs.push_back(centerKnob);
-        perTrackKnobs.push_back(centerKnob);
-
-        boost::shared_ptr<KnobDouble> offsetKnob = Natron::createKnob<KnobDouble>(effect, kTrackerParamOffsetLabel, 2, false);
-        offsetKnob->setName(kTrackerParamOffset);
-        offsetKnob->setHintToolTip(kTrackerParamOffsetHint);
-        offsetKnob->setIsPersistant(false);
-        offsetKnob->setEvaluateOnChange(false);
-        offsetKnob->setSecretByDefault(true);
-        settingsPage->addKnob(offsetKnob);
-
-        offset = offsetKnob;
-        knobs.push_back(offsetKnob);
-        perTrackKnobs.push_back(offsetKnob);
-        
-        boost::shared_ptr<KnobDouble> weightKnob = Natron::createKnob<KnobDouble>(effect, kTrackerParamTrackWeightLabel, 1, false);
-        weightKnob->setName(kTrackerParamTrackWeight);
-        weightKnob->setHintToolTip(kTrackerParamTrackWeightHint);
-        weightKnob->setAnimationEnabled(false);
-        weightKnob->setIsPersistant(false);
-        weightKnob->setMinimum(0.);
-        weightKnob->setMaximum(1.);
-        weightKnob->setEvaluateOnChange(false);
-        weightKnob->setDefaultValue(1.);
-        weightKnob->setSecretByDefault(true);
-        settingsPage->addKnob(weightKnob);
-        weight = weightKnob;
-        knobs.push_back(weightKnob);
-        perTrackKnobs.push_back(weightKnob);
-        
-        boost::shared_ptr<KnobDouble> correlationKnob = Natron::createKnob<KnobDouble>(effect, kTrackerParamCorrelationLabel, 1, false);
-        correlationKnob->setName(kTrackerParamCorrelation);
-        correlationKnob->setHintToolTip(kTrackerParamCorrelationHint);
-        correlationKnob->setAnimationEnabled(false);
-        correlationKnob->setMinimum(0.);
-        correlationKnob->setMaximum(1.);
-        correlationKnob->setDefaultValue(1.);
-        correlationKnob->disableSlider();
-        correlationKnob->setIsPersistant(false);
-        correlationKnob->setAllDimensionsEnabled(false);
-        correlationKnob->setEvaluateOnChange(false);
-        correlationKnob->setSecretByDefault(true);
-        settingsPage->addKnob(correlationKnob);
-        correlation = correlationKnob;
-        knobs.push_back(correlationKnob);
-        perTrackKnobs.push_back(correlationKnob);
-        
-        boost::shared_ptr<KnobChoice> motionModelKnob = Natron::createKnob<KnobChoice>(effect, kTrackerParamMotionModelLabel, 1, false);
-        motionModelKnob->setName(kTrackerParamMotionModel);
-        motionModelKnob->setHintToolTip(kTrackerParamMotionModelHint);
-        {
-            std::vector<std::string> choices,helps;
-            TrackerContext::getMotionModelsAndHelps(&choices,&helps);
-            motionModelKnob->populateChoices(choices,helps);
-        }
-        motionModelKnob->setAnimationEnabled(false);
-        motionModelKnob->setMinimum(0.);
-        motionModelKnob->setMaximum(1.);
-        motionModelKnob->setIsPersistant(false);
-        motionModelKnob->setDefaultValue(4);
-        motionModelKnob->setSecretByDefault(true);
-        motionModelKnob->setEvaluateOnChange(false);
-        settingsPage->addKnob(motionModelKnob);
-        motionModel = motionModelKnob;
-        knobs.push_back(motionModelKnob);
-        perTrackKnobs.push_back(motionModelKnob);
-        */
+ 
         
     }
     
@@ -2491,8 +2317,7 @@ FrameAccessorImpl::GetImage(int /*clip*/,
     
     NodePtr node = _context->getNode();
     
-    ParallelRenderArgsSetter frameRenderArgs(node->getApp()->getProject().get(),
-                                             frame,
+    ParallelRenderArgsSetter frameRenderArgs(frame,
                                              0, //<  view 0 (left)
                                              true, //<isRenderUserInteraction
                                              false, //isSequential
@@ -2913,33 +2738,33 @@ TrackerContextPrivate::linkMarkerKnobsToGuiKnobs(const std::list<boost::shared_p
             }
             
             if (!slave) {
-                QObject::disconnect((*it2)->getSignalSlotHandler().get(), SIGNAL(keyFrameSet(SequenceTime,int,int,bool)),
+                QObject::disconnect((*it2)->getSignalSlotHandler().get(), SIGNAL(keyFrameSet(double,int,int,bool)),
                                     _publicInterface, SLOT(onSelectedKnobCurveChanged()));
-                QObject::disconnect((*it2)->getSignalSlotHandler().get(), SIGNAL(keyFrameRemoved(SequenceTime,int,int)),
+                QObject::disconnect((*it2)->getSignalSlotHandler().get(), SIGNAL(keyFrameRemoved(double,int,int)),
                                     _publicInterface, SLOT(onSelectedKnobCurveChanged()));
-                QObject::disconnect((*it2)->getSignalSlotHandler().get(), SIGNAL(keyFrameMoved(int,int,int)),
+                QObject::disconnect((*it2)->getSignalSlotHandler().get(), SIGNAL(keyFrameMoved(int,double,double)),
                                     _publicInterface, SLOT(onSelectedKnobCurveChanged()));
                 QObject::disconnect((*it2)->getSignalSlotHandler().get(), SIGNAL(animationRemoved(int)),
                                     _publicInterface, SLOT(onSelectedKnobCurveChanged()));
-                QObject::disconnect((*it2)->getSignalSlotHandler().get(), SIGNAL(derivativeMoved(SequenceTime,int)),
+                QObject::disconnect((*it2)->getSignalSlotHandler().get(), SIGNAL(derivativeMoved(double,int)),
                                     _publicInterface, SLOT(onSelectedKnobCurveChanged()));
                 
-                QObject::disconnect((*it2)->getSignalSlotHandler().get(), SIGNAL(keyFrameInterpolationChanged(SequenceTime,int)),
+                QObject::disconnect((*it2)->getSignalSlotHandler().get(), SIGNAL(keyFrameInterpolationChanged(double,int)),
                                     _publicInterface, SLOT(onSelectedKnobCurveChanged()));
                 
             } else {
-                QObject::connect((*it2)->getSignalSlotHandler().get(), SIGNAL(keyFrameSet(SequenceTime,int,int,bool)),
+                QObject::connect((*it2)->getSignalSlotHandler().get(), SIGNAL(keyFrameSet(double,int,int,bool)),
                                  _publicInterface, SLOT(onSelectedKnobCurveChanged()));
-                QObject::connect((*it2)->getSignalSlotHandler().get(), SIGNAL(keyFrameRemoved(SequenceTime,int,int)),
+                QObject::connect((*it2)->getSignalSlotHandler().get(), SIGNAL(keyFrameRemoved(double,int,int)),
                                  _publicInterface, SLOT(onSelectedKnobCurveChanged()));
-                QObject::connect((*it2)->getSignalSlotHandler().get(), SIGNAL(keyFrameMoved(int,int,int)),
+                QObject::connect((*it2)->getSignalSlotHandler().get(), SIGNAL(keyFrameMoved(int,double,double)),
                                  _publicInterface, SLOT(onSelectedKnobCurveChanged()));
                 QObject::connect((*it2)->getSignalSlotHandler().get(), SIGNAL(animationRemoved(int)),
                                  _publicInterface, SLOT(onSelectedKnobCurveChanged()));
-                QObject::connect((*it2)->getSignalSlotHandler().get(), SIGNAL(derivativeMoved(SequenceTime,int)),
+                QObject::connect((*it2)->getSignalSlotHandler().get(), SIGNAL(derivativeMoved(double,int)),
                                  _publicInterface, SLOT(onSelectedKnobCurveChanged()));
                 
-                QObject::connect((*it2)->getSignalSlotHandler().get(), SIGNAL(keyFrameInterpolationChanged(SequenceTime,int)),
+                QObject::connect((*it2)->getSignalSlotHandler().get(), SIGNAL(keyFrameInterpolationChanged(double,int)),
                                  _publicInterface, SLOT(onSelectedKnobCurveChanged()));
             }
             

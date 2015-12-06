@@ -33,6 +33,8 @@
 #include "Global/GlobalDefines.h"
 
 #include "Engine/Knob.h"
+#include "Engine/EngineFwd.h"
+
 
 #define kQSettingsSoftwareMajorVersionSettingName "SoftwareVersionMajor"
 
@@ -40,25 +42,6 @@
    @todo Move this class to QSettings instead*/
 
 
-namespace Natron {
-class LibraryBinary;
-class Plugin;
-}
-
-class KnobI;
-class KnobFile;
-class KnobPage;
-class KnobDouble;
-class KnobInt;
-class KnobBool;
-class KnobButton;
-class KnobGroup;
-class KnobChoice;
-class KnobPath;
-class KnobColor;
-class KnobString;
-class QSettings;
-class KnobSeparator;
 class Settings
     : public KnobHolder
 {
@@ -296,7 +279,11 @@ public:
     
     bool isAutoDeclaredVariablePrintActivated() const;
     
+    void setAutoDeclaredVariablePrintEnabled(bool enabled);
+    
     bool isPluginIconActivatedOnNodeGraph() const;
+    
+    bool isNodeGraphAntiAliasingEnabled() const;
     
     void getSunkenColor(double* r,double* g,double* b) const;
     void getBaseColor(double* r,double* g,double* b) const;
@@ -321,6 +308,18 @@ public:
     void getDopeSheetEditorScaleColor(double* r,double* g, double* b) const;
     void getDopeSheetEditorGridColor(double* r,double* g, double* b) const;
 
+    
+    void getSEKeywordColor(double* r,double* g, double* b) const;
+    void getSEOperatorColor(double* r,double* g, double* b) const;
+    void getSEBraceColor(double* r,double* g, double* b) const;
+    void getSEDefClassColor(double* r,double* g, double* b) const;
+    void getSEStringsColor(double* r,double* g, double* b) const;
+    void getSECommentsColor(double* r,double* g, double* b) const;
+    void getSESelfColor(double* r,double* g, double* b) const;
+    void getSENumbersColor(double* r,double* g, double* b) const;
+    void getSECurLineColor(double* r,double* g, double* b) const;
+    
+    
     void getPluginIconFrameColor(int *r, int *g, int *b) const;
     int getDopeSheetEditorNodeSeparationWith() const;
     
@@ -442,6 +441,7 @@ private:
     boost::shared_ptr<KnobBool> _hideOptionalInputsAutomatically;
     boost::shared_ptr<KnobBool> _useInputAForMergeAutoConnect;
     boost::shared_ptr<KnobBool> _usePluginIconsInNodeGraph;
+    boost::shared_ptr<KnobBool> _useAntiAliasing;
     boost::shared_ptr<KnobColor> _defaultNodeColor;
     boost::shared_ptr<KnobColor> _defaultBackdropColor;
     boost::shared_ptr<KnobColor> _defaultGeneratorColor;
@@ -513,6 +513,18 @@ private:
     boost::shared_ptr<KnobColor> _dopeSheetEditorKnobSectionBackgroundColor;
     boost::shared_ptr<KnobColor> _dopeSheetEditorScaleColor;
     boost::shared_ptr<KnobColor> _dopeSheetEditorGridColor;
+    
+    boost::shared_ptr<KnobGroup> _scriptEditorColors;
+    boost::shared_ptr<KnobColor> _curLineColor;
+    boost::shared_ptr<KnobColor> _keywordColor;
+    boost::shared_ptr<KnobColor> _operatorColor;
+    boost::shared_ptr<KnobColor> _braceColor;
+    boost::shared_ptr<KnobColor> _defClassColor;
+    boost::shared_ptr<KnobColor> _stringsColor;
+    boost::shared_ptr<KnobColor> _commentsColor;
+    boost::shared_ptr<KnobColor> _selfColor;
+    boost::shared_ptr<KnobColor> _numbersColor;
+    
     
     struct PerPluginKnobs
     {

@@ -58,10 +58,10 @@ using std::pair;
 
 /******************************KnobInt**************************************/
 KnobInt::KnobInt(KnobHolder* holder,
-                   const std::string &description,
+                   const std::string &label,
                    int dimension,
                    bool declaredByPlugin)
-: Knob<int>(holder, description, dimension,declaredByPlugin)
+: Knob<int>(holder, label, dimension, declaredByPlugin)
 , _increments(dimension)
 , _disableSlider(false)
 {
@@ -142,10 +142,10 @@ KnobInt::typeName() const
 /******************************KnobBool**************************************/
 
 KnobBool::KnobBool(KnobHolder* holder,
-                     const std::string &description,
+                     const std::string &label,
                      int dimension,
                      bool declaredByPlugin)
-: Knob<bool>(holder, description, dimension,declaredByPlugin)
+: Knob<bool>(holder, label, dimension, declaredByPlugin)
 {
 }
 
@@ -172,10 +172,10 @@ KnobBool::typeName() const
 
 
 KnobDouble::KnobDouble(KnobHolder* holder,
-                         const std::string &description,
+                         const std::string &label,
                          int dimension,
                          bool declaredByPlugin)
-: Knob<double>(holder, description, dimension,declaredByPlugin)
+: Knob<double>(holder, label, dimension, declaredByPlugin)
 , _spatial(false)
 , _increments(dimension)
 , _decimals(dimension)
@@ -506,10 +506,10 @@ KnobDouble::normalize(int dimension,
 /******************************KnobButton**************************************/
 
 KnobButton::KnobButton(KnobHolder*  holder,
-                         const std::string &description,
+                         const std::string &label,
                          int dimension,
                          bool declaredByPlugin)
-: Knob<bool>(holder, description, dimension,declaredByPlugin)
+: Knob<bool>(holder, label, dimension, declaredByPlugin)
 , _renderButton(false)
 {
     setIsPersistant(false);
@@ -545,10 +545,10 @@ KnobButton::trigger()
 #define KNOBCHOICE_MAX_ENTRIES_HELP 40 // don't show help in the tootlip if there are more entries that this
 
 KnobChoice::KnobChoice(KnobHolder* holder,
-                         const std::string &description,
+                         const std::string &label,
                          int dimension,
                          bool declaredByPlugin)
-: Knob<int>(holder, description, dimension,declaredByPlugin)
+: Knob<int>(holder, label, dimension, declaredByPlugin)
 , _entriesMutex()
 , _addNewChoice(false)
 , _isCascading(false)
@@ -844,13 +844,58 @@ KnobChoice::choiceRestoration(KnobChoice* knob,const ChoiceExtraData* data)
     }
     
 }
+
+void
+KnobChoice::onOriginalKnobPopulated()
+{
+    
+    KnobChoice* isChoice = dynamic_cast<KnobChoice*>(sender());
+    if (!isChoice) {
+        return;
+    }
+    populateChoices(isChoice->_entries,isChoice->_entriesHelp);
+}
+
+void
+KnobChoice::onOriginalKnobEntriesReset()
+{
+    resetChoices();
+}
+
+void
+KnobChoice::onOriginalKnobEntryAppend(const QString& text,const QString& help)
+{
+    appendChoice(text.toStdString(), help.toStdString());
+}
+
+void
+KnobChoice::handleSignalSlotsForAliasLink(const boost::shared_ptr<KnobI>& alias,bool connect)
+{
+    assert(alias);
+    KnobChoice* aliasIsChoice = dynamic_cast<KnobChoice*>(alias.get());
+    if (!aliasIsChoice) {
+        return;
+    }
+    if (connect) {
+        QObject::connect(this, SIGNAL(populated()), aliasIsChoice, SLOT(onOriginalKnobPopulated()));
+        QObject::connect(this, SIGNAL(entriesReset()), aliasIsChoice, SLOT(onOriginalKnobEntriesReset()));
+        QObject::connect(this, SIGNAL(entryAppended(QString,QString)), aliasIsChoice,
+                         SLOT(onOriginalKnobEntryAppend(QString,QString)));
+    } else {
+        QObject::disconnect(this, SIGNAL(populated()), aliasIsChoice, SLOT(onOriginalKnobPopulated()));
+        QObject::disconnect(this, SIGNAL(entriesReset()), aliasIsChoice, SLOT(onOriginalKnobEntriesReset()));
+        QObject::disconnect(this, SIGNAL(entryAppended(QString,QString)), aliasIsChoice,
+                         SLOT(onOriginalKnobEntryAppend(QString,QString)));
+    }
+}
+
 /******************************KnobSeparator**************************************/
 
 KnobSeparator::KnobSeparator(KnobHolder* holder,
-                               const std::string &description,
+                               const std::string &label,
                                int dimension,
                                bool declaredByPlugin)
-: Knob<bool>(holder, description, dimension,declaredByPlugin)
+: Knob<bool>(holder, label, dimension, declaredByPlugin)
 {
 }
 
@@ -883,10 +928,10 @@ KnobSeparator::typeName() const
  **/
 
 KnobColor::KnobColor(KnobHolder* holder,
-                       const std::string &description,
+                       const std::string &label,
                        int dimension,
                        bool declaredByPlugin)
-: Knob<double>(holder, description, dimension,declaredByPlugin)
+: Knob<double>(holder, label, dimension, declaredByPlugin)
 , _allDimensionsEnabled(true)
 , _simplifiedMode(false)
 {
@@ -945,12 +990,13 @@ KnobColor::isSimplified() const
 
 
 KnobString::KnobString(KnobHolder* holder,
-                         const std::string &description,
+                         const std::string &label,
                          int dimension,
                          bool declaredByPlugin)
-: AnimatingKnobStringHelper(holder, description, dimension,declaredByPlugin)
+: AnimatingKnobStringHelper(holder, label, dimension, declaredByPlugin)
 , _multiLine(false)
 , _richText(false)
+, _customHtmlText(false)
 , _isLabel(false)
 , _isCustom(false)
 {
@@ -1010,13 +1056,21 @@ KnobString::hasContentWithoutHtmlTags() const
     return true;
 }
 
+void
+KnobString::setAsLabel()
+{
+    setAnimationEnabled(false); //< labels cannot animate
+    // hideLabel(); // labels do not have a label
+    _isLabel = true;
+}
+
 /******************************KnobGroup**************************************/
 
 KnobGroup::KnobGroup(KnobHolder* holder,
-                       const std::string &description,
+                       const std::string &label,
                        int dimension,
                        bool declaredByPlugin)
-: Knob<bool>(holder, description, dimension,declaredByPlugin)
+: Knob<bool>(holder, label, dimension, declaredByPlugin)
 , _isTab(false)
 {
 }
@@ -1091,36 +1145,38 @@ KnobGroup::removeKnob(KnobI* k)
     }
 }
 
-void
+bool
 KnobGroup::moveOneStepUp(KnobI* k)
 {
     for (U32 i = 0; i < _children.size(); ++i) {
         if (_children[i].lock().get() == k) {
             if (i == 0) {
-                break;
+                return false;
             }
             boost::weak_ptr<KnobI> tmp = _children[i - 1];
             _children[i - 1] = _children[i];
             _children[i] = tmp;
-            break;
+            return true;
         }
     }
+    throw std::invalid_argument("Given knob does not belong to this group");
 }
 
-void
+bool
 KnobGroup::moveOneStepDown(KnobI* k)
 {
     for (U32 i = 0; i < _children.size(); ++i) {
         if (_children[i].lock().get() == k) {
             if (i == _children.size() - 1) {
-                break;
+                return false;
             }
             boost::weak_ptr<KnobI> tmp = _children[i + 1];
             _children[i + 1] = _children[i];
             _children[i] = tmp;
-            break;
+            return true;
         }
     }
+    throw std::invalid_argument("Given knob does not belong to this group");
 }
 
 void
@@ -1170,11 +1226,12 @@ KnobGroup::getChildren() const
 /******************************PAGE_KNOB**************************************/
 
 KnobPage::KnobPage(KnobHolder* holder,
-                     const std::string &description,
+                     const std::string &label,
                      int dimension,
                      bool declaredByPlugin)
-: Knob<bool>(holder, description, dimension,declaredByPlugin)
+: Knob<bool>(holder, label, dimension, declaredByPlugin)
 {
+    setIsPersistant(false);
 }
 
 bool
@@ -1280,36 +1337,38 @@ KnobPage::removeKnob(KnobI* k)
     }
 }
 
-void
+bool
 KnobPage::moveOneStepUp(KnobI* k)
 {
     for (U32 i = 0; i < _children.size(); ++i) {
         if (_children[i].lock().get() == k) {
             if (i == 0) {
-                break;
+                return false;
             }
             boost::weak_ptr<KnobI> tmp = _children[i - 1];
             _children[i - 1] = _children[i];
             _children[i] = tmp;
-            break;
+            return true;
         }
     }
+    throw std::invalid_argument("Given knob does not belong to this page");
 }
 
-void
+bool
 KnobPage::moveOneStepDown(KnobI* k)
 {
     for (U32 i = 0; i < _children.size(); ++i) {
         if (_children[i].lock().get() == k) {
             if (i == _children.size() - 1) {
-                break;
+                return false;
             }
             boost::weak_ptr<KnobI> tmp = _children[i + 1];
             _children[i + 1] = _children[i];
             _children[i] = tmp;
-            break;
+            return true;
         }
     }
+    throw std::invalid_argument("Given knob does not belong to this page");
 }
 
 
@@ -1317,10 +1376,10 @@ KnobPage::moveOneStepDown(KnobI* k)
 
 
 KnobParametric::KnobParametric(KnobHolder* holder,
-                                 const std::string &description,
+                                 const std::string &label,
                                  int dimension,
                                  bool declaredByPlugin)
-: Knob<double>(holder,description,dimension,declaredByPlugin)
+: Knob<double>(holder,label,dimension, declaredByPlugin)
 , _curvesMutex()
 , _curves(dimension)
 , _defaultCurves(dimension)

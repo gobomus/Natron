@@ -226,17 +226,17 @@ struct Node::Implementation
     , masterNodeMutex()
     , masterNode()
     , nodeLinks()
+    , frameIncrKnob()
     , nodeSettingsPage()
     , nodeLabelKnob()
     , previewEnabledKnob()
     , disableNodeKnob()
     , infoPage()
-    , infoDisclaimer()
-    , inputFormats()
-    , outputFormat()
+    , nodeInfos()
     , refreshInfoButton()
     , useFullScaleImagesWhenRenderScaleUnsupported()
     , forceCaching()
+    , hideInputs()
     , beforeFrameRender()
     , beforeRender()
     , afterFrameRender()
@@ -289,14 +289,7 @@ struct Node::Implementation
     , mustComputeInputRelatedData(true)
     , duringPaintStrokeCreation(false)
     , lastStrokeMovementMutex()
-    , lastStrokeMovementBbox()
     , strokeBitmapCleared(false)
-    , lastStrokeIndex(-1)
-    , multiStrokeIndex(0)
-    , strokeImage()
-    , lastStrokePoints()
-    , distToNextIn(0.)
-    , distToNextOut(0.)
     , useAlpha0ToConvertFromRGBToRGBA(false)
     , isBeingDestroyed(false)
     , inputModifiedRecursion(0)
@@ -417,6 +410,8 @@ struct Node::Implementation
     boost::weak_ptr<Node> masterNode; //< this points to the master when the node is a clone
     KnobLinkList nodeLinks; //< these point to the parents of the params links
     
+    boost::weak_ptr<KnobInt> frameIncrKnob;
+    
     boost::weak_ptr<KnobPage> nodeSettingsPage;
     boost::weak_ptr<KnobString> nodeLabelKnob;
     boost::weak_ptr<KnobBool> previewEnabledKnob;
@@ -427,14 +422,12 @@ struct Node::Implementation
     boost::weak_ptr<KnobString> nodeRemovalCallback;
     
     boost::weak_ptr<KnobPage> infoPage;
-    boost::weak_ptr<KnobString> infoDisclaimer;
-    std::vector< boost::weak_ptr<KnobString> > inputFormats;
-    boost::weak_ptr<KnobString> outputFormat;
-    boost::weak_ptr<KnobString> cacheMemInfo;
+    boost::weak_ptr<KnobString> nodeInfos;
     boost::weak_ptr<KnobButton> refreshInfoButton;
     
     boost::weak_ptr<KnobBool> useFullScaleImagesWhenRenderScaleUnsupported;
     boost::weak_ptr<KnobBool> forceCaching;
+    boost::weak_ptr<KnobBool> hideInputs;
     
     boost::weak_ptr<KnobString> beforeFrameRender;
     boost::weak_ptr<KnobString> beforeRender;
@@ -516,12 +509,8 @@ struct Node::Implementation
     
     bool duringPaintStrokeCreation; // protected by lastStrokeMovementMutex
     mutable QMutex lastStrokeMovementMutex;
-    RectD lastStrokeMovementBbox;
     bool strokeBitmapCleared;
-    int lastStrokeIndex,multiStrokeIndex;
-    ImagePtr strokeImage;
-    std::list<std::pair<Natron::Point,double> > lastStrokePoints;
-    double distToNextIn,distToNextOut;
+    
     
     //This flag is used for the Roto plug-in and for the Merge inside the rotopaint tree
     //so that if the input of the roto node is RGB, it gets converted with alpha = 0, otherwise the user
@@ -541,6 +530,9 @@ struct Node::Implementation
     std::vector<std::string> createdViews;
     
 };
+
+
+
 
 /**
  *@brief Actually converting to ARGB... but it is called BGRA by
@@ -713,7 +705,21 @@ Node::load(const std::string & parentMultiInstanceName,
             _imp->cacheID = serialization.getCacheID();
         }
         if (!dontLoadName && !nameSet && fixedName.isEmpty()) {
-            setScriptName_no_error_check(serialization.getNodeScriptName());
+            const std::string& baseName = serialization.getNodeScriptName();
+            std::string name = baseName;
+            int no = 1;
+            do {
+                
+                if (no > 1) {
+                    std::stringstream ss;
+                    ss << baseName;
+                    ss << '_';
+                    ss << no;
+                    name = ss.str();
+                }
+                ++no;
+            } while(getGroup() && getGroup()->checkIfNodeNameExists(name, this));
+            setScriptName_no_error_check(name);
             setLabel(serialization.getNodeLabel());
             nameSet = true;
         }
@@ -732,11 +738,19 @@ Node::load(const std::string & parentMultiInstanceName,
             } else {
                 pluginLabel = _imp->plugin->getPluginLabel();
             }
-            getGroup()->initNodeName(isMultiInstanceChild ? parentMultiInstanceName + '_' : pluginLabel.toStdString(),&name);
-            setNameInternal(name.c_str());
+            try {
+                getGroup()->initNodeName(isMultiInstanceChild ? parentMultiInstanceName + '_' : pluginLabel.toStdString(),&name);
+            } catch (...) {
+                
+            }
+            setNameInternal(name.c_str(), false);
             nameSet = true;
         } else {
-            setScriptName(fixedName.toStdString());
+            try {
+                setScriptName(fixedName.toStdString());
+            } catch (...) {
+                appPTR->writeToOfxLog_mt_safe("Could not set node name to " + fixedName);
+            }
         }
         if (!isMultiInstanceChild && _imp->isMultiInstance) {
             updateEffectLabelKnob( getScriptName().c_str() );
@@ -776,7 +790,7 @@ Node::load(const std::string & parentMultiInstanceName,
     
     bool isLoadingPyPlug = getApp()->isCreatingPythonGroup();
     
-    if (!getApp()->getProject()->isLoadingProject() && !isLoadingPyPlug) {
+    if (!getApp()->isCreatingNodeTree()) {
         refreshAllInputRelatedData(serialization.isNull());
     }
 
@@ -785,7 +799,7 @@ Node::load(const std::string & parentMultiInstanceName,
     
     ///Now that the instance is created, make sure instanceChangedActino is called for all extra default values
     ///that we set
-    int time = getLiveInstance()->getCurrentTime();
+    double time = getLiveInstance()->getCurrentTime();
     for (std::list<boost::shared_ptr<KnobSerialization> >::const_iterator it = paramValues.begin(); it != paramValues.end(); ++it) {
         boost::shared_ptr<KnobI> knob = getKnobByName((*it)->getName());
         if (knob) {
@@ -815,13 +829,8 @@ Node::usesAlpha0ToConvertFromRGBToRGBA() const
 void
 Node::setWhileCreatingPaintStroke(bool creating)
 {
-    {
-        QMutexLocker k(&_imp->lastStrokeMovementMutex);
-        _imp->duringPaintStrokeCreation = creating;
-        if (creating) {
-            _imp->lastStrokeIndex = -1;
-        }
-    }
+    QMutexLocker k(&_imp->lastStrokeMovementMutex);
+    _imp->duringPaintStrokeCreation = creating;
 }
 
 bool
@@ -906,29 +915,21 @@ Node::refreshDynamicProperties()
 }
 
 void
-Node::updateLastPaintStrokeData(int newAge,const std::list<std::pair<Natron::Point,double> >& points,
-                                const RectD& lastPointsBbox,
-                                int strokeIndex)
+Node::prepareForNextPaintStrokeRender()
 {
     
     {
         QMutexLocker k(&_imp->lastStrokeMovementMutex);
-        _imp->lastStrokePoints = points;
-        _imp->lastStrokeMovementBbox = lastPointsBbox;
-        _imp->lastStrokeIndex = newAge;
-        _imp->distToNextIn = _imp->distToNextOut;
         _imp->strokeBitmapCleared = false;
-        _imp->multiStrokeIndex = strokeIndex;
     }
     _imp->liveInstance->clearActionsCache();
 }
 
 void
-Node::setLastPaintStrokeDataNoRotopaint(const RectD& lastStrokeBbox)
+Node::setLastPaintStrokeDataNoRotopaint()
 {
     {
         QMutexLocker k(&_imp->lastStrokeMovementMutex);
-        _imp->lastStrokeMovementBbox = lastStrokeBbox;
         _imp->strokeBitmapCleared = false;
         _imp->duringPaintStrokeCreation = true;
     }
@@ -940,7 +941,6 @@ Node::invalidateLastPaintStrokeDataNoRotopaint()
 {
     {
         QMutexLocker k(&_imp->lastStrokeMovementMutex);
-        _imp->lastStrokeMovementBbox.clear();
         _imp->duringPaintStrokeCreation = false;
     }
 
@@ -955,7 +955,7 @@ Node::getPaintStrokeRoD_duringPainting() const
 }
 
 void
-Node::getPaintStrokeRoD(int time, RectD* bbox) const
+Node::getPaintStrokeRoD(double time, RectD* bbox) const
 {
     bool duringPaintStroke = _imp->liveInstance->isDuringPaintStrokeCreationThreadLocal();
     QMutexLocker k(&_imp->lastStrokeMovementMutex);
@@ -963,7 +963,6 @@ Node::getPaintStrokeRoD(int time, RectD* bbox) const
         *bbox = getPaintStrokeRoD_duringPainting();
     } else {
         boost::shared_ptr<RotoDrawableItem> stroke = _imp->paintStroke.lock();
-        assert(stroke);
         if (!stroke) {
             throw std::logic_error("");
         }
@@ -972,13 +971,7 @@ Node::getPaintStrokeRoD(int time, RectD* bbox) const
     
 }
 
-void
-Node::getLastPaintStrokeRoD(RectD* bbox)
-{
-    QMutexLocker k(&_imp->lastStrokeMovementMutex);
-    *bbox = _imp->lastStrokeMovementBbox;
-    
-}
+
 
 bool
 Node::isLastPaintStrokeBitmapCleared() const
@@ -996,14 +989,17 @@ Node::clearLastPaintStrokeRoD()
 }
 
 void
-Node::getLastPaintStrokePoints(int time,
+Node::getLastPaintStrokePoints(double time,
                                std::list<std::list<std::pair<Natron::Point,double> > >* strokes,
                                int* strokeIndex) const
 {
-    QMutexLocker k(&_imp->lastStrokeMovementMutex);
-    if (_imp->duringPaintStrokeCreation) {
-        strokes->push_back(_imp->lastStrokePoints);
-        *strokeIndex = _imp->multiStrokeIndex;
+    bool duringPaintStroke;
+    {
+        QMutexLocker k(&_imp->lastStrokeMovementMutex);
+        duringPaintStroke = _imp->duringPaintStrokeCreation;
+    }
+    if (duringPaintStroke) {
+        getApp()->getLastPaintStrokePoints(strokes, strokeIndex);
     } else {
         boost::shared_ptr<RotoDrawableItem> item = _imp->paintStroke.lock();
         RotoStrokeItem* stroke = dynamic_cast<RotoStrokeItem*>(item.get());
@@ -1016,26 +1012,6 @@ Node::getLastPaintStrokePoints(int time,
     }
 }
 
-bool
-Node::isFirstPaintStrokeRenderTick() const
-{
-    QMutexLocker k(&_imp->lastStrokeMovementMutex);
-    return _imp->lastStrokeIndex == -1;
-}
-
-int
-Node::getStrokeImageAge() const
-{
-    QMutexLocker k(&_imp->lastStrokeMovementMutex);
-    return _imp->lastStrokeIndex;
-}
-
-void
-Node::updateStrokeImage(const boost::shared_ptr<Natron::Image>& image)
-{
-    QMutexLocker k(&_imp->lastStrokeMovementMutex);
-    _imp->strokeImage = image;
-}
 
 boost::shared_ptr<Natron::Image>
 Node::getOrRenderLastStrokeImage(unsigned int mipMapLevel,
@@ -1056,9 +1032,17 @@ Node::getOrRenderLastStrokeImage(unsigned int mipMapLevel,
     }
 
    // qDebug() << getScriptName_mt_safe().c_str() << "Rendering stroke: " << _imp->lastStrokeMovementBbox.x1 << _imp->lastStrokeMovementBbox.y1 << _imp->lastStrokeMovementBbox.x2 << _imp->lastStrokeMovementBbox.y2;
-    _imp->distToNextOut = stroke->renderSingleStroke(stroke, _imp->lastStrokeMovementBbox, _imp->lastStrokePoints, mipMapLevel, par, components, depth, _imp->distToNextIn, &_imp->strokeImage);
+    
+    RectD lastStrokeBbox;
+    std::list<std::pair<Natron::Point,double> > lastStrokePoints;
+    double distNextIn;
+    boost::shared_ptr<Natron::Image> strokeImage;
+    getApp()->getRenderStrokeData(&lastStrokeBbox, &lastStrokePoints, &distNextIn, &strokeImage);
+    double distToNextOut = stroke->renderSingleStroke(stroke, lastStrokeBbox, lastStrokePoints, mipMapLevel, par, components, depth, distNextIn, &strokeImage);
 
-    return _imp->strokeImage;
+    getApp()->updateStrokeImage(strokeImage, distToNextOut, true);
+    
+    return strokeImage;
 }
 
 bool
@@ -1093,9 +1077,10 @@ Node::declareRotoPythonField()
 {
     assert(_imp->rotoContext);
     std::string appID = getApp()->getAppIDString();
-    std::string fullyQualifiedName = appID + "." + getFullyQualifiedName();
+    std::string nodeName = getFullyQualifiedName();
+    std::string nodeFullName = appID + "." + nodeName;
     std::string err;
-    std::string script = fullyQualifiedName + ".roto = " + fullyQualifiedName + ".getRotoContext()\n";
+    std::string script = nodeFullName + ".roto = " + nodeFullName + ".getRotoContext()\n";
     if (!appPTR->isBackground()) {
         getApp()->printAutoDeclaredVariable(script);
     }
@@ -1316,7 +1301,7 @@ Node::computeHashInternal(std::list<Natron::Node*>& marked)
     
     ///If the node is a group, call it on all nodes in the group
     ///Also force a change to their hash
-    NodeGroup* group = dynamic_cast<NodeGroup*>(getLiveInstance());
+    /*NodeGroup* group = dynamic_cast<NodeGroup*>(getLiveInstance());
     if (group) {
         NodeList nodes = group->getNodes();
         for (NodeList::iterator it = nodes.begin(); it != nodes.end(); ++it) {
@@ -1325,7 +1310,7 @@ Node::computeHashInternal(std::list<Natron::Node*>& marked)
             (*it)->computeHashInternal(marked);
         }
     }
-
+*/
 }
 
 void
@@ -1559,16 +1544,53 @@ Node::restoreKnobsLinks(const NodeSerialization & serialization,
     }
     
     const std::list<boost::shared_ptr<GroupKnobSerialization> >& userKnobs = serialization.getUserPages();
-    for (std::list<boost::shared_ptr<GroupKnobSerialization> >::const_iterator it = userKnobs.begin(); it != userKnobs.end(); ++it) {
-        _imp->restoreKnobLinksRecursive(it->get(), allNodes);
+    for (std::list<boost::shared_ptr<GroupKnobSerialization > >::const_iterator it = userKnobs.begin(); it != userKnobs.end(); ++it) {
+        _imp->restoreKnobLinksRecursive((*it).get(), allNodes);
     }
     
+}
+
+void
+Node::setPagesOrder(const std::list<std::string>& pages)
+{
+    //re-order the pages
+    std::list<boost::shared_ptr<KnobI> > pagesOrdered;
+    
+    for (std::list<std::string>::const_iterator it = pages.begin(); it!=pages.end();++it) {
+        const std::vector<boost::shared_ptr<KnobI> > &knobs = getKnobs();
+        for (std::vector<boost::shared_ptr<KnobI> >::const_iterator it2 = knobs.begin(); it2 != knobs.end(); ++it2) {
+            if ((*it2)->getName() == *it) {
+                pagesOrdered.push_back(*it2);
+                _imp->liveInstance->removeKnobFromList(it2->get());
+                break;
+            }
+        }
+    }
+    int index = 0;
+    for (std::list<boost::shared_ptr<KnobI> >::iterator it=  pagesOrdered.begin() ;it!=pagesOrdered.end(); ++it,++index) {
+        _imp->liveInstance->insertKnob(index, *it);
+    }
+}
+
+std::list<std::string>
+Node::getPagesOrder() const
+{
+    const std::vector<boost::shared_ptr<KnobI> >& knobs = getKnobs();
+    std::list<std::string> ret;
+    for (std::vector<boost::shared_ptr<KnobI> >::const_iterator it = knobs.begin(); it!=knobs.end(); ++it) {
+        KnobPage* ispage = dynamic_cast<KnobPage*>(it->get());
+        if (ispage) {
+            ret.push_back(ispage->getName());
+        }
+    }
+    return ret;
 }
 
 void
 Node::restoreUserKnobs(const NodeSerialization& serialization)
 {
     const std::list<boost::shared_ptr<GroupKnobSerialization> >& userPages = serialization.getUserPages();
+    
     for (std::list<boost::shared_ptr<GroupKnobSerialization> >::const_iterator it = userPages.begin() ; it != userPages.end(); ++it) {
         boost::shared_ptr<KnobI> found = getKnobByName((*it)->getName());
         boost::shared_ptr<KnobPage> page;
@@ -1576,14 +1598,16 @@ Node::restoreUserKnobs(const NodeSerialization& serialization)
             page = Natron::createKnob<KnobPage>(_imp->liveInstance.get(), (*it)->getLabel() , 1, false);
             page->setAsUserKnob();
             page->setName((*it)->getName());
+            
         } else {
             page = boost::dynamic_pointer_cast<KnobPage>(found);
         }
         if (page) {
             _imp->restoreUserKnobsRecursive((*it)->getChildren(), boost::shared_ptr<KnobGroup>(), page);
         }
-        
     }
+    setPagesOrder(serialization.getPagesOrdered());
+
 }
 
 void
@@ -2299,9 +2323,9 @@ static void prependGroupNameRecursive(const boost::shared_ptr<Natron::Node>& gro
 }
 
 std::string
-Node::getFullyQualifiedName() const
+Node::getFullyQualifiedNameInternal(const std::string& scriptName) const
 {
-    std::string ret = getScriptName_mt_safe();
+    std::string ret = scriptName;
     NodePtr parent = getParentMultiInstance();
     if (parent) {
         prependGroupNameRecursive(parent, ret);
@@ -2313,6 +2337,13 @@ Node::getFullyQualifiedName() const
         }
     }
     return ret;
+
+}
+
+std::string
+Node::getFullyQualifiedName() const
+{
+    return getFullyQualifiedNameInternal(getScriptName_mt_safe());
 }
 
 void
@@ -2325,6 +2356,9 @@ Node::setLabel(const std::string& label)
     
     {
         QMutexLocker k(&_imp->nameMutex);
+        if (label == _imp->label) {
+            return;
+        }
         _imp->label = label;
     }
     boost::shared_ptr<NodeCollection> collection = getGroup();
@@ -2353,11 +2387,12 @@ Node::getLabel_mt_safe() const
 void
 Node::setScriptName_no_error_check(const std::string & name)
 {
-    setNameInternal(name);
+    setNameInternal(name, false);
 }
 
+
 void
-Node::setNameInternal(const std::string& name)
+Node::setNameInternal(const std::string& name, bool throwErrors)
 {
     std::string oldName = getScriptName_mt_safe();
     std::string fullOldName = getFullyQualifiedName();
@@ -2365,7 +2400,42 @@ Node::setNameInternal(const std::string& name)
     
     boost::shared_ptr<NodeCollection> collection = getGroup();
     if (collection) {
-        collection->setNodeName(name,false, false, &newName);
+        if (throwErrors) {
+            try {
+                collection->setNodeName(name,false, false, &newName);
+            } catch (const std::exception& e) {
+                appPTR->writeToOfxLog_mt_safe(e.what());
+                std::cerr << e.what() << std::endl;
+                return;
+            }
+        } else {
+            collection->setNodeName(name,false, false, &newName);
+        }
+    }
+    
+    
+    
+    if (oldName == newName) {
+        return;
+    }
+
+
+    if (!newName.empty()) {
+        bool isAttrDefined = false;
+        std::string newPotentialQualifiedName = getApp()->getAppIDString() + getFullyQualifiedNameInternal(newName);
+        (void)Natron::getAttrRecursive(newPotentialQualifiedName, appPTR->getMainModule(), &isAttrDefined);
+        if (isAttrDefined) {
+            std::stringstream ss;
+            ss << "A Python attribute with the same name (" << newPotentialQualifiedName << ") already exists.";
+            if (throwErrors) {
+                throw std::runtime_error(ss.str());
+            } else {
+                std::string err = ss.str();
+                appPTR->writeToOfxLog_mt_safe(err.c_str());
+                std::cerr << err << std::endl;
+                return;
+            }
+        }
     }
     
     bool mustSetCacheID;
@@ -2376,11 +2446,15 @@ Node::setNameInternal(const std::string& name)
         ///Set the label at the same time
         _imp->label = newName;
     }
+    std::string fullySpecifiedName = getFullyQualifiedName();
+
     if (mustSetCacheID) {
-        std::string baseName = newName;
-        std::string cacheID = baseName;
+        std::string baseName = fullySpecifiedName;
+        std::string cacheID = fullySpecifiedName;
+        
+        
         int i = 1;
-        while (getApp()->getProject()->isCacheIDAlreadyTaken(cacheID)) {
+        while (getGroup() && getGroup()->isCacheIDAlreadyTaken(cacheID)) {
             std::stringstream ss;
             ss << baseName;
             ss << i;
@@ -2392,39 +2466,12 @@ Node::setNameInternal(const std::string& name)
     }
     
     if (collection) {
-        std::string fullySpecifiedName = getFullyQualifiedName();
         if (!oldName.empty()) {
-            
             if (fullOldName != fullySpecifiedName) {
                 try {
                     setNodeVariableToPython(fullOldName,fullySpecifiedName);
                 } catch (const std::exception& e) {
                     qDebug() << e.what();
-                }
-                
-                const std::vector<boost::shared_ptr<KnobI> > & knobs = getKnobs();
-                
-                for (U32 i = 0; i < knobs.size(); ++i) {
-                    std::list<boost::shared_ptr<KnobI> > listeners;
-                    knobs[i]->getListeners(listeners);
-                    ///For all listeners make sure they belong to a node
-                    bool foundEffect = false;
-                    for (std::list<boost::shared_ptr<KnobI> >::iterator it2 = listeners.begin(); it2 != listeners.end(); ++it2) {
-                        EffectInstance* isEffect = dynamic_cast<EffectInstance*>( (*it2)->getHolder() );
-                        if ( isEffect && ( isEffect != _imp->liveInstance.get() ) && isEffect->getNode()->isActivated() ) {
-                            foundEffect = true;
-                            break;
-                        }
-                    }
-                    if (foundEffect) {
-                        Natron::warningDialog( tr("Rename").toStdString(), tr("This node has one or several "
-                                                                              "parameters from which other parameters "
-                                                                              "of the project rely on through expressions "
-                                                                              "or links. Changing the name of this node will probably "
-                                                                              "break these expressions. You should carefully update them. ")
-                                              .toStdString() );
-                        break;
-                    }
                 }
             }
         } else { //if (!oldName.empty()) {
@@ -2437,25 +2484,23 @@ Node::setNameInternal(const std::string& name)
     Q_EMIT labelChanged(qnewName);
 }
 
-bool
+void
 Node::setScriptName(const std::string& name)
 {
     std::string newName;
     if (getGroup()) {
-        if (!getGroup()->setNodeName(name,false, true, &newName)) {
-            return false;
-        }
+        getGroup()->setNodeName(name,false, true, &newName);
     } else {
         newName = name;
     }
-    
+    //We do not allow setting the script-name of output nodes because we rely on it with NatronRenderer
     if (dynamic_cast<GroupOutput*>(_imp->liveInstance.get())) {
-        return false;
+        throw std::runtime_error(QObject::tr("Changing the script-name of an Output node is not a valid operation").toStdString());
+        return;
     }
     
     
-    setNameInternal(newName);
-    return true;
+    setNameInternal(newName, true);
 }
 
 
@@ -2482,7 +2527,7 @@ Node::makeCacheInfo() const
     QString diskSizeStr = printAsRAM((U64)disk);
     
     std::stringstream ss;
-    ss << "<b><font color=\"green\">Cache Occupancy:</font></b> RAM: " << ramSizeStr.toStdString() << " / Disk: " << diskSizeStr.toStdString();
+    ss << "<br><b><font color=\"green\">Cache Occupancy:</font></b> RAM: " << ramSizeStr.toStdString() << " / Disk: " << diskSizeStr.toStdString() << "</br>";
     return ss.str();
 }
 
@@ -2545,8 +2590,8 @@ Node::makeInfoForInput(int inputNumber) const
     double fps = input->getPreferredFrameRate();
 
     std::stringstream ss;
-    ss << "<b><font color=\"orange\">"<< inputName << ":\n" << "</font></b>";
-    ss << "<b>Image Format:</b>\n";
+    ss << "<br><b><font color=\"orange\">"<< inputName << ":" << "</font></b></br>";
+    ss << "<br><b>Image Format: </b>";
     
     EffectInstance::ComponentsAvailableMap::iterator next = availableComps.begin();
     if (next != availableComps.end()) {
@@ -2562,18 +2607,18 @@ Node::makeInfoForInput(int inputNumber) const
         }
         if (next != availableComps.end()) {
             if (origin.get() != this || inputNumber == -1) {
-                ss << "\n";
+                ss << "</br>";
             }
             ++next;
         }
     }
     
-    ss << "\n<b>Alpha premultiplication:</b> " << premultStr;
-    ss << "\n<b>Pixel aspect ratio:</b> " << par;
-    ss << "\n<b>Framerate:</b> " << fps;
+    ss << "<br><b>Alpha premultiplication: </b>" << premultStr << "</br>";
+    ss << "<br><b>Pixel aspect ratio: </b>" << par << "</br>";
+    ss << "<br><b>Framerate:</b> " << fps << "</br>";
     if (stat != Natron::eStatusFailed) {
-        ss << "\n<b>Region of Definition:</b> ";
-        ss << "left = " << rod.x1 << " bottom = " << rod.y1 << " right = " << rod.x2 << " top = " << rod.y2 << '\n';
+        ss << "<br><b>Region of Definition:</b> ";
+        ss << "left = " << rod.x1 << " bottom = " << rod.y1 << " right = " << rod.x2 << " top = " << rod.y2 << "</br>";
     }
     return ss.str();
 }
@@ -2604,11 +2649,12 @@ Node::initializeKnobs(int renderScaleSupportPref)
     if (!isDot && !isViewer) {
         
         if (!isBd) {
-            
 
-            bool disableNatronKnobs = _imp->liveInstance->isReader() || _imp->liveInstance->isWriter() || _imp->liveInstance->isBuiltinTrackerNode() || dynamic_cast<NodeGroup*>(_imp->liveInstance.get()) || dynamic_cast<GroupInput*>(_imp->liveInstance.get()) ||
-            dynamic_cast<GroupOutput*>(_imp->liveInstance.get());
+            bool isWriter = _imp->liveInstance->isWriter();
+        
             
+            bool disableNatronKnobs = _imp->liveInstance->isReader() || isWriter || _imp->liveInstance->isBuiltinTrackerNode() || dynamic_cast<NodeGroup*>(_imp->liveInstance.get()) || dynamic_cast<GroupInput*>(_imp->liveInstance.get()) ||
+            dynamic_cast<GroupOutput*>(_imp->liveInstance.get());
             
             bool useChannels = !_imp->liveInstance->isMultiPlanar() && !disableNatronKnobs && !isDiskCache;
             
@@ -2616,11 +2662,11 @@ Node::initializeKnobs(int renderScaleSupportPref)
             boost::shared_ptr<KnobPage> mainPage;
             const std::vector< boost::shared_ptr<KnobI> > & knobs = _imp->liveInstance->getKnobs();
             
-            if (!disableNatronKnobs) {
+            if (!disableNatronKnobs || isWriter) {
                 for (U32 i = 0; i < knobs.size(); ++i) {
                     boost::shared_ptr<KnobPage> p = boost::dynamic_pointer_cast<KnobPage>(knobs[i]);
-                    if ( p && (p->getDescription() != NATRON_PARAMETER_PAGE_NAME_INFO) &&
-                        (p->getDescription() != NATRON_PARAMETER_PAGE_NAME_EXTRA) ) {
+                    if ( p && (p->getLabel() != NATRON_PARAMETER_PAGE_NAME_INFO) &&
+                        (p->getLabel() != NATRON_PARAMETER_PAGE_NAME_EXTRA) ) {
                         mainPage = p;
                         break;
                     }
@@ -2630,6 +2676,33 @@ Node::initializeKnobs(int renderScaleSupportPref)
                 }
                 assert(mainPage);
             }
+            
+            
+            if (isWriter) {
+                ///Find a  "lastFrame" parameter and add it after it
+                boost::shared_ptr<KnobInt> frameIncrKnob = Natron::createKnob<KnobInt>(_imp->liveInstance.get(), kWriteParamFrameStepLabel, 1 , false);
+                frameIncrKnob->setName(kWriteParamFrameStep);
+                frameIncrKnob->setHintToolTip(kWriteParamFrameStepHint);
+                frameIncrKnob->setAnimationEnabled(false);
+                frameIncrKnob->setMinimum(1);
+                frameIncrKnob->setDefaultValue(1);
+                if (mainPage) {
+                    std::vector< boost::shared_ptr<KnobI> > children = mainPage->getChildren();
+                    bool foundLastFrame = false;
+                    for (std::size_t i = 0; i < children.size(); ++i) {
+                        if (children[i]->getName() == "lastFrame") {
+                            mainPage->insertKnob(i + 1, frameIncrKnob);
+                            foundLastFrame = true;
+                            break;
+                        }
+                    }
+                    if (!foundLastFrame) {
+                        mainPage->addKnob(frameIncrKnob);
+                    }
+                }
+                _imp->frameIncrKnob = frameIncrKnob;
+            }
+            
            
             
             ///Pair hasMaskChannelSelector, isMask
@@ -2662,8 +2735,13 @@ Node::initializeKnobs(int renderScaleSupportPref)
                 
                 if (useSelectors) {
                     
-                    boost::shared_ptr<KnobSeparator> sep = Natron::createKnob<KnobSeparator>(_imp->liveInstance.get(), "Advanced", 1, false);
-                    mainPage->addKnob(sep);
+                    std::vector<boost::shared_ptr<KnobI> > mainPageChildren = mainPage->getChildren();
+                    bool skipSeparator = !mainPageChildren.empty() && dynamic_cast<KnobSeparator*>(mainPageChildren.back().get());
+
+                    if (skipSeparator) {
+                        boost::shared_ptr<KnobSeparator> sep = Natron::createKnob<KnobSeparator>(_imp->liveInstance.get(), "Advanced", 1, false);
+                        mainPage->addKnob(sep);
+                    }
                     
                     ///Create input layer selectors
                     for (int i = 0; i < inputsCount; ++i) {
@@ -2807,6 +2885,7 @@ Node::initializeKnobs(int renderScaleSupportPref)
                 boost::shared_ptr<KnobString> channelName = Natron::createKnob<KnobString>(_imp->liveInstance.get(), "",1,false);
                 channelName->setSecretByDefault(true);
                 channelName->setEvaluateOnChange(false);
+                channelName->setDefaultValue(choices[choices.size() - 1]);
                 if (mainPage) {
                     mainPage->addKnob(channelName);
                 }
@@ -2868,6 +2947,19 @@ Node::initializeKnobs(int renderScaleSupportPref)
         _imp->nodeLabelKnob = nodeLabel;
         
         if (!isBd) {
+            
+            boost::shared_ptr<KnobBool> hideInputs = Natron::createKnob<KnobBool>(_imp->liveInstance.get(), "Hide inputs", 1, false);
+            hideInputs->setName("hideInputs");
+            hideInputs->setDefaultValue(false);
+            hideInputs->setAnimationEnabled(false);
+            hideInputs->setAddNewLine(false);
+            hideInputs->setIsPersistant(true);
+            hideInputs->setEvaluateOnChange(false);
+            hideInputs->setHintToolTip(tr("When checked, the input arrows of the node in the nodegraph will be hidden").toStdString());
+            _imp->hideInputs = hideInputs;
+            _imp->nodeSettingsPage.lock()->addKnob(hideInputs);
+
+            
             boost::shared_ptr<KnobBool> fCaching = Natron::createKnob<KnobBool>(_imp->liveInstance.get(), "Force caching", 1, false);
             fCaching->setName("forceCaching");
             fCaching->setDefaultValue(false);
@@ -2880,7 +2972,7 @@ Node::initializeKnobs(int renderScaleSupportPref)
             _imp->forceCaching = fCaching;
             _imp->nodeSettingsPage.lock()->addKnob(fCaching);
             
-            boost::shared_ptr<KnobBool> previewEnabled = Natron::createKnob<KnobBool>(_imp->liveInstance.get(), tr("Preview enabled").toStdString(),1,false);
+            boost::shared_ptr<KnobBool> previewEnabled = Natron::createKnob<KnobBool>(_imp->liveInstance.get(), tr("Preview").toStdString(),1,false);
             assert(previewEnabled);
             previewEnabled->setDefaultValue( makePreviewByDefault() );
             previewEnabled->setName(kEnablePreviewKnobName);
@@ -2988,52 +3080,17 @@ Node::initializeKnobs(int renderScaleSupportPref)
             infoPage->setName(NATRON_PARAMETER_PAGE_NAME_INFO);
             _imp->infoPage = infoPage;
             
-            boost::shared_ptr<KnobString> infoDisclaimer = Natron::createKnob<KnobString>(_imp->liveInstance.get(), tr("Input and output informations").toStdString(), 1, false);
-            infoDisclaimer->setName("infoDisclaimer");
-            infoDisclaimer->setAnimationEnabled(false);
-            infoDisclaimer->setIsPersistant(false);
-            infoDisclaimer->setAsLabel();
-            infoDisclaimer->hideDescription();
-            infoDisclaimer->setEvaluateOnChange(false);
-            infoDisclaimer->setDefaultValue(tr("Input and output informations, press Refresh to update them with current values").toStdString());
-            infoPage->addKnob(infoDisclaimer);
-            _imp->infoDisclaimer = infoDisclaimer;
+            boost::shared_ptr<KnobString> nodeInfos = Natron::createKnob<KnobString>(_imp->liveInstance.get(), "", 1, false);
+            nodeInfos->setName("nodeInfos");
+            nodeInfos->setAnimationEnabled(false);
+            nodeInfos->setIsPersistant(false);
+            nodeInfos->setAsMultiLine();
+            nodeInfos->setAsCustomHTMLText(true);
+            nodeInfos->setEvaluateOnChange(false);
+            nodeInfos->setHintToolTip(tr("Input and output informations, press Refresh to update them with current values").toStdString());
+            infoPage->addKnob(nodeInfos);
+            _imp->nodeInfos = nodeInfos;
             
-            for (int i = 0; i < inputsCount; ++i) {
-                std::string inputLabel = getInputLabel(i);
-                boost::shared_ptr<KnobString> inputInfo = Natron::createKnob<KnobString>(_imp->liveInstance.get(), inputLabel + ' ' + tr("Info").toStdString(), 1, false);
-                inputInfo->setName(inputLabel + "Info");
-                inputInfo->setAnimationEnabled(false);
-                inputInfo->setIsPersistant(false);
-                inputInfo->setEvaluateOnChange(false);
-                inputInfo->setSecretByDefault(true);
-                inputInfo->hideDescription();
-                inputInfo->setAsLabel();
-                _imp->inputFormats.push_back(inputInfo);
-                infoPage->addKnob(inputInfo);
-            }
-            
-            std::string outputLabel("Output");
-            boost::shared_ptr<KnobString> outputFormat = Natron::createKnob<KnobString>(_imp->liveInstance.get(), outputLabel + " Info", 1, false);
-            outputFormat->setName(outputLabel + "Info");
-            outputFormat->setAnimationEnabled(false);
-            outputFormat->setIsPersistant(false);
-            outputFormat->setEvaluateOnChange(false);
-            outputFormat->hideDescription();
-            outputFormat->setAsLabel();
-            infoPage->addKnob(outputFormat);
-            _imp->outputFormat = outputFormat;
-            
-            std::string cacheInfoLabel("Cache Occupancy");
-            boost::shared_ptr<KnobString> cacheOccupancy = Natron::createKnob<KnobString>(_imp->liveInstance.get(), cacheInfoLabel, 1, false);
-            cacheOccupancy->setName(cacheInfoLabel + "Info");
-            cacheOccupancy->setAnimationEnabled(false);
-            cacheOccupancy->setIsPersistant(false);
-            cacheOccupancy->setEvaluateOnChange(false);
-            cacheOccupancy->hideDescription();
-            cacheOccupancy->setAsLabel();
-            infoPage->addKnob(cacheOccupancy);
-            _imp->cacheMemInfo = cacheOccupancy;
             
             boost::shared_ptr<KnobButton> refreshInfoButton = Natron::createKnob<KnobButton>(_imp->liveInstance.get(), tr("Refresh Info").toStdString(),1,false);
             refreshInfoButton->setName("refreshButton");
@@ -3093,7 +3150,7 @@ Node::initializeKnobs(int renderScaleSupportPref)
             }
         }
     }
-  
+
 
     if (isGroup) {
         _imp->liveInstance->initializeKnobsPublic();
@@ -3140,26 +3197,42 @@ Node::Implementation::createChannelSelector(int inputNb,const std::string & inpu
     baseLayers.push_back(ImageComponents::getForwardMotionComponents().getLayerName());
     baseLayers.push_back(ImageComponents::getBackwardMotionComponents().getLayerName());
     layer->populateChoices(baseLayers);
+    int defVal;
     if (isOutput && liveInstance->isPassThroughForNonRenderedPlanes() == EffectInstance::ePassThroughRenderAllRequestedPlanes) {
-        layer->setDefaultValue(0);
+        defVal = 0;
+        
         //Hide all other input selectors if choice is All in output
         for (std::map<int,ChannelSelector>::iterator it = channelsSelectors.begin(); it!=channelsSelectors.end(); ++it) {
             it->second.layer.lock()->setSecret(true);
         }
     } else {
-        layer->setDefaultValue(1);
+        defVal = 1;
     }
+    layer->setDefaultValue(defVal);
     
     boost::shared_ptr<KnobString> layerName = Natron::createKnob<KnobString>(liveInstance.get(), inputName + "_layer_name", 1, false);
     layerName->setSecretByDefault(true);
     layerName->setAnimationEnabled(false);
     layerName->setEvaluateOnChange(false);
+    layerName->setDefaultValue(baseLayers[defVal]);
     //layerName->setAddNewLine(!sel.useRGBASelectors);
     page->addKnob(layerName);
     sel.layerName = layerName;
     
     channelsSelectors[inputNb] = sel;
     
+}
+
+int
+Node::getFrameStepKnobValue() const
+{
+    boost::shared_ptr<KnobInt> k = _imp->frameIncrKnob.lock();
+    if (!k) {
+        return 1;
+    } else {
+        int v = k->getValue();
+        return std::max(1, v);
+    }
 }
 
 bool
@@ -3342,26 +3415,6 @@ Node::initializeInputs()
         _imp->liveInstance->addAcceptedComponents(-1, &_imp->outputComponents);
     }
     _imp->inputsInitialized = true;
-    boost::shared_ptr<KnobPage> infoPage = _imp->infoPage.lock();
-    if (infoPage) {
-        _imp->inputFormats.clear();
-        for (int i = 0; i < inputCount; ++i) {
-            std::string inputLabel = getInputLabel(i);
-            boost::shared_ptr<KnobString> inputInfo = Natron::createKnob<KnobString>(_imp->liveInstance.get(), inputLabel + ' ' + tr("Info").toStdString(), 1, false);
-            inputInfo->setName(inputLabel + "Info");
-            inputInfo->setAnimationEnabled(false);
-            inputInfo->setIsPersistant(false);
-            inputInfo->setEvaluateOnChange(false);
-            inputInfo->setSecretByDefault(true);
-            inputInfo->hideDescription();
-            inputInfo->setAsLabel();
-            _imp->inputFormats.push_back(inputInfo);
-            infoPage->insertKnob(1 + i,inputInfo);
-        }
-        if (inputCount > 0) {
-            _imp->liveInstance->refreshKnobs();
-        }
-    }
     
     Q_EMIT inputsInitialized();
 }
@@ -4266,7 +4319,6 @@ void
 Node::clearLastRenderedImage()
 {
     _imp->liveInstance->clearLastRenderedImage();
-    _imp->strokeImage.reset();
 }
 
 /*After this call this node still knows the link to the old inputs/outputs
@@ -4742,8 +4794,7 @@ Node::makePreviewImage(SequenceTime time,
         return false;
     }
     
-    ParallelRenderArgsSetter frameRenderArgs(getApp()->getProject().get(),
-                                             time,
+    ParallelRenderArgsSetter frameRenderArgs(time,
                                              0, //< preview only renders view 0 (left)
                                              true, //<isRenderUserInteraction
                                              false, //isSequential
@@ -4932,10 +4983,10 @@ Node::getPluginLabel() const
 }
 
 std::string
-Node::getDescription() const
+Node::getPluginDescription() const
 {
     ///MT-safe, never changes
-    return _imp->liveInstance->getDescription();
+    return _imp->liveInstance->getPluginDescription();
 }
 
 int
@@ -5228,7 +5279,7 @@ Node::getRenderInstancesSharedMutex()
     return _imp->renderInstancesSharedMutex;
 }
 
-static void refreshPreviewsRecursivelyUpstreamInternal(int time,Node* node,std::list<Node*>& marked)
+static void refreshPreviewsRecursivelyUpstreamInternal(double time,Node* node,std::list<Node*>& marked)
 {
     if (std::find(marked.begin(), marked.end(), node) != marked.end()) {
         return;
@@ -5251,13 +5302,13 @@ static void refreshPreviewsRecursivelyUpstreamInternal(int time,Node* node,std::
 }
 
 void
-Node::refreshPreviewsRecursivelyUpstream(int time)
+Node::refreshPreviewsRecursivelyUpstream(double time)
 {
     std::list<Node*> marked;
     refreshPreviewsRecursivelyUpstreamInternal(time,this,marked);
 }
 
-static void refreshPreviewsRecursivelyDownstreamInternal(int time,Node* node,std::list<Node*>& marked)
+static void refreshPreviewsRecursivelyDownstreamInternal(double time,Node* node,std::list<Node*>& marked)
 {
     if (std::find(marked.begin(), marked.end(), node) != marked.end()) {
         return;
@@ -5279,7 +5330,7 @@ static void refreshPreviewsRecursivelyDownstreamInternal(int time,Node* node,std
 }
 
 void
-Node::refreshPreviewsRecursivelyDownstream(int time)
+Node::refreshPreviewsRecursivelyDownstream(double time)
 {
     if (!getNodeGui()) {
         return;
@@ -5585,7 +5636,7 @@ Node::unlock(const boost::shared_ptr<Natron::Image> & image)
 }
 
 boost::shared_ptr<Natron::Image>
-Node::getImageBeingRendered(int time,
+Node::getImageBeingRendered(double time,
                             unsigned int mipMapLevel,
                             int view)
 {
@@ -5621,7 +5672,7 @@ Node::endInputEdition(bool triggerRender)
         _imp->inputsModified.clear();
 
         if (hasChanged) {
-            if (!getApp()->getProject()->isLoadingProject() && !getApp()->isCreatingPythonGroup()) {
+            if (!getApp()->isCreatingNodeTree()) {
                 forceRefreshAllInputRelatedData();
             }
             refreshDynamicProperties();
@@ -5660,7 +5711,7 @@ Node::onInputChanged(int inputNb)
         isViewer->refreshActiveInputs(inputNb);
     }
     
-    bool shouldDoInputChanged = (!getApp()->getProject()->isProjectClosing() && !getApp()->getProject()->isLoadingProject() && !getApp()->isCreatingPythonGroup()) ||
+    bool shouldDoInputChanged = (!getApp()->getProject()->isProjectClosing() && !getApp()->isCreatingNodeTree()) ||
     _imp->liveInstance->isRotoPaintNode();
     
     if (shouldDoInputChanged) {
@@ -5673,8 +5724,7 @@ Node::onInputChanged(int inputNb)
          * The plug-in might call getImage, set a valid thread storage on the tree.
          **/
         double time = getApp()->getTimeLine()->currentFrame();
-        ParallelRenderArgsSetter frameRenderArgs(getApp()->getProject().get(),
-                                                 time,
+        ParallelRenderArgsSetter frameRenderArgs(time,
                                                  0 /*view*/,
                                                  true,
                                                  false,
@@ -5719,7 +5769,6 @@ Node::onInputChanged(int inputNb)
     GroupOutput* isOutput = dynamic_cast<GroupOutput*>(_imp->liveInstance.get());
     if (isOutput) {
         NodeGroup* containerGroup = dynamic_cast<NodeGroup*>(isOutput->getNode()->getGroup().get());
-        assert(containerGroup);
         if (containerGroup) {
             std::map<Node*,int> groupOutputs;
             containerGroup->getNode()->getOutputsConnectedToThisNode(&groupOutputs);
@@ -6130,7 +6179,7 @@ Node::refreshCreatedViews(KnobI* knob)
             std::string filename = inputFileKnob->getValue();
             
             std::stringstream ss;
-            for (std::size_t i = 0; i < missingViews.size(); ++i) {
+            for (int i = 0; i < missingViews.size(); ++i) {
                 ss << missingViews[i].toStdString();
                 if (i < missingViews.size() - 1) {
                     ss << ", ";
@@ -6159,6 +6208,26 @@ Node::refreshCreatedViews(KnobI* knob)
     
 }
 
+bool
+Node::getHideInputsKnobValue() const
+{
+    boost::shared_ptr<KnobBool> k = _imp->hideInputs.lock();
+    if (!k) {
+        return false;
+    }
+    return k->getValue();
+}
+
+void
+Node::setHideInputsKnobValue(bool hidden)
+{
+    boost::shared_ptr<KnobBool> k = _imp->hideInputs.lock();
+    if (!k) {
+        return;
+    }
+    k->setValue(hidden,0);
+}
+
 void
 Node::refreshIdentityState()
 {
@@ -6166,17 +6235,20 @@ Node::refreshIdentityState()
     RenderScale scale;
     scale.x = scale.y = 1;
     
-    double inputTime;
-    int inputNb;
+    double inputTime = 0;
+    int inputNb = -1;
     
     U64 hash = getHashValue();
     RectD rod;
     bool isProj;
-    (void)_imp->liveInstance->getRegionOfDefinition_public(hash, time, scale, 0, &rod, &isProj);
+    Natron::StatusEnum stat = _imp->liveInstance->getRegionOfDefinition_public(hash, time, scale, 0, &rod, &isProj);
     
     RectI pixelRod;
     rod.toPixelEnclosing(scale, _imp->liveInstance->getPreferredAspectRatio(), &pixelRod);
-    bool isIdentity = _imp->liveInstance->isIdentity_public(true, hash, time, scale, pixelRod, 0, &inputTime, &inputNb);
+    bool isIdentity =  false;
+    if (!pixelRod.isNull() && stat != Natron::eStatusFailed) {
+        isIdentity = _imp->liveInstance->isIdentity_public(true, hash, time, scale, pixelRod, 0, &inputTime, &inputNb);
+    }
     
     
     Q_EMIT identityChanged(isIdentity ? inputNb : -1);
@@ -6220,6 +6292,8 @@ Node::onEffectKnobValueChanged(KnobI* what,
             }
             replaceCustomDataInlabel(operation);
         }
+    } else if (what == _imp->hideInputs.lock().get()) {
+        Q_EMIT hideInputsKnobChanged(_imp->hideInputs.lock()->getValue());
     } else if (what->getName() == kOfxImageEffectFileParamName) {
         
         if (_imp->liveInstance->isReader()) {
@@ -6267,27 +6341,18 @@ Node::onEffectKnobValueChanged(KnobI* what,
         refreshCreatedViews(what);
     } else if ( what == _imp->refreshInfoButton.lock().get() ) {
         int maxinputs = getMaxInputCount();
+        std::stringstream ssinfo;
         for (int i = 0; i < maxinputs; ++i) {
             std::string inputInfo = makeInfoForInput(i);
-            boost::shared_ptr<KnobString> strKnob = _imp->inputFormats[i].lock();
-            if (i < (int)_imp->inputFormats.size() && strKnob) {
-                if (inputInfo.empty()) {
-                    if (!strKnob->getIsSecret()) {
-                        strKnob->setSecret(true);
-                    }
-                } else {
-                    if (strKnob->getIsSecret()) {
-                        strKnob->setSecret(false);
-                    }
-                    strKnob->setValue(inputInfo, 0);
-                }
+            if (!inputInfo.empty()) {
+                ssinfo << inputInfo << "<br/>";
             }
         }
         std::string outputInfo = makeInfoForInput(-1);
-        _imp->outputFormat.lock()->setValue(outputInfo, 0);
+        ssinfo << outputInfo << "<br/>";
         std::string cacheInfo = makeCacheInfo();
-        _imp->cacheMemInfo.lock()->setValue(cacheInfo, 0);
- 
+        ssinfo << cacheInfo << "<br/>";
+        _imp->nodeInfos.lock()->setValue(ssinfo.str(), 0);
     }
     
     for (std::map<int,ChannelSelector>::iterator it = _imp->channelsSelectors.begin(); it != _imp->channelsSelectors.end(); ++it) {
@@ -6432,22 +6497,29 @@ Node::Implementation::onLayerChanged(int inputNb,const ChannelSelector& selector
         }
 
     } else {
-        const std::vector<std::string>& channels = comp.getComponentsNames();
-        for (int i = 0; i < 4; ++i) {
-            boost::shared_ptr<KnobBool> enabled = enabledChan[i].lock();
-            if (i >= (int)(channels.size())) {
-                enabled->setSecret(true);
-            } else {
-                enabled->setSecret(false);
-                enabled->setDescription(channels[i]);
-            }
-            enabled->setValue(true, 0);
-        }
+        _publicInterface->refreshEnabledKnobsLabel(comp);
     }
     
     if (inputNb == -1) {
         _publicInterface->s_outputLayerChanged();
     }
+}
+
+void
+Node::refreshEnabledKnobsLabel(const Natron::ImageComponents& comp)
+{
+    const std::vector<std::string>& channels = comp.getComponentsNames();
+    for (int i = 0; i < 4; ++i) {
+        boost::shared_ptr<KnobBool> enabled = _imp->enabledChan[i].lock();
+        if (i >= (int)(channels.size())) {
+            enabled->setSecret(true);
+        } else {
+            enabled->setSecret(false);
+            enabled->setLabel(channels[i]);
+        }
+        //enabled->setValue(true, 0);
+    }
+
 }
 
 void
@@ -6803,6 +6875,8 @@ Node::canOthersConnectToThisNode() const
     if (dynamic_cast<BackDrop*>(_imp->liveInstance.get())) {
         return false;
     } else if (dynamic_cast<GroupOutput*>(_imp->liveInstance.get())) {
+        return false;
+    } else if (_imp->liveInstance->isWriter() && _imp->liveInstance->getSequentialPreference() == Natron::eSequentialPreferenceOnlySequential) {
         return false;
     }
     ///In debug mode only allow connections to Writer nodes
@@ -7274,7 +7348,7 @@ Node::refreshAllInputRelatedData(bool canChangeValues,const std::vector<boost::s
 {
     bool hasChanged = false;
     hasChanged |= refreshDraftFlagInternal(inputs);
-    
+
     ///if all non optional clips are connected, call getClipPrefs
     ///The clip preferences action is never called until all non optional clips have been attached to the plugin.
     if (!hasMandatoryInputDisconnected()) {
@@ -7442,6 +7516,9 @@ Node::markInputRelatedDataDirtyRecursive()
 void
 Node::refreshInputRelatedDataRecursiveInternal(std::list<Natron::Node*>& markedNodes)
 {
+    if (getApp()->isCreatingNodeTree()) {
+        return;
+    }
     refreshInputRelatedDataInternal(markedNodes);
     
     /*
@@ -7613,47 +7690,19 @@ Node::attachRotoItem(const boost::shared_ptr<RotoDrawableItem>& stroke)
     setProcessChannelsValues(true, true, true, true);
 }
 
+void
+Node::setUseAlpha0ToConvertFromRGBToRGBA(bool use)
+{
+    assert(QThread::currentThread() == qApp->thread());
+    _imp->useAlpha0ToConvertFromRGBToRGBA = use;
+}
+
 boost::shared_ptr<RotoDrawableItem>
 Node::getAttachedRotoItem() const
 {
     return _imp->paintStroke.lock();
 }
 
-/**
- * @brief Given a fullyQualifiedName, e.g: app1.Group1.Blur1
- * this function returns the PyObject attribute of Blur1 if it is defined, or Group1 otherwise
- * If app1 or Group1 does not exist at this point, this is a failure.
- **/
-static PyObject* getAttrRecursive(const std::string& fullyQualifiedName,PyObject* parentObj,bool* isDefined)
-{
-    std::size_t foundDot = fullyQualifiedName.find(".");
-    std::string attrName = foundDot == std::string::npos ? fullyQualifiedName : fullyQualifiedName.substr(0, foundDot);
-    PyObject* obj = 0;
-    if (PyObject_HasAttrString(parentObj, attrName.c_str())) {
-        obj = PyObject_GetAttrString(parentObj, attrName.c_str());
-    }
-    
-    ///We either found the parent object or we are on the last object in which case we return the parent
-    if (!obj) {
-        assert(fullyQualifiedName.find(".") == std::string::npos);
-        *isDefined = false;
-        return parentObj;
-    } else {
-        assert(obj);
-        std::string recurseName;
-        if (foundDot != std::string::npos) {
-            recurseName = fullyQualifiedName;
-            recurseName.erase(0, foundDot + 1);
-        }
-        if (!recurseName.empty()) {
-            return getAttrRecursive(recurseName, obj, isDefined);
-        } else {
-            *isDefined = true;
-            return obj;
-        }
-    }
-    
-}
 
 
 void
@@ -7672,14 +7721,14 @@ Node::declareNodeVariableToPython(const std::string& nodeName)
     
     std::string appID = getApp()->getAppIDString();
     
-    std::string varName = appID + "." + nodeName;
+    std::string nodeFullName = appID + "." + nodeName;
     bool alreadyDefined = false;
-    PyObject* nodeObj = getAttrRecursive(varName, mainModule, &alreadyDefined);
+    PyObject* nodeObj = Natron::getAttrRecursive(nodeFullName, mainModule, &alreadyDefined);
     assert(nodeObj);
     Q_UNUSED(nodeObj);
 
     if (!alreadyDefined) {
-        std::string script = varName + " = " + appID + ".getNode(\"";
+        std::string script = nodeFullName + " = " + appID + ".getNode(\"";
         script.append(nodeName);
         script.append("\")\n");
         std::string err;
@@ -7751,13 +7800,13 @@ Node::declarePythonFields()
     }
     
     std::locale locale;
-    std::string fullName = getFullyQualifiedName();
+    std::string nodeName = getFullyQualifiedName();
     
     std::string appID = getApp()->getAppIDString();
     bool alreadyDefined = false;
     
-    std::string nodeFullName = appID + "." + fullName;
-    PyObject* nodeObj = getAttrRecursive(nodeFullName, getMainModule(), &alreadyDefined);
+    std::string nodeFullName = appID + "." + nodeName;
+    PyObject* nodeObj = Natron::getAttrRecursive(nodeFullName, getMainModule(), &alreadyDefined);
     assert(nodeObj);
     Q_UNUSED(nodeObj);
     if (!alreadyDefined) {
@@ -7784,11 +7833,11 @@ Node::removeParameterFromPython(const std::string& parameterName)
     }
     Natron::PythonGILLocker pgl;
     std::string appID = getApp()->getAppIDString();
-    std::string fullName = getFullyQualifiedName();
-    std::string nodeFullName = appID + "." + fullName;
+    std::string nodeName = getFullyQualifiedName();
+    std::string nodeFullName = appID + "." + nodeName;
     bool alreadyDefined = false;
     
-    PyObject* nodeObj = getAttrRecursive(nodeFullName, getMainModule(), &alreadyDefined);
+    PyObject* nodeObj = Natron::getAttrRecursive(nodeFullName, getMainModule(), &alreadyDefined);
     assert(nodeObj);
     Q_UNUSED(nodeObj);
     if (!alreadyDefined) {
@@ -8074,7 +8123,9 @@ Node::Implementation::runInputChangedCallback(int index,const std::string& cb)
     std::string thisGroupVar;
     NodeGroup* isParentGrp = dynamic_cast<NodeGroup*>(collection.get());
     if (isParentGrp) {
-        thisGroupVar = appID + "." + isParentGrp->getNode()->getFullyQualifiedName();
+        std::string nodeName = isParentGrp->getNode()->getFullyQualifiedName();
+        std::string nodeFullName = appID + "." + nodeName;
+        thisGroupVar = nodeFullName;
     } else {
         thisGroupVar = appID;
     }
@@ -8120,7 +8171,7 @@ Node::refreshChannelSelectors(bool setValues)
     }
     _imp->liveInstance->setComponentsAvailableDirty(true);
     
-    int time = getApp()->getTimeLine()->currentFrame();
+    double time = getApp()->getTimeLine()->currentFrame();
     
     bool hasChanged = false;
     for (std::map<int,ChannelSelector>::iterator it = _imp->channelsSelectors.begin(); it != _imp->channelsSelectors.end(); ++it) {
@@ -8145,7 +8196,8 @@ Node::refreshChannelSelectors(bool setValues)
         }
         int gotColor = -1;
 
-        Natron::ImageComponents colorComp;
+        Natron::ImageComponents colorComp,selectedComp;
+        bool foundSelectedComp = false;
         
         /*
          These are default layers that we always display in the layer selector.
@@ -8174,6 +8226,11 @@ Node::refreshChannelSelectors(bool setValues)
                     std::vector<std::string>::iterator pos = choices.begin();
                     ++pos;
                     gotColor = 1;
+                    
+                    if (!foundSelectedComp && (curLayer == kNatronRGBAComponentsName || curLayer == kNatronRGBComponentsName || curLayer == kNatronAlphaComponentsName)) {
+                        selectedComp = it2->first;
+                        foundSelectedComp = true;
+                    }
 
                     if (numComp == 1) {
                         choices.insert(pos,kNatronAlphaComponentsName);
@@ -8192,6 +8249,10 @@ Node::refreshChannelSelectors(bool setValues)
                         }
                     }
                 } else {
+                    if (!foundSelectedComp && it2->first.getLayerName() == curLayer) {
+                        selectedComp = it2->first;
+                        foundSelectedComp = true;
+                    }
                     choices.push_back(it2->first.getLayerName());
                     std::map<std::string, int>::iterator foundDefaultLayer = defaultLayers.find(it2->first.getLayerName());
                     if (foundDefaultLayer != defaultLayers.end()) {
@@ -8274,17 +8335,8 @@ Node::refreshChannelSelectors(bool setValues)
                         layerKnob->setValue(i, 0);
                         _imp->liveInstance->endChanges(true);
                         layerKnob->unblockValueChanges();
-                        if (isColor && it->first == -1 && _imp->enabledChan[0].lock()) {
-                            assert(gotColor != -1);
-                            //Since color plane may have changed (RGB, or RGBA or Alpha), adjust the secretness of the checkboxes
-                            const std::vector<std::string>& channels = colorComp.getComponentsNames();
-                            for (int j = 0; j < 4; ++j) {
-                                if (j >= (int)(channels.size())) {
-                                    _imp->enabledChan[j].lock()->setSecret(true);
-                                } else {
-                                    _imp->enabledChan[j].lock()->setSecret(false);
-                                }
-                            }
+                        if (foundSelectedComp && it->first == -1 && _imp->enabledChan[0].lock()) {
+                            refreshEnabledKnobsLabel(selectedComp);
                         }
                         break;
                     }
@@ -8457,7 +8509,7 @@ Node::getUserCreatedComponents(std::list<Natron::ImageComponents>* comps)
 }
 
 double
-Node::getHostMixingValue(int time) const
+Node::getHostMixingValue(double time) const
 {
     boost::shared_ptr<KnobDouble> mix = _imp->mixWithSource.lock();
     return mix ? mix->getValueAtTime(time) : 1.;

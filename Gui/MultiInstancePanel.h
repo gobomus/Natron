@@ -25,23 +25,26 @@
 #include <Python.h>
 // ***** END PYTHON BLOCK *****
 
+#include "Global/Macros.h"
+
 #if !defined(Q_MOC_RUN) && !defined(SBK_RUN)
 #include <boost/scoped_ptr.hpp>
 #include <boost/shared_ptr.hpp>
 #endif
+
+CLANG_DIAG_OFF(deprecated)
+CLANG_DIAG_OFF(uninitialized)
+#include <QtCore/QThread>
+CLANG_DIAG_ON(deprecated)
+CLANG_DIAG_ON(uninitialized)
+
 #include "Engine/Knob.h"
 
-namespace Natron {
-class Node;
-}
-class NodeGui;
-class QVBoxLayout;
-class QHBoxLayout;
-class QItemSelection;
-class ViewerInstance;
-class TableItem;
-class KnobButton;
-class Gui;
+#include "Engine/EngineFwd.h"
+
+#include "Gui/GuiFwd.h"
+
+
 /**
  * @brief This class represents a multi-instance settings panel.
  **/

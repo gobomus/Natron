@@ -28,13 +28,13 @@
 #include <list>
 #include <stdexcept>
 
-#include <QDir>
-#include <QtConcurrentMap>
-#include <QThreadPool>
-#include <QUrl>
-#include <QFileInfo>
-#include <QEventLoop>
-#include <QSettings>
+#include <QtCore/QDir>
+#include <QtCore/QTextStream>
+#include <QtConcurrentMap> // QtCore on Qt4, QtConcurrent on Qt5
+#include <QtCore/QUrl>
+#include <QtCore/QFileInfo>
+#include <QtCore/QEventLoop>
+#include <QtCore/QSettings>
 
 #if !defined(SBK_RUN) && !defined(Q_MOC_RUN)
 GCC_DIAG_UNUSED_LOCAL_TYPEDEFS_OFF
@@ -97,8 +97,15 @@ struct AppInstancePrivate
     bool _projectCreatedWithLowerCaseIDs;
     
     mutable QMutex creatingGroupMutex;
+    
+    //When a pyplug is created
     bool _creatingGroup;
+    
+    //When a node is created
     bool _creatingNode;
+    
+    //When a node tree is created
+    bool _creatingTree;
     
     AppInstancePrivate(int appID,
                        AppInstance* app)
@@ -108,6 +115,7 @@ struct AppInstancePrivate
     , creatingGroupMutex()
     , _creatingGroup(false)
     , _creatingNode(false)
+    , _creatingTree(false)
     {
     }
     
@@ -146,6 +154,20 @@ AppInstance::isCreatingNode() const
 {
     QMutexLocker k(&_imp->creatingGroupMutex);
     return _imp->_creatingNode;
+}
+
+bool
+AppInstance::isCreatingNodeTree() const
+{
+    QMutexLocker k(&_imp->creatingGroupMutex);
+    return _imp->_creatingTree;
+}
+
+void
+AppInstance::setIsCreatingNodeTree(bool b)
+{
+    QMutexLocker k(&_imp->creatingGroupMutex);
+    _imp->_creatingTree = b;
 }
 
 void
@@ -336,18 +358,12 @@ AppInstance::getWritersWorkForCL(const CLArgs& cl,std::list<AppInstance::RenderR
 {
     const std::list<CLArgs::WriterArg>& writers = cl.getWriterArgs();
     for (std::list<CLArgs::WriterArg>::const_iterator it = writers.begin(); it != writers.end(); ++it) {
-        AppInstance::RenderRequest r;
         
-        int firstFrame = INT_MIN,lastFrame = INT_MAX;
-        if (cl.hasFrameRange()) {
-            const std::pair<int,int>& range = cl.getFrameRange();
-            firstFrame = range.first;
-            lastFrame = range.second;
-        }
-        
-        if (it->mustCreate) {
-            
-            NodePtr writer = createWriter(it->filename.toStdString(), getProject(), firstFrame, lastFrame);
+        QString writerName;
+        if (!it->mustCreate) {
+            writerName = it->name;
+        } else {
+            NodePtr writer = createWriter(it->filename.toStdString(), getProject(), INT_MIN, INT_MAX);
             
             //Connect the writer to the corresponding Output node input
             NodePtr output = getProject()->getNodeByFullySpecifiedName(it->name.toStdString());
@@ -363,15 +379,28 @@ AppInstance::getWritersWorkForCL(const CLArgs& cl,std::list<AppInstance::RenderR
                 writer->connectInput(outputInput, 0);
             }
             
-            r.writerName = writer->getScriptName().c_str();
-            r.firstFrame = firstFrame;
-            r.lastFrame = lastFrame;
-        } else {
-            r.writerName = it->name;
-            r.firstFrame = firstFrame;
-            r.lastFrame = lastFrame;
+            writerName = writer->getScriptName().c_str();
         }
-        requests.push_back(r);
+
+        if (cl.hasFrameRange()) {
+            const std::list<std::pair<int,std::pair<int,int> > >& frameRanges = cl.getFrameRanges();
+            for (std::list<std::pair<int,std::pair<int,int> > >::const_iterator it2 = frameRanges.begin(); it2 != frameRanges.end(); ++it2) {
+                AppInstance::RenderRequest r;
+                r.firstFrame = it2->second.first;
+                r.lastFrame = it2->second.second;
+                r.frameStep = it2->first;
+                r.writerName = writerName;
+                requests.push_back(r);
+            }
+        } else {
+            AppInstance::RenderRequest r;
+            r.firstFrame = INT_MIN;
+            r.lastFrame = INT_MAX;
+            r.frameStep = INT_MIN;
+            r.writerName = writerName;
+            requests.push_back(r);
+        }
+    
     }
 }
 
@@ -467,7 +496,7 @@ AppInstance::load(const CLArgs& cl)
         }
         
        
-        startWritersRendering(cl.areRenderStatsEnabled(),writersWork);
+        startWritersRendering(cl.areRenderStatsEnabled(), false, writersWork);
        
         
         
@@ -557,10 +586,14 @@ AppInstance::loadPythonScript(const QFileInfo& file)
             moduleName = moduleName.left(lastDotPos);
         }
     
+        std::stringstream ss;
+        ss << "import " << moduleName.toStdString() << '\n';
+        ss << moduleName.toStdString() << ".createInstance(app,app)";
         
         std::string output;
         FlagSetter flag(true, &_imp->_creatingGroup, &_imp->creatingGroupMutex);
-        if (!Natron::interpretPythonScript(moduleName.toStdString() + ".createInstance(app,app)", &err, &output)) {
+        CreatingNodeTreeFlag_RAII createNodeTree(this);
+        if (!Natron::interpretPythonScript(ss.str(), &err, &output)) {
             if (!err.empty()) {
                 Natron::errorDialog(tr("Python").toStdString(), err);
             }
@@ -574,6 +607,8 @@ AppInstance::loadPythonScript(const QFileInfo& file)
                 }
             }
         }
+        
+        getProject()->forceComputeInputDependentDataOnAllTrees();
     } else {
         QFile f(file.absoluteFilePath());
         PyRun_SimpleString(content.toStdString().c_str());
@@ -617,6 +652,7 @@ boost::shared_ptr<Natron::Node>
 AppInstance::createNodeFromPythonModule(Natron::Plugin* plugin,
                                         const boost::shared_ptr<NodeCollection>& group,
                                         bool requestedByLoad,
+                                        bool userEdited,
                                         const NodeSerialization & serialization)
 
 {
@@ -633,6 +669,7 @@ AppInstance::createNodeFromPythonModule(Natron::Plugin* plugin,
     
     {
         FlagSetter fs(true,&_imp->_creatingGroup,&_imp->creatingGroupMutex);
+        CreatingNodeTreeFlag_RAII createNodeTree(this);
         
         NodePtr containerNode;
         if (!requestedByLoad) {
@@ -649,8 +686,12 @@ AppInstance::createNodeFromPythonModule(Natron::Plugin* plugin,
                                      group);
             containerNode = createNode(groupArgs);
             std::string containerName;
-            group->initNodeName(plugin->getLabelWithoutSuffix().toStdString(),&containerName);
-            containerNode->setScriptName(containerName);
+            try {
+                group->initNodeName(plugin->getLabelWithoutSuffix().toStdString(),&containerName);
+                containerNode->setScriptName(containerName);
+            } catch (...) {
+                
+            }
             
             
         } else {
@@ -698,7 +739,7 @@ AppInstance::createNodeFromPythonModule(Natron::Plugin* plugin,
     } //FlagSetter fs(true,&_imp->_creatingGroup,&_imp->creatingGroupMutex);
     
     ///Now that the group is created and all nodes loaded, autoconnect the group like other nodes.
-    onGroupCreationFinished(node, requestedByLoad);
+    onGroupCreationFinished(node, requestedByLoad, userEdited);
     
     return node;
 }
@@ -819,7 +860,13 @@ AppInstance::createNodeInternal(const QString & pluginID,
 
     const QString& pythonModule = plugin->getPythonModule();
     if (!pythonModule.isEmpty()) {
-        return createNodeFromPythonModule(plugin, group, requestedByLoad, serialization);
+        try {
+            return createNodeFromPythonModule(plugin, group, requestedByLoad, userEdited, serialization);
+        } catch (const std::exception& e) {
+            Natron::errorDialog(tr("Plugin error").toStdString(),
+                                tr("Cannot create PyPlug:").toStdString()+ e.what(), false );
+            return node;
+        }
     }
 
     std::string foundPluginID = plugin->getPluginID().toStdString();
@@ -928,6 +975,7 @@ AppInstance::createNodeInternal(const QString & pluginID,
                       multiInstanceParent,
                       requestedByLoad,
                       autoConnect,
+                      userEdited,
                       xPosHint,
                       yPosHint,
                       pushUndoRedoCommand);
@@ -948,9 +996,10 @@ AppInstance::createNodeInternal(const QString & pluginID,
                     modulePath = pythonModulePath.mid(0,foundLastSlash + 1);
                     moduleName = pythonModulePath.remove(0,foundLastSlash + 1);
                 }
+                Natron::removeFileExtension(moduleName);
                 setGroupLabelIDAndVersion(node, modulePath, moduleName);
             }
-        } else if (!requestedByLoad && !_imp->_creatingGroup) {
+        } else if (!requestedByLoad && !_imp->_creatingGroup && userEdited) {
             //if the node is a group and we're not loading the project, create one input and one output
             NodePtr input,output;
             
@@ -964,12 +1013,16 @@ AppInstance::createNodeInternal(const QString & pluginID,
                                     INT_MIN,
                                     false, //<< don't push an undo command
                                     true,
-                                    false,
+                                    true,
                                     QString(),
                                     CreateNodeArgs::DefaultValuesList(),
                                     isGrp);
                 output = createNode(args);
-                output->setScriptName("Output");
+                try {
+                    output->setScriptName("Output");
+                } catch (...) {
+                    
+                }
                 assert(output);
             }
             {
@@ -982,7 +1035,7 @@ AppInstance::createNodeInternal(const QString & pluginID,
                                     INT_MIN,
                                     false, //<< don't push an undo command
                                     true,
-                                    false,
+                                    true,
                                     QString(),
                                     CreateNodeArgs::DefaultValuesList(),
                                     isGrp);
@@ -991,7 +1044,7 @@ AppInstance::createNodeInternal(const QString & pluginID,
             }
             
             ///Now that the group is created and all nodes loaded, autoconnect the group like other nodes.
-            onGroupCreationFinished(node, false);
+            onGroupCreationFinished(node, false, userEdited);
         }
     }
     
@@ -1132,7 +1185,7 @@ AppInstance::triggerAutoSave()
 
 
 void
-AppInstance::startWritersRendering(bool enableRenderStats,const std::list<RenderRequest>& writers)
+AppInstance::startWritersRendering(bool enableRenderStats,bool doBlockingRender, const std::list<RenderRequest>& writers)
 {
     
     std::list<RenderWork> renderers;
@@ -1164,6 +1217,7 @@ AppInstance::startWritersRendering(bool enableRenderStats,const std::list<Render
                 assert(w.writer);
                 w.firstFrame = it->firstFrame;
                 w.lastFrame = it->lastFrame;
+                w.frameStep = it->frameStep;
                 renderers.push_back(w);
             }
         }
@@ -1181,16 +1235,17 @@ AppInstance::startWritersRendering(bool enableRenderStats,const std::list<Render
                 w.writer->getFrameRange_public(w.writer->getHash(), &f, &l);
                 w.firstFrame = std::floor(f);
                 w.lastFrame = std::ceil(l);
+                w.frameStep = w.writer->getNode()->getFrameStepKnobValue();
                 renderers.push_back(w);
             }
         }
     }
     
-    startWritersRendering(enableRenderStats, renderers);
+    startWritersRendering(enableRenderStats, doBlockingRender, renderers);
 }
 
 void
-AppInstance::startWritersRendering(bool enableRenderStats,const std::list<RenderWork>& writers)
+AppInstance::startWritersRendering(bool enableRenderStats,bool doBlockingRender, const std::list<RenderWork>& writers)
 {
     
     
@@ -1201,10 +1256,10 @@ AppInstance::startWritersRendering(bool enableRenderStats,const std::list<Render
     getProject()->resetTotalTimeSpentRenderingForAllNodes();
 
     
-    if ( appPTR->isBackground() ) {
+    if (appPTR->isBackground() || doBlockingRender) {
         
         //blocking call, we don't want this function to return pre-maturely, in which case it would kill the app
-        QtConcurrent::blockingMap( writers,boost::bind(&AppInstance::startRenderingFullSequence,this,enableRenderStats, _1,false,QString()) );
+        QtConcurrent::blockingMap( writers,boost::bind(&AppInstance::startRenderingBlockingFullSequence,this,enableRenderStats, _1,false,QString()) );
     } else {
         
         //Take a snapshot of the graph at this time, this will be the version loaded by the process
@@ -1220,7 +1275,7 @@ AppInstance::startWritersRendering(bool enableRenderStats,const std::list<Render
 }
 
 void
-AppInstance::startRenderingFullSequence(bool enableRenderStats,const RenderWork& writerWork,bool /*renderInSeparateProcess*/,const QString& /*savePath*/)
+AppInstance::startRenderingBlockingFullSequence(bool enableRenderStats,const RenderWork& writerWork,bool /*renderInSeparateProcess*/,const QString& /*savePath*/)
 {
     BlockingBackgroundRender backgroundRender(writerWork.writer);
     double first,last;
@@ -1234,7 +1289,21 @@ AppInstance::startRenderingFullSequence(bool enableRenderStats,const RenderWork&
         last = writerWork.lastFrame;
     }
     
-    backgroundRender.blockingRender(enableRenderStats,first,last); //< doesn't return before rendering is finished
+    int frameStep;
+    if (writerWork.frameStep == INT_MAX || writerWork.frameStep == INT_MIN) {
+        ///Get the frame step from the frame step parameter of the Writer
+        frameStep = writerWork.writer->getNode()->getFrameStepKnobValue();
+    } else {
+        frameStep = std::max(1, writerWork.frameStep);
+    }
+    
+    backgroundRender.blockingRender(enableRenderStats,first,last,frameStep); //< doesn't return before rendering is finished
+}
+
+void
+AppInstance::startRenderingFullSequence(bool enableRenderStats,const RenderWork& writerWork,bool renderInSeparateProcess,const QString& savePath)
+{
+    startRenderingBlockingFullSequence(enableRenderStats, writerWork, renderInSeparateProcess, savePath);
 }
 
 void
@@ -1421,7 +1490,9 @@ AppInstance::getAppIDString() const
 }
 
 void
-AppInstance::onGroupCreationFinished(const boost::shared_ptr<Natron::Node>& node,bool requestedByLoad)
+AppInstance::onGroupCreationFinished(const boost::shared_ptr<Natron::Node>& node,
+                                     bool requestedByLoad,
+                                     bool /*userEdited*/)
 {
     assert(node);
     if (!_imp->_currentProject->isLoadingProject() && !requestedByLoad) {
@@ -1448,9 +1519,9 @@ AppInstance::save(const std::string& filename)
 {
     boost::shared_ptr<Natron::Project> project= getProject();
     if (project->hasProjectBeenSavedByUser()) {
-        QString projectName = project->getProjectName();
+        QString projectFilename = project->getProjectFilename();
         QString projectPath = project->getProjectPath();
-        return project->saveProject(projectPath, projectName, 0);
+        return project->saveProject(projectPath, projectFilename, 0);
     } else {
         return saveAs(filename);
     }

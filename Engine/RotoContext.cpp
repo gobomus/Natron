@@ -110,17 +110,13 @@ RotoContext::isRotoPaint() const
 }
 
 void
-RotoContext::setStrokeBeingPainted(const boost::shared_ptr<RotoStrokeItem>& stroke)
+RotoContext::setWhileCreatingPaintStrokeOnMergeNodes(bool b)
 {
+    getNode()->setWhileCreatingPaintStroke(b);
     QMutexLocker k(&_imp->rotoContextMutex);
-    _imp->strokeBeingPainted = stroke;
-}
-
-boost::shared_ptr<RotoStrokeItem>
-RotoContext::getStrokeBeingPainted() const
-{
-    QMutexLocker k(&_imp->rotoContextMutex);
-    return _imp->strokeBeingPainted;
+    for (std::list<boost::shared_ptr<Natron::Node> >::iterator it = _imp->globalMergeNodes.begin(); it != _imp->globalMergeNodes.end(); ++it) {
+        (*it)->setWhileCreatingPaintStroke(b);
+    }
 }
 
 boost::shared_ptr<Natron::Node>
@@ -129,6 +125,13 @@ RotoContext::getRotoPaintBottomMergeNode() const
     std::list<boost::shared_ptr<RotoDrawableItem> > items = getCurvesByRenderOrder();
     if (items.empty()) {
         return boost::shared_ptr<Natron::Node>();
+    }
+    
+    if (isRotoPaintTreeConcatenatableInternal(items)) {
+        QMutexLocker k(&_imp->rotoContextMutex);
+        if (!_imp->globalMergeNodes.empty()) {
+            return _imp->globalMergeNodes.front();
+        }
     }
     
     const boost::shared_ptr<RotoDrawableItem>& firstStrokeItem = items.back();
@@ -160,6 +163,11 @@ RotoContext::getRotoPaintTreeNodes(std::list<boost::shared_ptr<Natron::Node> >* 
         if (frameHoldNode) {
             nodes->push_back(frameHoldNode);
         }
+    }
+    
+    QMutexLocker k(&_imp->rotoContextMutex);
+    for (std::list<boost::shared_ptr<Natron::Node> >::const_iterator it = _imp->globalMergeNodes.begin(); it != _imp->globalMergeNodes.end(); ++it) {
+        nodes->push_back(*it);
     }
 }
 
@@ -202,6 +210,7 @@ RotoContext::addLayerInternal(bool declarePython)
     boost::shared_ptr<RotoLayer> item;
     
     std::string name = generateUniqueName(kRotoLayerBaseName);
+    int indexInLayer = -1;
     {
         
         boost::shared_ptr<RotoLayer> deepestLayer;
@@ -228,6 +237,7 @@ RotoContext::addLayerInternal(bool declarePython)
         item.reset( new RotoLayer(this_shared, name, boost::shared_ptr<RotoLayer>()) );
         if (parentLayer) {
             parentLayer->addItem(item,declarePython);
+            indexInLayer = parentLayer->getItems().size() - 1;
         }
         
         QMutexLocker l(&_imp->rotoContextMutex);
@@ -237,7 +247,7 @@ RotoContext::addLayerInternal(bool declarePython)
         _imp->lastInsertedItem = item;
     }
     
-    Q_EMIT itemInserted(RotoItem::eSelectionReasonOther);
+    Q_EMIT itemInserted(indexInLayer,RotoItem::eSelectionReasonOther);
     
     
     clearSelection(RotoItem::eSelectionReasonOther);
@@ -419,12 +429,15 @@ RotoContext::makeBezier(double x,
     assert(parentLayer);
     boost::shared_ptr<Bezier> curve( new Bezier(this_shared, name, boost::shared_ptr<RotoLayer>(), isOpenBezier) );
     curve->createNodes();
+    
+    int indexInLayer = -1;
     if (parentLayer) {
+        indexInLayer = 0;
         parentLayer->insertItem(curve,0);
     }
     _imp->lastInsertedItem = curve;
 
-    Q_EMIT itemInserted(RotoItem::eSelectionReasonOther);
+    Q_EMIT itemInserted(indexInLayer, RotoItem::eSelectionReasonOther);
 
 
     clearSelection(RotoItem::eSelectionReasonOther);
@@ -470,15 +483,16 @@ RotoContext::makeStroke(Natron::RotoStrokeType type,const std::string& baseName,
     }
     assert(parentLayer);
     boost::shared_ptr<RotoStrokeItem> curve( new RotoStrokeItem(type,this_shared, name, boost::shared_ptr<RotoLayer>()) );
+    int indexInLayer = -1;
     if (parentLayer) {
+        indexInLayer = 0;
         parentLayer->insertItem(curve,0);
     }
     curve->createNodes();
-    _imp->strokeBeingPainted = curve;
     
     _imp->lastInsertedItem = curve;
     
-    Q_EMIT itemInserted(RotoItem::eSelectionReasonOther);
+    Q_EMIT itemInserted(indexInLayer,RotoItem::eSelectionReasonOther);
     
     if (clearSel) {
         clearSelection(RotoItem::eSelectionReasonOther);
@@ -621,7 +635,7 @@ RotoContext::addItem(const boost::shared_ptr<RotoLayer>& layer,
         }
         _imp->lastInsertedItem = item;
     }
-    Q_EMIT itemInserted(reason);
+    Q_EMIT itemInserted(indexInLayer,reason);
 }
 
 
@@ -730,44 +744,114 @@ RotoContext::onRippleEditChanged(bool enabled)
 }
 
 void
+RotoContext::getGlobalMotionBlurSettings(const double time,
+                              double* startTime,
+                              double* endTime,
+                              double* timeStep) const
+{
+    *startTime = time, *timeStep = 1., *endTime = time;
+#ifdef NATRON_ROTO_ENABLE_MOTION_BLUR
+    
+    double motionBlurAmnt = _imp->globalMotionBlurKnob.lock()->getValueAtTime(time);
+    if (motionBlurAmnt == 0) {
+        return;
+    }
+    int nbSamples = std::floor(motionBlurAmnt * 10 + 0.5);
+    double shutterInterval = _imp->globalMotionBlurKnob.lock()->getValueAtTime(time);
+    if (shutterInterval == 0) {
+        return;
+    }
+    int shutterType_i = _imp->globalMotionBlurKnob.lock()->getValueAtTime(time);
+    if (nbSamples != 0) {
+        *timeStep = shutterInterval / nbSamples;
+    }
+    if (shutterType_i == 0) { // centered
+        *startTime = time - shutterInterval / 2.;
+        *endTime = time + shutterInterval / 2.;
+    } else if (shutterType_i == 1) {// start
+        *startTime = time;
+        *endTime = time + shutterInterval;
+    } else if (shutterType_i == 2) { // end
+        *startTime = time - shutterInterval;
+        *endTime = time;
+    } else if (shutterType_i == 3) { // custom
+        *startTime = time + _imp->globalCustomOffsetKnob.lock()->getValueAtTime(time);
+        *endTime = *startTime + shutterInterval;
+    } else {
+        assert(false);
+    }
+    
+    
+#endif
+}
+
+void
 RotoContext::getItemsRegionOfDefinition(const std::list<boost::shared_ptr<RotoItem> >& items, double time, int /*view*/, RectD* rod) const
 {
     
-    QMutexLocker l(&_imp->rotoContextMutex);
-    bool first = true;
+    double startTime = time, mbFrameStep = 1., endTime = time;
+#ifdef NATRON_ROTO_ENABLE_MOTION_BLUR
+    int mbType_i = getMotionBlurTypeKnob()->getValue();
+    bool applyGlobalMotionBlur = mbType_i == 1;
+    if (applyGlobalMotionBlur) {
+        getGlobalMotionBlurSettings(time, &startTime, &endTime, &mbFrameStep);
+    }
+#endif
+    
 
-    for (std::list<boost::shared_ptr<RotoItem> >::const_iterator it2 = items.begin(); it2 != items.end(); ++it2) {
-        Bezier* isBezier = dynamic_cast<Bezier*>(it2->get());
-        RotoStrokeItem* isStroke = dynamic_cast<RotoStrokeItem*>(it2->get());
-        if (isBezier && !isStroke) {
-            if (isBezier->isActivated(time)  && isBezier->getControlPointsCount() > 1) {
-                RectD splineRoD = isBezier->getBoundingBox(time);
-                if ( splineRoD.isNull() ) {
-                    continue;
+    bool rodSet = false;
+    
+    boost::shared_ptr<Natron::Node> activeRotoPaintNode;
+    boost::shared_ptr<RotoStrokeItem> activeStroke;
+    bool isDrawing;
+    getNode()->getApp()->getActiveRotoDrawingStroke(&activeRotoPaintNode, &activeStroke,&isDrawing);
+    if (!isDrawing) {
+        activeStroke.reset();
+    }
+    
+    QMutexLocker l(&_imp->rotoContextMutex);
+    for (double t = startTime; t <= endTime; t+= mbFrameStep) {
+        bool first = true;
+        RectD bbox;
+        for (std::list<boost::shared_ptr<RotoItem> >::const_iterator it2 = items.begin(); it2 != items.end(); ++it2) {
+            Bezier* isBezier = dynamic_cast<Bezier*>(it2->get());
+            RotoStrokeItem* isStroke = dynamic_cast<RotoStrokeItem*>(it2->get());
+            if (isBezier && !isStroke) {
+                if (isBezier->isActivated(time)  && isBezier->getControlPointsCount() > 1) {
+                    RectD splineRoD = isBezier->getBoundingBox(t);
+                    if ( splineRoD.isNull() ) {
+                        continue;
+                    }
+                    
+                    if (first) {
+                        first = false;
+                        bbox = splineRoD;
+                    } else {
+                        bbox.merge(splineRoD);
+                    }
                 }
-                
-                if (first) {
-                    first = false;
-                    *rod = splineRoD;
-                } else {
-                    rod->merge(splineRoD);
+            } else if (isStroke) {
+                RectD strokeRod;
+                if (isStroke->isActivated(time)) {
+                    if (isStroke == activeStroke.get()) {
+                        strokeRod = isStroke->getMergeNode()->getPaintStrokeRoD_duringPainting();
+                    } else {
+                        strokeRod = isStroke->getBoundingBox(t);
+                    }
+                    if (first) {
+                        first = false;
+                        bbox= strokeRod;
+                    } else {
+                        bbox.merge(strokeRod);
+                    }
                 }
             }
-        } else if (isStroke) {
-            RectD strokeRod;
-            if (isStroke->isActivated(time)) {
-                if (isStroke == _imp->strokeBeingPainted.get()) {
-                    strokeRod = isStroke->getMergeNode()->getPaintStrokeRoD_duringPainting();
-                } else {
-                    strokeRod = isStroke->getBoundingBox(time);
-                }
-                if (first) {
-                    first = false;
-                    *rod = strokeRod;
-                } else {
-                    rod->merge(strokeRod);
-                }
-            }
+        }
+        if (!rodSet) {
+            *rod = bbox;
+            rodSet = true;
+        } else {
+            rod->merge(bbox);
         }
     }
 
@@ -791,6 +875,42 @@ const
         }
     }
     getItemsRegionOfDefinition(allItems, time, view, rod);
+}
+
+bool
+RotoContext::isRotoPaintTreeConcatenatableInternal(const std::list<boost::shared_ptr<RotoDrawableItem> >& items)
+{
+    bool operatorSet = false;
+    int comp_i;
+    for (std::list<boost::shared_ptr<RotoDrawableItem> >::const_iterator it = items.begin(); it != items.end(); ++it) {
+        int op = (*it)->getCompositingOperator();
+        if (!operatorSet) {
+            operatorSet = true;
+            comp_i = op;
+        } else {
+            if (op != comp_i) {
+                //2 items have a different compositing operator
+                return false;
+            }
+        }
+        RotoStrokeItem* isStroke = dynamic_cast<RotoStrokeItem*>(it->get());
+        if (!isStroke) {
+            assert(dynamic_cast<Bezier*>(it->get()));
+        } else {
+            if (isStroke->getBrushType() != Natron::eRotoStrokeTypeSolid) {
+                return false;
+            }
+        }
+        
+    }
+    return true;
+}
+
+bool
+RotoContext::isRotoPaintTreeConcatenatable() const
+{
+    std::list<boost::shared_ptr<RotoDrawableItem> > items = getCurvesByRenderOrder();
+    return isRotoPaintTreeConcatenatableInternal(items);
 }
 
 bool
@@ -1377,6 +1497,21 @@ RotoContext::knobChanged(KnobI* k,
     } else if (k == _imp->resetCloneTransformKnob.lock().get()) {
         resetCloneTransform();
     }
+#ifdef NATRON_ROTO_ENABLE_MOTION_BLUR
+    else if (k == _imp->motionBlurTypeKnob.lock().get()) {
+        int mbType_i = getMotionBlurTypeKnob()->getValue();
+        bool isPerShapeMB = mbType_i == 0;
+        _imp->motionBlurKnob.lock()->setSecret(!isPerShapeMB);
+        _imp->shutterKnob.lock()->setSecret(!isPerShapeMB);
+        _imp->shutterTypeKnob.lock()->setSecret(!isPerShapeMB);
+        _imp->customOffsetKnob.lock()->setSecret(!isPerShapeMB);
+        
+        _imp->globalMotionBlurKnob.lock()->setSecret(isPerShapeMB);
+        _imp->globalShutterKnob.lock()->setSecret(isPerShapeMB);
+        _imp->globalShutterTypeKnob.lock()->setSecret(isPerShapeMB);
+        _imp->globalCustomOffsetKnob.lock()->setSecret(isPerShapeMB);
+    }
+#endif
 }
 
 boost::shared_ptr<RotoItem>
@@ -1534,7 +1669,7 @@ RotoContext::goToPreviousKeyframe()
 
     if (minimum != INT_MIN) {
         getNode()->getApp()->setLastViewerUsingTimeline(boost::shared_ptr<Natron::Node>());
-        getNode()->getApp()->getTimeLine()->seekFrame(minimum, false,  NULL, Natron::eTimelineChangeReasonPlaybackSeek);
+        getNode()->getApp()->getTimeLine()->seekFrame(minimum, false,  NULL, Natron::eTimelineChangeReasonOtherSeek);
     }
 }
 
@@ -1567,7 +1702,7 @@ RotoContext::goToNextKeyframe()
     }
     if (maximum != INT_MAX) {
         getNode()->getApp()->setLastViewerUsingTimeline(boost::shared_ptr<Natron::Node>());
-        getNode()->getApp()->getTimeLine()->seekFrame(maximum, false, NULL,Natron::eTimelineChangeReasonPlaybackSeek);
+        getNode()->getApp()->getTimeLine()->seekFrame(maximum, false, NULL,Natron::eTimelineChangeReasonOtherSeek);
         
     }
 }
@@ -1738,12 +1873,7 @@ RotoContext::evaluateChange()
 void
 RotoContext::evaluateChange_noIncrement()
 {
-    //Used for the rotopaint to optimize the portion to render (the last tick of the mouse move)
-    std::list<Node*> outputs;
-    for (std::list<Node*>::iterator it = outputs.begin(); it!=outputs.end(); ++it) {
-        (*it)->incrementKnobsAge();
-    }
-    
+    //Used for the rotopaint to optimize the portion to render (render only the bbox of the last tick of the mouse move)
     std::list<ViewerInstance* > viewers;
     getNode()->hasViewersConnected(&viewers);
     for (std::list<ViewerInstance* >::iterator it = viewers.begin();
@@ -1838,18 +1968,18 @@ RotoContext::emitRefreshViewerOverlays()
 }
 
 void
-RotoContext::getBeziersKeyframeTimes(std::list<int> *times) const
+RotoContext::getBeziersKeyframeTimes(std::list<double> *times) const
 {
     std::list< boost::shared_ptr<RotoDrawableItem> > splines = getCurvesByRenderOrder();
 
     for (std::list< boost::shared_ptr<RotoDrawableItem> > ::iterator it = splines.begin(); it != splines.end(); ++it) {
-        std::set<int> splineKeys;
+        std::set<double> splineKeys;
         Bezier* isBezier = dynamic_cast<Bezier*>(it->get());
         if (!isBezier) {
             continue;
         }
         isBezier->getKeyframeTimes(&splineKeys);
-        for (std::set<int>::iterator it2 = splineKeys.begin(); it2 != splineKeys.end(); ++it2) {
+        for (std::set<double>::iterator it2 = splineKeys.begin(); it2 != splineKeys.end(); ++it2) {
             times->push_back(*it2);
         }
     }
@@ -1885,6 +2015,16 @@ RotoContext::dequeueGuiActions()
         evaluateChange();
     }
     
+}
+
+boost::shared_ptr<KnobChoice>
+RotoContext::getMotionBlurTypeKnob() const
+{
+#ifdef NATRON_ROTO_ENABLE_MOTION_BLUR
+    return _imp->motionBlurTypeKnob.lock();
+#else
+    return boost::shared_ptr<KnobChoice>();
+#endif
 }
 
 bool
@@ -2212,9 +2352,9 @@ convertNatronImageToCairoImageForComponents(unsigned char* cairoImg,
             } else if (dstNComps == 4) {
                 if (srcNComps == 4) {
                     //We are in the !buildUp case, do exactly the opposite that is done in convertNatronImageToCairoImageForComponents
-                    dstPix[x * dstNComps + 0] = (float)(srcPix[x * srcNComps + 2] / maxValue) / shapeColor[2] * 255.f;
-                    dstPix[x * dstNComps + 1] = (float)(srcPix[x * srcNComps + 1] / maxValue) / shapeColor[1] * 255.f;
-                    dstPix[x * dstNComps + 2] = (float)(srcPix[x * srcNComps + 0] / maxValue) / shapeColor[0] * 255.f;
+                    dstPix[x * dstNComps + 0] = shapeColor[2] == 0 ? 0 : (float)(srcPix[x * srcNComps + 2] / maxValue) / shapeColor[2] * 255.f;
+                    dstPix[x * dstNComps + 1] = shapeColor[1] == 0 ? 0 : (float)(srcPix[x * srcNComps + 1] / maxValue) / shapeColor[1] * 255.f;
+                    dstPix[x * dstNComps + 2] = shapeColor[0] == 0 ? 0 : (float)(srcPix[x * srcNComps + 0] / maxValue) / shapeColor[0] * 255.f;
                     dstPix[x * dstNComps + 3] = 255;//(float)srcPix[x * srcNComps + 3] / maxValue * 255.f;
                 } else {
                     assert(srcNComps == 1);
@@ -2473,14 +2613,15 @@ RotoContext::renderSingleStroke(const boost::shared_ptr<RotoStrokeItem>& stroke,
     return distToNext;
 }
 
+
 boost::shared_ptr<Natron::Image>
 RotoContext::renderMaskFromStroke(const boost::shared_ptr<RotoDrawableItem>& stroke,
                                   const RectI& /*roi*/,
                                   const Natron::ImageComponents& components,
-                                  SequenceTime time,
-                                  int view,
-                                  Natron::ImageBitDepthEnum depth,
-                                  unsigned int mipmapLevel)
+                                  const double time,
+                                  const int view,
+                                  const Natron::ImageBitDepthEnum depth,
+                                  const unsigned int mipmapLevel)
 {
     boost::shared_ptr<Node> node = getNode();
     
@@ -2490,11 +2631,17 @@ RotoContext::renderMaskFromStroke(const boost::shared_ptr<RotoDrawableItem>& str
 
     ///compute an enhanced hash different from the one of the merge node of the item in order to differentiate within the cache
     ///the output image of the node and the mask image.
-    Hash64 hash;
-    hash.append(stroke->getMergeNode()->getLiveInstance()->getRenderHash());
-    hash.computeHash();
+    U64 rotoHash;
+    {
+        Hash64 hash;
+        U64 mergeNodeHash = stroke->getMergeNode()->getLiveInstance()->getRenderHash();
+        hash.append(mergeNodeHash);
+        hash.computeHash();
+        rotoHash = hash.value();
+        assert(mergeNodeHash != rotoHash);
+    }
     
-    Natron::ImageKey key = Natron::Image::makeKey(stroke.get(),hash.value(), true ,time, view, false, false);
+    Natron::ImageKey key = Natron::Image::makeKey(stroke.get(),rotoHash, true ,time, view, false, false);
     
     {
         QMutexLocker k(&_imp->cacheAccessMutex);
@@ -2505,17 +2652,38 @@ RotoContext::renderMaskFromStroke(const boost::shared_ptr<RotoDrawableItem>& str
     }
     
     
-    RectD bbox;
-    
-    std::list<std::list<std::pair<Natron::Point,double> > > strokes;
-    
     RotoStrokeItem* isStroke = dynamic_cast<RotoStrokeItem*>(stroke.get());
     Bezier* isBezier = dynamic_cast<Bezier*>(stroke.get());
+    
+    double startTime = time, mbFrameStep = 1., endTime = time;
+#ifdef NATRON_ROTO_ENABLE_MOTION_BLUR
+    if (isBezier) {
+        int mbType_i = _imp->motionBlurTypeKnob.lock()->getValue();
+        bool applyPerShapeMotionBlur = mbType_i == 0;
+        if (applyPerShapeMotionBlur) {
+            isBezier->getMotionBlurSettings(time, &startTime, &endTime, &mbFrameStep);
+        }
+    }
+#endif
+    
+    RectD bbox;
+
+    std::list<std::list<std::pair<Natron::Point,double> > > strokes;
+ 
     if (isStroke) {
         isStroke->evaluateStroke(mipmapLevel, time, &strokes, &bbox);
     } else {
         assert(isBezier);
-        bbox = isBezier->getBoundingBox(time);
+        bool bboxSet = false;
+        for (double t = startTime; t <= endTime; t += mbFrameStep) {
+            RectD subBbox = isBezier->getBoundingBox(t);
+            if (!bboxSet) {
+                bbox = subBbox;
+                bboxSet = true;
+            } else {
+                bbox.merge(subBbox);
+            }
+        }
         if (isBezier->isOpenBezier()) {
             std::list<Point> decastelJauPolygon;
             isBezier->evaluateAtTime_DeCasteljau_autoNbPoints(false, time, mipmapLevel, &decastelJauPolygon, 0);
@@ -2563,7 +2731,7 @@ RotoContext::renderMaskFromStroke(const boost::shared_ptr<RotoDrawableItem>& str
     image->allocateMemory();
     
 
-    image = renderMaskInternal(stroke, pixelRod, components, time, depth, mipmapLevel, strokes, image);
+    image = renderMaskInternal(stroke, pixelRod, components, startTime, endTime, mbFrameStep, time, depth, mipmapLevel, strokes, image);
     
     return image;
 }
@@ -2575,9 +2743,12 @@ boost::shared_ptr<Natron::Image>
 RotoContext::renderMaskInternal(const boost::shared_ptr<RotoDrawableItem>& stroke,
                                 const RectI & roi,
                                 const Natron::ImageComponents& components,
-                                SequenceTime time,
-                                Natron::ImageBitDepthEnum depth,
-                                unsigned int mipmapLevel,
+                                const double startTime,
+                                const double endTime,
+                                const double timeStep,
+                                const double time,
+                                const Natron::ImageBitDepthEnum depth,
+                                const unsigned int mipmapLevel,
                                 const std::list<std::list<std::pair<Natron::Point,double> > >& strokes,
                                 const boost::shared_ptr<Natron::Image> &image)
 {
@@ -2593,6 +2764,9 @@ RotoContext::renderMaskInternal(const boost::shared_ptr<RotoDrawableItem>& strok
     bool doBuildUp = true;
     
     if (isStroke) {
+        //Motion-blur is not supported for strokes
+        assert(startTime == endTime);
+        
         doBuildUp = stroke->getBuildupKnob()->getValueAtTime(time);
         //For the non build-up case, we use the LIGHTEN compositing operator, which only works on colors
         if (!doBuildUp || components.getNumComponents() > 1) {
@@ -3679,11 +3853,12 @@ void
 RotoContext::changeItemScriptName(const std::string& oldFullyQualifiedName,const std::string& newFullyQUalifiedName)
 {
     std::string appID = getNode()->getApp()->getAppIDString();
-    std::string nodeName = appID + "." + getNode()->getFullyQualifiedName();
+    std::string nodeName = getNode()->getFullyQualifiedName();
+    std::string nodeFullName = appID + "." + nodeName;
     std::string err;
     
-    std::string declStr = nodeName + ".roto." + newFullyQUalifiedName + " = " + nodeName + ".roto." + oldFullyQualifiedName + "\n";
-    std::string delStr = "del " + nodeName + ".roto." + oldFullyQualifiedName + "\n";
+    std::string declStr = nodeFullName + ".roto." + newFullyQUalifiedName + " = " + nodeFullName + ".roto." + oldFullyQualifiedName + "\n";
+    std::string delStr = "del " + nodeFullName + ".roto." + oldFullyQualifiedName + "\n";
     std::string script = declStr + delStr;
     if (!appPTR->isBackground()) {
         getNode()->getApp()->printAutoDeclaredVariable(script);
@@ -3703,9 +3878,10 @@ RotoContext::removeItemAsPythonField(const boost::shared_ptr<RotoItem>& item)
         return;
     }
     std::string appID = getNode()->getApp()->getAppIDString();
-    std::string nodeName = appID + "." + getNode()->getFullyQualifiedName();
+    std::string nodeName = getNode()->getFullyQualifiedName();
+    std::string nodeFullName = appID + "." + nodeName;
     std::string err;
-    std::string script = "del " + nodeName + ".roto." + item->getFullyQualifiedName() + "\n";
+    std::string script = "del " + nodeFullName + ".roto." + item->getFullyQualifiedName() + "\n";
     if (!appPTR->isBackground()) {
         getNode()->getApp()->printAutoDeclaredVariable(script);
     }
@@ -3715,41 +3891,126 @@ RotoContext::removeItemAsPythonField(const boost::shared_ptr<RotoItem>& item)
     
 }
 
-static void refreshLayerRotoPaintTree(RotoLayer* layer)
+boost::shared_ptr<Natron::Node>
+RotoContext::getOrCreateGlobalMergeNode(int *availableInputIndex)
 {
-    const RotoItems& items = layer->getItems();
-    for (RotoItems::const_iterator it = items.begin(); it!=items.end(); ++it) {
-        RotoLayer* isLayer = dynamic_cast<RotoLayer*>(it->get());
-        RotoDrawableItem* isDrawable = dynamic_cast<RotoDrawableItem*>(it->get());
-        if (isLayer) {
-            refreshLayerRotoPaintTree(isLayer);
-        } else if (isDrawable) {
-            isDrawable->refreshNodesConnections();
+    
+    
+    {
+        QMutexLocker k(&_imp->rotoContextMutex);
+        for (std::list<boost::shared_ptr<Natron::Node> >::iterator it = _imp->globalMergeNodes.begin(); it!=_imp->globalMergeNodes.end(); ++it) {
+            const std::vector<boost::shared_ptr<Natron::Node> > &inputs = (*it)->getInputs();
+            
+            //Merge node goes like this: B, A, Mask, A2, A3, A4 ...
+            assert(inputs.size() >= 3 && (*it)->getLiveInstance()->isInputMask(2));
+            if (!inputs[1]) {
+                *availableInputIndex = 1;
+                return *it;
+            }
+            
+            //Leave the B empty to connect the next merge node
+            for (std::size_t i = 3; i < inputs.size(); ++i) {
+                if (!inputs[i]) {
+                    *availableInputIndex = (int)i;
+                    return *it;
+                }
+            }
         }
     }
+    
+    boost::shared_ptr<Natron::Node>  node = getNode();
+    //We must create a new merge node
+    QString fixedNamePrefix(node->getScriptName_mt_safe().c_str());
+    fixedNamePrefix.append('_');
+    fixedNamePrefix.append("globalMerge");
+    fixedNamePrefix.append('_');
+    CreateNodeArgs args(PLUGINID_OFX_MERGE, "",
+                        -1,-1,
+                        false,
+                        INT_MIN,
+                        INT_MIN,
+                        false,
+                        false,
+                        false,
+                        fixedNamePrefix,
+                        CreateNodeArgs::DefaultValuesList(),
+                        boost::shared_ptr<NodeCollection>());
+    args.createGui = false;
+    
+    boost::shared_ptr<Natron::Node> mergeNode = node->getApp()->createNode(args);
+    if (!mergeNode) {
+        return mergeNode;
+    }
+    mergeNode->setUseAlpha0ToConvertFromRGBToRGBA(true);
+    *availableInputIndex = 1;
+    
+    QMutexLocker k(&_imp->rotoContextMutex);
+    _imp->globalMergeNodes.push_back(mergeNode);
+    return mergeNode;
 }
 
 void
 RotoContext::refreshRotoPaintTree()
 {
-    if (!_imp->isPaintNode || _imp->isCurrentlyLoading) {
+    if (_imp->isCurrentlyLoading) {
         return;
     }
-    boost::shared_ptr<RotoLayer> layer;
+    
+    bool canConcatenate = isRotoPaintTreeConcatenatable();
+    
+    boost::shared_ptr<Natron::Node> globalMerge;
+    int globalMergeIndex = -1;
+    
+    
+    std::list<boost::shared_ptr<Natron::Node> > mergeNodes;
     {
         QMutexLocker k(&_imp->rotoContextMutex);
-        if (_imp->layers.empty()) {
-            return;
-        }
-        layer = _imp->layers.front();
+        mergeNodes = _imp->globalMergeNodes;
     }
-    refreshLayerRotoPaintTree(layer.get());
+    //ensure that all global merge nodes are disconnected
+    for (std::list<boost::shared_ptr<Natron::Node> >::iterator it = mergeNodes.begin(); it!=mergeNodes.end(); ++it) {
+        int maxInputs = (*it)->getMaxInputCount();
+        for (int i = 0; i < maxInputs; ++i) {
+            (*it)->disconnectInput(i);
+        }
+    }
+    if (canConcatenate) {
+        globalMerge = getOrCreateGlobalMergeNode(&globalMergeIndex);
+    }
+    if (globalMerge) {
+        boost::shared_ptr<Natron::Node> rotopaintNodeInput = getNode()->getInput(0);
+        //Connect the rotopaint node input to the B input of the Merge
+        if (rotopaintNodeInput) {
+            globalMerge->connectInput(rotopaintNodeInput, 0);
+        }
+    }
+    
+    std::list<boost::shared_ptr<RotoDrawableItem> > items = getCurvesByRenderOrder();
+    for (std::list<boost::shared_ptr<RotoDrawableItem> >::const_iterator it = items.begin(); it!=items.end(); ++it) {
+        (*it)->refreshNodesConnections();
+        
+        if (globalMerge) {
+            boost::shared_ptr<Natron::Node> effectNode = (*it)->getEffectNode();
+            assert(effectNode);
+            //qDebug() << "Connecting" << (*it)->getScriptName().c_str() << "to input" << globalMergeIndex <<
+            //"(" << globalMerge->getInputLabel(globalMergeIndex).c_str() << ")" << "of" << globalMerge->getScriptName().c_str();
+            globalMerge->connectInput(effectNode, globalMergeIndex);
+            
+            ///Refresh for next node
+            boost::shared_ptr<Natron::Node> nextMerge = getOrCreateGlobalMergeNode(&globalMergeIndex);
+            if (nextMerge != globalMerge) {
+                assert(!nextMerge->getInput(0));
+                nextMerge->connectInput(globalMerge, 0);
+                globalMerge = nextMerge;
+            }
+        }
+        
+    }
 }
 
 void
 RotoContext::onRotoPaintInputChanged(const boost::shared_ptr<Natron::Node>& node)
 {
-    assert(_imp->isPaintNode);
     
     if (node) {
         
@@ -3761,8 +4022,9 @@ void
 RotoContext::declareItemAsPythonField(const boost::shared_ptr<RotoItem>& item)
 {
     std::string appID = getNode()->getApp()->getAppIDString();
-    std::string nodeName = appID + "." + getNode()->getFullyQualifiedName();
-    
+    std::string nodeName = getNode()->getFullyQualifiedName();
+    std::string nodeFullName = appID + "." + nodeName;
+
     RotoStrokeItem* isStroke = dynamic_cast<RotoStrokeItem*>(item.get());
     if (isStroke) {
         ///Strokes are unsupported in Python currently
@@ -3771,8 +4033,8 @@ RotoContext::declareItemAsPythonField(const boost::shared_ptr<RotoItem>& item)
     RotoLayer* isLayer = dynamic_cast<RotoLayer*>(item.get());
     
     std::string err;
-    std::string script = nodeName + ".roto." + item->getFullyQualifiedName() + " = " +
-    nodeName + ".roto.getItemByName(\"" + item->getScriptName() + "\")\n";
+    std::string script = (nodeFullName + ".roto." + item->getFullyQualifiedName() + " = " +
+                          nodeFullName + ".roto.getItemByName(\"" + item->getScriptName() + "\")\n");
     if (!appPTR->isBackground()) {
         getNode()->getApp()->printAutoDeclaredVariable(script);
     }

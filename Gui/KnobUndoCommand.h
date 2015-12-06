@@ -25,10 +25,11 @@
 #include <Python.h>
 // ***** END PYTHON BLOCK *****
 
+#include "Global/Macros.h"
+
 #include <map>
 #include <vector>
 
-#include "Global/Macros.h"
 CLANG_DIAG_OFF(deprecated)
 CLANG_DIAG_OFF(uninitialized)
 #include <QUndoCommand>
@@ -49,6 +50,7 @@ CLANG_DIAG_ON(uninitialized)
 #include "Gui/CurveEditor.h"
 #include "Gui/CurveWidget.h"
 #include "Gui/GuiAppInstance.h"
+#include "Gui/GuiFwd.h"
 
 
 //================================================================
@@ -112,13 +114,31 @@ private:
         bool modifiedKeyFrame = false;
         int i = 0;
 
-        _knob->getKnob()->beginChanges();
+        boost::shared_ptr<KnobI> knob = _knob->getKnob();
+        knob->beginChanges();
+        
+        assert((int)_oldValue.size() == _knob->getKnob()->getDimension() || _dimension != -1);
+        
+        typename std::list<T>::iterator next = _oldValue.end();
+        if (next != _oldValue.end()) {
+            ++next;
+        }
         
         for (typename std::list<T>::iterator it = _oldValue.begin(); it != _oldValue.end(); ++it) {
             int dimension = _dimension == -1 ? i : _dimension;
           
+            if (it == _oldValue.begin() && _oldValue.size() > 1) {
+                knob->blockValueChanges();
+            }
+            
+            if (next == _oldValue.end() && _oldValue.size() > 1) {
+                knob->unblockValueChanges();
+            }
+
+            
             _knob->setValue(dimension,*it,NULL,false,Natron::eValueChangedReasonUserEdited);
-            if ( _knob->getKnob()->getHolder()->getApp() ) {
+            
+            if (knob->getHolder()->getApp() ) {
                 if (_valueChangedReturnCode[i] == 1) { //the value change also added a keyframe
                     _knob->removeKeyFrame(_newKeys[i].getTime(),dimension);
                     modifiedKeyFrame = true;
@@ -130,7 +150,9 @@ private:
                 }
             }
 
-            
+            if (next != _oldValue.end()) {
+                ++next;
+            }
             ++i;
     
         }
@@ -138,40 +160,52 @@ private:
         ///This will refresh all dimensions
         _knob->onInternalValueChanged(-1, Natron::eValueChangedReasonNatronGuiEdited);
         
-        _knob->getKnob()->endChanges();
+        knob->endChanges();
         if (modifiedKeyFrame) {
             _knob->getGui()->getCurveEditor()->getCurveWidget()->refreshSelectedKeys();
         }
 
         setText( QObject::tr("Set value of %1")
-                 .arg( _knob->getKnob()->getDescription().c_str() ) );
+                 .arg( _knob->getKnob()->getLabel().c_str() ) );
     }
 
     virtual void redo() OVERRIDE FINAL
     {
         double time = 0;
-
-        if ( _knob->getKnob()->getHolder()->getApp() ) {
-            time = _knob->getKnob()->getHolder()->getApp()->getTimeLine()->currentFrame();
+        
+        boost::shared_ptr<KnobI> knob = _knob->getKnob();
+        if ( knob->getHolder() && knob->getHolder()->getApp() ) {
+            time = knob->getHolder()->getApp()->getTimeLine()->currentFrame();
         }
 
+        assert((int)_oldValue.size() == _knob->getKnob()->getDimension() || _dimension != -1);
+        
         bool modifiedKeyFrames = false;
 
-        _knob->getKnob()->beginChanges();
+        knob->beginChanges();
         int i = 0;
-        
+        typename std::list<T>::iterator next = _newValue.end();
+        if (next != _newValue.end()) {
+            ++next;
+        }
         for (typename std::list<T>::iterator it = _newValue.begin(); it != _newValue.end(); ++it) {
             int dimension = _dimension == -1 ? i : _dimension;
     
-
-            boost::shared_ptr<Curve> c = _knob->getKnob()->getCurve(dimension);
+            if (it == _newValue.begin() && _newValue.size() > 1) {
+                knob->blockValueChanges();
+            }
+            
+            boost::shared_ptr<Curve> c = knob->getCurve(dimension);
             //find out if there's already an existing keyframe before calling setValue
             if (c) {
                 bool found = c->getKeyFrameWithTime(time, &_oldKeys[i]);
                 Q_UNUSED(found); // we don't care if it existed or not
             }
 
- 
+            if (next == _newValue.end() && _newValue.size() > 1) {
+                knob->unblockValueChanges();
+            }
+            
             _valueChangedReturnCode[i] = _knob->setValue(dimension,*it,&_newKeys[i],false,Natron::eValueChangedReasonUserEdited);
             if (_valueChangedReturnCode[i] != KnobHelper::eValueChangedReturnCodeNoKeyframeAdded) {
                 modifiedKeyFrames = true;
@@ -182,6 +216,9 @@ private:
                 _merge = false;
             }
             ++i;
+            if (next != _newValue.end()) {
+                ++next;
+            }
         
         }
         
@@ -192,14 +229,14 @@ private:
         }
 
         
-        _knob->getKnob()->endChanges();
+        knob->endChanges();
 
         if (modifiedKeyFrames) {
             _knob->getGui()->getCurveEditor()->getCurveWidget()->refreshSelectedKeys();
         }
 
         setText( QObject::tr("Set value of %1")
-                 .arg( _knob->getKnob()->getDescription().c_str() ) );
+                 .arg( knob->getLabel().c_str() ) );
 
         _firstRedoCalled = true;
     } // redo

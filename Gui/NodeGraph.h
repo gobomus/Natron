@@ -40,30 +40,16 @@ CLANG_DIAG_OFF(uninitialized)
 CLANG_DIAG_ON(deprecated)
 CLANG_DIAG_ON(uninitialized)
 
+#include "Global/GlobalDefines.h"
 
 #include "Engine/NodeGraphI.h"
-#include "Global/GlobalDefines.h"
-#include "Gui/PanelWidget.h"
+#include "Engine/EngineFwd.h"
 
-class QVBoxLayout;
-class QScrollArea;
-class QEvent;
-class QKeyEvent;
-class Gui;
-class NodeGui;
-class QDropEvent;
-class QUndoCommand;
-class QDragEnterEvent;
-class NodeSerialization;
-class NodeGuiSerialization;
-class NodeBackDropSerialization;
-class NodeCollection;
-class ViewerTab;
-struct NodeClipBoard;
-struct NodeGraphPrivate;
-namespace Natron {
-class Node;
-}
+#include "Gui/PanelWidget.h"
+#include "Gui/GuiFwd.h"
+
+
+class NodeGraphPrivate;
 
 class NodeGraph : public QGraphicsView, public NodeGraphI, public PanelWidget, public boost::noncopyable
 {
@@ -80,10 +66,15 @@ public:
 
     virtual ~NodeGraph();
     
+    static void makeFullyQualifiedLabel(Natron::Node* node,std::string* ret);
+    
     boost::shared_ptr<NodeCollection> getGroup() const;
 
     const std::list< boost::shared_ptr<NodeGui> > & getSelectedNodes() const;
-    boost::shared_ptr<NodeGui> createNodeGUI(const boost::shared_ptr<Natron::Node> & node,bool requestedByLoad,bool pushUndoRedoCommand);
+    boost::shared_ptr<NodeGui> createNodeGUI(const boost::shared_ptr<Natron::Node> & node,
+                                             bool requestedByLoad,
+                                             bool userEdited,
+                                             bool pushUndoRedoCommand);
 
     void selectNode(const boost::shared_ptr<NodeGui> & n,bool addToSelection);
     
@@ -150,7 +141,8 @@ public:
     bool areOptionalInputsAutoHidden() const;
     
     void copyNodesAndCreateInGroup(const std::list<boost::shared_ptr<NodeGui> >& nodes,
-                                   const boost::shared_ptr<NodeCollection>& group);
+                                   const boost::shared_ptr<NodeCollection>& group,
+                                   std::list<std::pair<std::string,boost::shared_ptr<NodeGui> > >& createdNodes);
 
     virtual void onNodesCleared() OVERRIDE FINAL;
     
@@ -178,6 +170,8 @@ public:
     void cloneSelectedNodes(const QPointF& pos);
     
     QPointF getRootPos() const;
+    
+    bool isDoingNavigatorRender() const;
     
 public Q_SLOTS:
 
@@ -226,6 +220,8 @@ public Q_SLOTS:
     void toggleConnectionHints();
     
     void toggleAutoHideInputs(bool setSettings = true);
+    
+    void toggleHideInputs();
         
     void onNodeCreationDialogFinished();
 
@@ -245,14 +241,15 @@ public Q_SLOTS:
     void onGroupScriptNameChanged(const QString& name);
     
     
+    void onAutoScrollTimerTriggered();
     
 private:
     
     void scrollViewIfNeeded(const QPointF& scenePos);
     
+    void checkAndStartAutoScrollTimer(const QPointF& scenePos);
+    
     bool isNearbyNavigator(const QPoint& widgetPos,QPointF& scenePos) const;
-
-    void setVisibleNodeDetails(bool visible);
     
     virtual void enterEvent(QEvent* e) OVERRIDE FINAL;
     virtual void leaveEvent(QEvent* e) OVERRIDE FINAL;
@@ -274,6 +271,8 @@ private:
     virtual void focusOutEvent(QFocusEvent* e) OVERRIDE FINAL;
 
 private:
+    
+    void moveRootInternal(double dx, double dy);
     
     void wheelEventInternal(bool ctrlDown,double delta);
 

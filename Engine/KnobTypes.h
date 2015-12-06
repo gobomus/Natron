@@ -53,15 +53,15 @@ GCC_DIAG_SUGGEST_OVERRIDE_ON
 public:
 
     static KnobHelper * BuildKnob(KnobHolder* holder,
-                                  const std::string &description,
+                                  const std::string &label,
                                   int dimension,
                                   bool declaredByPlugin = true)
     {
-        return new KnobInt(holder, description, dimension,declaredByPlugin);
+        return new KnobInt(holder, label, dimension, declaredByPlugin);
     }
 
     KnobInt(KnobHolder* holder,
-             const std::string &description,
+             const std::string &label,
              int dimension,
              bool declaredByPlugin);
 
@@ -106,15 +106,15 @@ class KnobBool
 public:
 
     static KnobHelper * BuildKnob(KnobHolder* holder,
-                                  const std::string &description,
+                                  const std::string &label,
                                   int dimension,
                                   bool declaredByPlugin = true)
     {
-        return new KnobBool(holder, description, dimension,declaredByPlugin);
+        return new KnobBool(holder, label, dimension, declaredByPlugin);
     }
 
     KnobBool(KnobHolder* holder,
-              const std::string &description,
+              const std::string &label,
               int dimension,
               bool declaredByPlugin);
 
@@ -156,15 +156,15 @@ public:
     };
 
     static KnobHelper * BuildKnob(KnobHolder* holder,
-                                  const std::string &description,
+                                  const std::string &label,
                                   int dimension,
                                   bool declaredByPlugin = true)
     {
-        return new KnobDouble(holder, description, dimension,declaredByPlugin);
+        return new KnobDouble(holder, label, dimension, declaredByPlugin);
     }
 
     KnobDouble(KnobHolder* holder,
-                const std::string &description,
+                const std::string &label,
                 int dimension,
                 bool declaredByPlugin );
 
@@ -338,15 +338,15 @@ class KnobButton
 public:
 
     static KnobHelper * BuildKnob(KnobHolder* holder,
-                                  const std::string &description,
+                                  const std::string &label,
                                   int dimension,
                                   bool declaredByPlugin = true)
     {
-        return new KnobButton(holder, description, dimension,declaredByPlugin);
+        return new KnobButton(holder, label, dimension, declaredByPlugin);
     }
 
     KnobButton(KnobHolder* holder,
-                const std::string &description,
+                const std::string &label,
                 int dimension,
                 bool declaredByPlugin);
     static const std::string & typeNameStatic();
@@ -397,15 +397,15 @@ GCC_DIAG_SUGGEST_OVERRIDE_ON
 public:
 
     static KnobHelper * BuildKnob(KnobHolder* holder,
-                                  const std::string &description,
+                                  const std::string &label,
                                   int dimension,
                                   bool declaredByPlugin = true)
     {
-        return new KnobChoice(holder, description, dimension,declaredByPlugin);
+        return new KnobChoice(holder, label, dimension, declaredByPlugin);
     }
 
     KnobChoice(KnobHolder* holder,
-                const std::string &description,
+                const std::string &label,
                 int dimension,
                 bool declaredByPlugin);
 
@@ -459,9 +459,16 @@ public:
     ValueChangedReturnCodeEnum setValueFromLabel(const std::string & value,
                                                  int dimension,
                                                  bool turnOffAutoKeying = false);
+    
     /// set the KnobChoice default value from the label
     void setDefaultValueFromLabel(const std::string & value,int dimension = 0);
 
+public Q_SLOTS:
+    
+    void onOriginalKnobPopulated();
+    void onOriginalKnobEntriesReset();
+    void onOriginalKnobEntryAppend(const QString& text,const QString& help);
+    
 Q_SIGNALS:
 
     void populated();
@@ -473,6 +480,9 @@ private:
 
     virtual bool canAnimate() const OVERRIDE FINAL;
     virtual const std::string & typeName() const OVERRIDE FINAL;
+    virtual void handleSignalSlotsForAliasLink(const boost::shared_ptr<KnobI>& alias,bool connect) OVERRIDE FINAL;
+    
+    
 private:
     
     mutable QMutex _entriesMutex;
@@ -491,15 +501,15 @@ class KnobSeparator
 public:
 
     static KnobHelper * BuildKnob(KnobHolder* holder,
-                                  const std::string &description,
+                                  const std::string &label,
                                   int dimension,
                                   bool declaredByPlugin = true)
     {
-        return new KnobSeparator(holder, description, dimension,declaredByPlugin);
+        return new KnobSeparator(holder, label, dimension, declaredByPlugin);
     }
 
     KnobSeparator(KnobHolder* holder,
-                   const std::string &description,
+                   const std::string &label,
                    int dimension,
                    bool declaredByPlugin);
     static const std::string & typeNameStatic();
@@ -532,15 +542,15 @@ GCC_DIAG_SUGGEST_OVERRIDE_ON
 public:
 
     static KnobHelper * BuildKnob(KnobHolder* holder,
-                                  const std::string &description,
+                                  const std::string &label,
                                   int dimension,
                                   bool declaredByPlugin = true)
     {
-        return new KnobColor(holder, description, dimension,declaredByPlugin);
+        return new KnobColor(holder, label, dimension, declaredByPlugin);
     }
 
     KnobColor(KnobHolder* holder,
-               const std::string &description,
+               const std::string &label,
                int dimension,
                bool declaredByPlugin);
     
@@ -602,15 +612,15 @@ public:
 
 
     static KnobHelper * BuildKnob(KnobHolder* holder,
-                                  const std::string &description,
+                                  const std::string &label,
                                   int dimension,
                                   bool declaredByPlugin = true)
     {
-        return new KnobString(holder, description, dimension,declaredByPlugin);
+        return new KnobString(holder, label, dimension, declaredByPlugin);
     }
 
     KnobString(KnobHolder* holder,
-                const std::string &description,
+                const std::string &label,
                 int dimension,
                 bool declaredByPlugin);
 
@@ -646,13 +656,18 @@ public:
     {
         return _richText;
     }
-
-    void setAsLabel()
+    
+    void setAsCustomHTMLText(bool custom) {
+        _customHtmlText = custom;
+    }
+    
+    bool isCustomHTMLText() const
     {
-        setAnimationEnabled(false); //< labels cannot animate
-        _isLabel = true;
+        return _customHtmlText;
     }
 
+    void setAsLabel();
+    
     bool isLabel() const
     {
         return _isLabel;
@@ -683,6 +698,7 @@ private:
     static const std::string _typeNameStr;
     bool _multiLine;
     bool _richText;
+    bool _customHtmlText;
     bool _isLabel;
     bool _isCustom;
 };
@@ -701,23 +717,23 @@ GCC_DIAG_SUGGEST_OVERRIDE_ON
 public:
 
     static KnobHelper * BuildKnob(KnobHolder* holder,
-                                  const std::string &description,
+                                  const std::string &label,
                                   int dimension,
                                   bool declaredByPlugin = true)
     {
-        return new KnobGroup(holder, description, dimension,declaredByPlugin);
+        return new KnobGroup(holder, label, dimension, declaredByPlugin);
     }
 
     KnobGroup(KnobHolder* holder,
-               const std::string &description,
+               const std::string &label,
                int dimension,
                bool declaredByPlugin);
 
     void addKnob(boost::shared_ptr<KnobI> k);
     void removeKnob(KnobI* k);
     
-    void moveOneStepUp(KnobI* k);
-    void moveOneStepDown(KnobI* k);
+    bool moveOneStepUp(KnobI* k);
+    bool moveOneStepDown(KnobI* k);
     
     void insertKnob(int index, const boost::shared_ptr<KnobI>& k);
 
@@ -751,23 +767,23 @@ GCC_DIAG_SUGGEST_OVERRIDE_ON
 public:
 
     static KnobHelper * BuildKnob(KnobHolder* holder,
-                                  const std::string &description,
+                                  const std::string &label,
                                   int dimension,
                                   bool declaredByPlugin = true)
     {
-        return new KnobPage(holder, description, dimension,declaredByPlugin);
+        return new KnobPage(holder, label, dimension, declaredByPlugin);
     }
 
     KnobPage(KnobHolder* holder,
-              const std::string &description,
+              const std::string &label,
               int dimension,
               bool declaredByPlugin);
 
     void addKnob(const boost::shared_ptr<KnobI>& k);
     
 
-    void moveOneStepUp(KnobI* k);
-    void moveOneStepDown(KnobI* k);
+    bool moveOneStepUp(KnobI* k);
+    bool moveOneStepDown(KnobI* k);
     
     void removeKnob(KnobI* k);
     
@@ -804,15 +820,15 @@ GCC_DIAG_SUGGEST_OVERRIDE_ON
 public:
 
     static KnobHelper * BuildKnob(KnobHolder* holder,
-                                  const std::string &description,
+                                  const std::string &label,
                                   int dimension,
                                   bool declaredByPlugin = true)
     {
-        return new KnobParametric(holder, description, dimension,declaredByPlugin);
+        return new KnobParametric(holder, label, dimension, declaredByPlugin);
     }
 
     KnobParametric(KnobHolder* holder,
-                    const std::string &description,
+                    const std::string &label,
                     int dimension,
                     bool declaredByPlugin );
 

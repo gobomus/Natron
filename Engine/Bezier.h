@@ -44,32 +44,11 @@ CLANG_DIAG_ON(deprecated-declarations)
 #include "Engine/RotoDrawableItem.h"
 #include "Engine/EngineFwd.h"
 
-#define kRotoLayerBaseName "Layer"
-#define kRotoBezierBaseName "Bezier"
-#define kRotoOpenBezierBaseName "Pencil"
-#define kRotoEllipseBaseName "Ellipse"
-#define kRotoRectangleBaseName "Rectangle"
-#define kRotoPaintBrushBaseName "Brush"
-#define kRotoPaintEraserBaseName "Eraser"
-#define kRotoPaintBlurBaseName "Blur"
-#define kRotoPaintSmearBaseName "Smear"
-#define kRotoPaintSharpenBaseName "Sharpen"
-#define kRotoPaintCloneBaseName "Clone"
-#define kRotoPaintRevealBaseName "Reveal"
-#define kRotoPaintDodgeBaseName "Dodge"
-#define kRotoPaintBurnBaseName "Burn"
-
-
-typedef struct _cairo_pattern cairo_pattern_t;
 
 
 /**
  * @class A base class for all items made by the roto context
  **/
-
-namespace Transform {
-struct Matrix3x3;
-}
 
 
 /**
@@ -323,6 +302,11 @@ public:
      * If ripple edit is enabled, the point will be moved at the same location at all keyframes.
      **/
     void cuspPointAtIndex(int index,double time,const std::pair<double,double>& pixelScale);
+    
+    void getMotionBlurSettings(const double time,
+                               double* startTime,
+                               double* endTime,
+                               double* timeStep) const;
 
 private:
     
@@ -349,7 +333,7 @@ public:
     /**
      * @brief Moves a keyframe
      **/
-    void moveKeyframe(int oldTime,int newTime);
+    void moveKeyframe(double oldTime,double newTime);
 
 
     /**
@@ -565,9 +549,9 @@ public:
      **/
     virtual void load(const RotoItemSerialization & obj) OVERRIDE;
 
-    void getKeyframeTimes(std::set<int> *times) const;
+    void getKeyframeTimes(std::set<double> *times) const;
     
-    void getKeyframeTimesAndInterpolation(std::list<std::pair<int,Natron::KeyframeTypeEnum> > *keys) const;
+    void getKeyframeTimesAndInterpolation(std::list<std::pair<double,Natron::KeyframeTypeEnum> > *keys) const;
 
     /**
      * @brief Get the nearest previous keyframe from the given time.

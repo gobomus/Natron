@@ -29,11 +29,12 @@
 #include <Python.h>
 // ***** END PYTHON BLOCK *****
 
+#include "Global/Macros.h"
+
 #include <map>
 #include <list>
 #include <vector>
 
-#include "Global/Macros.h"
 CLANG_DIAG_OFF(deprecated)
 CLANG_DIAG_OFF(uninitialized)
 #include <QKeyEvent>
@@ -42,6 +43,8 @@ CLANG_DIAG_OFF(uninitialized)
 #include <QAction>
 CLANG_DIAG_ON(deprecated)
 CLANG_DIAG_ON(uninitialized)
+
+#include "Gui/GuiFwd.h"
 
 #define kShortcutGroupGlobal "Global"
 #define kShortcutGroupNodegraph "NodeGraph"
@@ -470,7 +473,10 @@ CLANG_DIAG_ON(uninitialized)
 #define kShortcutDescActionGraphEnableHints "Enable Connection Hints"
 
 #define kShortcutIDActionGraphAutoHideInputs "autoHideInputs"
-#define kShortcutDescActionGraphAutoHideInputs "Auto-Hide Masks Inputs"
+#define kShortcutDescActionGraphAutoHideInputs "Auto-Hide Optional Inputs"
+
+#define kShortcutIDActionGraphHideInputs "hideInputs"
+#define kShortcutDescActionGraphHideInputs "Hide inputs"
 
 #define kShortcutIDActionGraphSwitchInputs "switchInputs"
 #define kShortcutDescActionGraphSwitchInputs "Switch Inputs 1 and 2"
@@ -553,7 +559,7 @@ CLANG_DIAG_ON(uninitialized)
 #define kShortcutDescActionCurveEditorHorizontal "Horizontal Interpolation"
 
 #define kShortcutIDActionCurveEditorBreak "break"
-#define kShortcutDescActionCurveEditorBreak "Break Curvature"
+#define kShortcutDescActionCurveEditorBreak "Break"
 
 #define kShortcutIDActionCurveEditorSelectAll "selectAll"
 #define kShortcutDescActionCurveEditorSelectAll "Select All Keyframes"
@@ -605,7 +611,6 @@ CLANG_DIAG_ON(uninitialized)
 #define kShortcutIDActionScriptShowOutput "showHideOutput"
 #define kShortcutDescActionScriptShowOutput "Show/Hide Output Window"
 
-class QWidget;
 
 inline
 QKeySequence

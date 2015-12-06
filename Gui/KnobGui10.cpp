@@ -22,6 +22,8 @@
 #include <Python.h>
 // ***** END PYTHON BLOCK *****
 
+#include "Engine/Knob.h"
+#include "Engine/KnobTypes.h"
 #include "Gui/KnobGui.h"
 #include "Gui/KnobGuiPrivate.h"
 
@@ -34,7 +36,7 @@ using namespace Natron;
 
 
 void
-KnobGui::onCreateMasterOnGroupActionTriggered()
+KnobGui::onCreateAliasOnGroupActionTriggered()
 {
     KnobHolder* holder = getKnob()->getHolder();
     EffectInstance* isEffect = dynamic_cast<EffectInstance*>(holder);
@@ -46,7 +48,27 @@ KnobGui::onCreateMasterOnGroupActionTriggered()
     NodeGroup* isCollecGroup = dynamic_cast<NodeGroup*>(collec.get());
     assert(isCollecGroup);
     if (isCollecGroup) {
-        createDuplicateOnNode(isCollecGroup, true);
+        createDuplicateOnNode(isCollecGroup, true, boost::shared_ptr<KnobPage>(), boost::shared_ptr<KnobGroup>(), -1);
+    }
+}
+
+void
+KnobGui::onRemoveAliasLinkActionTriggered()
+{
+    boost::shared_ptr<KnobI> thisKnob = getKnob();
+    std::list<boost::shared_ptr<KnobI> > listeners;
+    thisKnob->getListeners(listeners);
+    boost::shared_ptr<KnobI> aliasMaster;
+    boost::shared_ptr<KnobI> listener;
+    if (!listeners.empty()) {
+        listener = listeners.front();
+        aliasMaster = listener->getAliasMaster();
+        if (aliasMaster != thisKnob) {
+            aliasMaster.reset();
+        }
+    }
+    if (aliasMaster && listener) {
+        listener->setKnobAsAliasOfThis(aliasMaster, false);
     }
 }
 
@@ -61,15 +83,20 @@ KnobGui::onUnlinkActionTriggered()
     boost::shared_ptr<KnobI> thisKnob = getKnob();
     int dims = thisKnob->getDimension();
     
-    thisKnob->beginChanges();
-    for (int i = 0; i < dims; ++i) {
-        if (dim == -1 || i == dim) {
-            std::pair<int,boost::shared_ptr<KnobI> > other = thisKnob->getMaster(i);
-            thisKnob->onKnobUnSlaved(i);
-            onKnobSlavedChanged(i, false);
+    boost::shared_ptr<KnobI> aliasMaster = thisKnob->getAliasMaster();
+    if (aliasMaster) {
+        thisKnob->setKnobAsAliasOfThis(aliasMaster, false);
+    } else {
+        thisKnob->beginChanges();
+        for (int i = 0; i < dims; ++i) {
+            if (dim == -1 || i == dim) {
+                std::pair<int,boost::shared_ptr<KnobI> > other = thisKnob->getMaster(i);
+                thisKnob->onKnobUnSlaved(i);
+                onKnobSlavedChanged(i, false);
+            }
         }
+        thisKnob->endChanges();
     }
-    thisKnob->endChanges();
     getKnob()->getHolder()->getApp()->triggerAutoSave();
 }
 
@@ -609,6 +636,9 @@ KnobGui::hide()
 
     if (shouldRemoveWidget) {
         _imp->field->hide();
+        if (_imp->container) {
+            _imp->container->refreshTabWidgetMaxHeight();
+        }
     } else {
         if (!_imp->field->isVisible()) {
             _imp->field->show();
@@ -617,6 +647,7 @@ KnobGui::hide()
     if (_imp->descriptionLabel) {
         _imp->descriptionLabel->hide();
     }
+    
 }
 
 void
@@ -640,11 +671,15 @@ KnobGui::show(int /*index*/)
 
     if (_imp->isOnNewLine) {
         _imp->field->show();
+        if (_imp->container) {
+            _imp->container->refreshTabWidgetMaxHeight();
+        }
     }
     
     if (_imp->descriptionLabel) {
         _imp->descriptionLabel->show();
     }
+ 
 }
 
 int

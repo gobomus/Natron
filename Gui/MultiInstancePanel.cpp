@@ -28,17 +28,19 @@
 
 CLANG_DIAG_OFF(deprecated)
 CLANG_DIAG_OFF(uninitialized)
-#include <QVBoxLayout>
-#include <QPixmap>
-#include <QDebug>
-#include <QThread>
-#include <QHeaderView>
-#include <QStyledItemDelegate>
-#include <QUndoCommand>
-#include <QPainter>
-#include <QCheckBox>
-#include <QWaitCondition>
-#include <QApplication>
+
+#include <QtCore/QDebug>
+#include <QtCore/QThread>
+#include <QtCore/QWaitCondition>
+#include <QtConcurrentMap> // QtCore on Qt4, QtConcurrent on Qt5
+#include <QtGui/QVBoxLayout>
+#include <QtGui/QPixmap>
+#include <QtGui/QHeaderView>
+#include <QtGui/QStyledItemDelegate>
+#include <QtGui/QUndoCommand>
+#include <QtGui/QPainter>
+#include <QtGui/QCheckBox>
+#include <QtGui/QApplication>
 CLANG_DIAG_ON(deprecated)
 CLANG_DIAG_ON(uninitialized)
 
@@ -170,25 +172,25 @@ struct MultiInstancePanelPrivate
         
         boost::shared_ptr<KnobHelper> ret;
         if ( isInt  ) {
-            boost::shared_ptr<KnobInt> intKnb = Natron::createKnob<KnobInt>(publicInterface, ref->getDescription(),ref->getDimension(),declaredByPlugin);
+            boost::shared_ptr<KnobInt> intKnb = Natron::createKnob<KnobInt>(publicInterface, ref->getLabel(), ref->getDimension(),declaredByPlugin);
             intKnb->setMinimumsAndMaximums(isInt->getMinimums(), isInt->getMaximums());
             intKnb->setDisplayMinimumsAndMaximums(isInt->getDisplayMinimums(), isInt->getDisplayMaximums());
             ret = intKnb;
         } else if ( dynamic_cast<KnobBool*>( ref.get() ) ) {
-            ret = Natron::createKnob<KnobBool>(publicInterface, ref->getDescription(),ref->getDimension(),declaredByPlugin);
+            ret = Natron::createKnob<KnobBool>(publicInterface, ref->getLabel(), ref->getDimension(),declaredByPlugin);
         } else if ( isDouble ) {
-            boost::shared_ptr<KnobDouble> dblKnob = Natron::createKnob<KnobDouble>(publicInterface, ref->getDescription(),ref->getDimension(),declaredByPlugin);
+            boost::shared_ptr<KnobDouble> dblKnob = Natron::createKnob<KnobDouble>(publicInterface, ref->getLabel(), ref->getDimension(),declaredByPlugin);
             dblKnob->setMinimumsAndMaximums(isDouble->getMinimums(), isDouble->getMaximums());
             dblKnob->setDisplayMinimumsAndMaximums(isDouble->getDisplayMinimums(), isDouble->getDisplayMaximums());
             ret = dblKnob;
         } else if (isChoice) {
             boost::shared_ptr<KnobChoice> choice = Natron::createKnob<KnobChoice>(publicInterface,
-                                                                                    ref->getDescription(),ref->getDimension(),declaredByPlugin);
+                                                                                    ref->getLabel(), ref->getDimension(), declaredByPlugin);
             choice->populateChoices( isChoice->getEntries_mt_safe(),isChoice->getEntriesHelp_mt_safe() );
             ret = choice;
         } else if (isString) {
             boost::shared_ptr<KnobString> strKnob = Natron::createKnob<KnobString>(publicInterface,
-                                                                                     ref->getDescription(),ref->getDimension(),declaredByPlugin);
+                                                                                     ref->getLabel(), ref->getDimension(), declaredByPlugin);
             if ( isString->isCustomKnob() ) {
                 strKnob->setAsCustom();
             }
@@ -203,24 +205,24 @@ struct MultiInstancePanelPrivate
             }
             ret = strKnob;
         } else if ( dynamic_cast<KnobParametric*>( ref.get() ) ) {
-            ret = Natron::createKnob<KnobParametric>(publicInterface, ref->getDescription(),ref->getDimension(),declaredByPlugin);
+            ret = Natron::createKnob<KnobParametric>(publicInterface, ref->getLabel(), ref->getDimension(), declaredByPlugin);
         } else if ( dynamic_cast<KnobColor*>( ref.get() ) ) {
-            ret = Natron::createKnob<KnobColor>(publicInterface, ref->getDescription(),ref->getDimension(),declaredByPlugin);
+            ret = Natron::createKnob<KnobColor>(publicInterface, ref->getLabel(), ref->getDimension(), declaredByPlugin);
         } else if ( dynamic_cast<KnobPath*>( ref.get() ) ) {
-            ret = Natron::createKnob<KnobPath>(publicInterface, ref->getDescription(),ref->getDimension(),declaredByPlugin);
+            ret = Natron::createKnob<KnobPath>(publicInterface, ref->getLabel(), ref->getDimension(), declaredByPlugin);
         } else if ( dynamic_cast<KnobFile*>( ref.get() ) ) {
-            ret = Natron::createKnob<KnobFile>(publicInterface, ref->getDescription(),ref->getDimension(),declaredByPlugin);
+            ret = Natron::createKnob<KnobFile>(publicInterface, ref->getLabel(), ref->getDimension(), declaredByPlugin);
         } else if ( dynamic_cast<KnobOutputFile*>( ref.get() ) ) {
-            ret = Natron::createKnob<KnobOutputFile>(publicInterface, ref->getDescription(),ref->getDimension(),declaredByPlugin);
+            ret = Natron::createKnob<KnobOutputFile>(publicInterface, ref->getLabel(), ref->getDimension(), declaredByPlugin);
         } else if (isButton) {
             boost::shared_ptr<KnobButton> btn = Natron::createKnob<KnobButton>(publicInterface,
-                                                                                 ref->getDescription(),ref->getDimension(),declaredByPlugin);
+                                                                                 ref->getLabel(), ref->getDimension(), declaredByPlugin);
             ///set the name prior to calling setIconForButton
             btn->setName( ref->getName() );
             publicInterface->setIconForButton( btn.get() );
             ret = btn;
         } else if ( dynamic_cast<KnobPage*>( ref.get() ) ) {
-            ret = Natron::createKnob<KnobPage>(publicInterface, ref->getDescription(),ref->getDimension(),declaredByPlugin);
+            ret = Natron::createKnob<KnobPage>(publicInterface, ref->getLabel(), ref->getDimension(), declaredByPlugin);
         } else {
             return;
         }
@@ -499,7 +501,7 @@ MultiInstancePanel::createMultiInstanceGui(QVBoxLayout* layout)
                       SLOT( onSelectionChanged(QItemSelection,QItemSelection) ) );
     QStringList dimensionNames;
     for (std::list<boost::shared_ptr<KnobI> >::iterator it = instanceSpecificKnobs.begin(); it != instanceSpecificKnobs.end(); ++it) {
-        QString knobDesc( (*it)->getDescription().c_str() );
+        QString knobDesc( (*it)->getLabel().c_str() );
         int dims = (*it)->getDimension();
         for (int i = 0; i < dims; ++i) {
             QString dimName(knobDesc);
@@ -1309,7 +1311,7 @@ MultiInstancePanel::onItemDataChanged(TableItem* item)
         return;
     }
     
-    int time = getApp()->getTimeLine()->currentFrame();
+    double time = getApp()->getTimeLine()->currentFrame();
     
     assert( modelIndex.row() < (int)_imp->instances.size() );
     Nodes::iterator nIt = _imp->instances.begin();
@@ -1908,7 +1910,11 @@ TrackerPanelV1::onAverageTracksButtonClicked()
         }
     }
     QString newName = QString("Average%1").arg(avgIndex + 1);
-    newInstance->setScriptName(newName.toStdString());
+    try {
+        newInstance->setScriptName(newName.toStdString());
+    } catch (...) {
+        
+    }
     newInstance->updateEffectLabelKnob(newName);
 
     boost::shared_ptr<KnobDouble> newInstanceCenter = getCenterKnobForTracker( newInstance.get() );
@@ -2175,7 +2181,7 @@ TrackerPanelV1::clearAllAnimationForSelection()
 void
 TrackerPanelV1::clearBackwardAnimationForSelection()
 {
-    int time = getApp()->getTimeLine()->currentFrame();
+    double time = getApp()->getTimeLine()->currentFrame();
     std::list<Node*> selectedInstances;
 
     getSelectedInstances(&selectedInstances);
@@ -2192,7 +2198,7 @@ TrackerPanelV1::clearBackwardAnimationForSelection()
 void
 TrackerPanelV1::clearForwardAnimationForSelection()
 {
-    int time = getApp()->getTimeLine()->currentFrame();
+    double time = getApp()->getTimeLine()->currentFrame();
     std::list<Node*> selectedInstances;
 
     getSelectedInstances(&selectedInstances);
@@ -2352,7 +2358,7 @@ TrackerPanelPrivateV1::createCornerPinFromSelection(const std::list<Node*> & sel
     boost::shared_ptr<KnobDouble> toPoints[4];
     boost::shared_ptr<KnobDouble>  fromPoints[4];
     
-    int timeForFromPoints = useTransformRefFrame ? referenceFrame->getValue() : app->getTimeLine()->currentFrame();
+    double timeForFromPoints = useTransformRefFrame ? referenceFrame->getValue() : app->getTimeLine()->currentFrame();
 
     for (unsigned int i = 0; i < selection.size(); ++i) {
         fromPoints[i] = getCornerPinPoint(cornerPin.get(), true, i);

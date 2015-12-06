@@ -405,7 +405,9 @@ EffectInstance::Implementation::runChangedParamCallback(KnobI* k,
     std::string thisGroupVar;
     NodeGroup* isParentGrp = dynamic_cast<NodeGroup*>( collection.get() );
     if (isParentGrp) {
-        thisGroupVar = appID + "." + isParentGrp->getNode()->getFullyQualifiedName();
+        std::string nodeName = isParentGrp->getNode()->getFullyQualifiedName();
+        std::string nodeFullName = appID + "." + nodeName;
+        thisGroupVar = nodeFullName;
     } else {
         thisGroupVar = appID;
     }

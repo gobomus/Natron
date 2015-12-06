@@ -48,9 +48,6 @@ CLANG_DIAG_ON(deprecated)
 /*macro to get the unique pointer to the controler*/
 #define appPTR AppManager::instance()
 
-class QMutex;
-class QChar;
-
 
 namespace Natron {
 enum AppInstanceStatusEnum
@@ -60,14 +57,6 @@ enum AppInstanceStatusEnum
 };
 }
 
-namespace OFX {
-    namespace Host {
-        namespace ImageEffect {
-            class ImageEffectPlugin;
-            class Descriptor;
-        }
-    }
-}
 
 struct AppInstanceRef
 {
@@ -572,11 +561,11 @@ Natron::StandardButtonEnum questionDialog(const std::string & title,const std::s
 
 template <class K>
 boost::shared_ptr<K> createKnob(KnobHolder*  holder,
-                                const std::string &description,
+                                const std::string &label,
                                 int dimension = 1,
                                 bool declaredByPlugin = true)
 {
-    return appPTR->getKnobFactory().createKnob<K>(holder,description,dimension,declaredByPlugin);
+    return appPTR->getKnobFactory().createKnob<K>(holder, label, dimension, declaredByPlugin);
 }
 
 inline bool
@@ -673,6 +662,13 @@ bool getGroupInfos(const std::string& modulePath,
 
 // Does not work for functions with var args
 void getFunctionArguments(const std::string& pyFunc,std::string* error,std::vector<std::string>* args);
+    
+/**
+* @brief Given a fullyQualifiedName, e.g: app1.Group1.Blur1
+* this function returns the PyObject attribute of Blur1 if it is defined, or Group1 otherwise
+* If app1 or Group1 does not exist at this point, this is a failure.
+**/
+PyObject* getAttrRecursive(const std::string& fullyQualifiedName,PyObject* parentObj,bool* isDefined);
     
 /**
  * @brief Small helper class to use as RAII to hold the GIL (Global Interpreter Lock) before calling ANY Python code.

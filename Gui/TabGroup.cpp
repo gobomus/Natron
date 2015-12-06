@@ -85,7 +85,7 @@ TabGroup::onGroupSecretChanged()
 }
 
 QGridLayout*
-TabGroup::addTab(const boost::shared_ptr<KnobGroup>& group,const QString& name)
+TabGroup::addTab(const boost::shared_ptr<KnobGroup>& group, const QString& label)
 {
     
     QWidget* tab = 0;
@@ -105,13 +105,13 @@ TabGroup::addTab(const boost::shared_ptr<KnobGroup>& group,const QString& name)
     if (!tab) {
         QObject::connect(group->getSignalSlotHandler().get(), SIGNAL(secretChanged()), this, SLOT(onGroupSecretChanged()));
         tab = new QWidget(_tabWidget);
-        tab->setObjectName(name);
+        tab->setObjectName(label);
         tabLayout = new QGridLayout(tab);
         tabLayout->setColumnStretch(1, 1);
         //tabLayout->setContentsMargins(0, 0, 0, 0);
         tabLayout->setSpacing(NATRON_FORM_LAYOUT_LINES_SPACING); // unfortunately, this leaves extra space when parameters are hidden
         if (!group->getIsSecret()) {
-            _tabWidget->addTab(tab,name);
+            _tabWidget->addTab(tab,label);
             if (!isVisible()) {
                 setVisible(true);
             }
@@ -120,6 +120,7 @@ TabGroup::addTab(const boost::shared_ptr<KnobGroup>& group,const QString& name)
         d.gridLayout = tabLayout;
         d.tabContainer = tab;
         _tabs.push_back(std::make_pair(group, d));
+
     }
     assert(tabLayout);
     return tabLayout;

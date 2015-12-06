@@ -25,13 +25,13 @@
 #include <Python.h>
 // ***** END PYTHON BLOCK *****
 
+#include "Global/Macros.h"
+
 #if !defined(Q_MOC_RUN) && !defined(SBK_RUN)
 #include <boost/noncopyable.hpp>
 #include <boost/shared_ptr.hpp>
 #include <boost/scoped_ptr.hpp>
 #endif
-
-#include "Global/Macros.h"
 
 CLANG_DIAG_OFF(deprecated)
 CLANG_DIAG_OFF(uninitialized)
@@ -40,75 +40,19 @@ CLANG_DIAG_ON(deprecated)
 CLANG_DIAG_ON(uninitialized)
 
 #include "Global/GlobalDefines.h"
+
+#include "Engine/ScriptObject.h"
+#include "Engine/EngineFwd.h"
+
 #include "Gui/SerializableWindow.h"
 #ifdef __NATRON_WIN32__
 #include "Gui/FileTypeMainWindow_win.h"
 #endif
-#include "Engine/ScriptObject.h"
+#include "Gui/RegisteredTabs.h"
+#include "Gui/GuiFwd.h"
 
 
 #define kMainSplitterObjectName "ToolbarSplitter"
-
-//boost
-namespace boost {
-namespace archive {
-class xml_iarchive;
-class xml_oarchive;
-}
-}
-
-//QtGui
-class Splitter;
-class QUndoStack;
-class QScrollArea;
-class QToolButton;
-class QVBoxLayout;
-class QMutex;
-
-//Natron gui
-#include "Gui/RegisteredTabs.h"
-class GuiLayoutSerialization;
-class GuiAppInstance;
-class PanelWidget;
-class AppInstance;
-class NodeGui;
-class TabWidget;
-class ToolButton;
-class ViewerTab;
-class DockablePanel;
-class NodeGraph;
-class CurveEditor;
-class Histogram;
-class RotoGui;
-class FloatingWidget;
-class BoundAction;
-class ScriptEditor;
-class PyPanel;
-class RectI;
-class DopeSheetEditor;
-class PropertiesBinWrapper;
-class RenderStatsDialog;
-
-//Natron engine
-class ViewerInstance;
-class PluginGroupNode;
-class KnobColor;
-class ProcessHandler;
-class NodeCollection;
-class KnobHolder;
-namespace Natron {
-class Node;
-class Image;
-class EffectInstance;
-class OutputEffectInstance;
-    
-    
-#if defined(Q_OS_MAC)
-//Implementation in Gui/QtMac.mm
-bool isHighDPIInternal(const QWidget* w);
-#endif
-    
-}
 
 
 struct GuiPrivate;
@@ -143,6 +87,7 @@ public:
 
     boost::shared_ptr<NodeGui> createNodeGUI(boost::shared_ptr<Natron::Node> node,
                                              bool requestedByLoad,
+                                             bool userEdited,
                                              bool pushUndoRedoCommand);
 
     void addNodeGuiToCurveEditor(const boost::shared_ptr<NodeGui> &node);
@@ -153,8 +98,6 @@ public:
     void removeNodeGuiFromDopeSheetEditor(const boost::shared_ptr<NodeGui>& node);
 
     const std::list<boost::shared_ptr<NodeGui> > & getSelectedNodes() const;
-
-    bool eventFilter(QObject *target, QEvent* e) OVERRIDE;
 
     void createViewerGui(boost::shared_ptr<Natron::Node> viewer);
 
@@ -402,10 +345,10 @@ public:
 
     void deselectAllNodes() const;
 
-    void onProcessHandlerStarted(const QString & sequenceName,int firstFrame,int lastFrame,
+    void onProcessHandlerStarted(const QString & sequenceName,int firstFrame,int lastFrame, int frameStep,
                                  const boost::shared_ptr<ProcessHandler> & process);
 
-    void onWriterRenderStarted(const QString & sequenceName,int firstFrame,int lastFrame,
+    void onWriterRenderStarted(const QString & sequenceName,int firstFrame,int lastFrame,int frameStep,
                                Natron::OutputEffectInstance* writer);
 
     NodeGraph* getNodeGraph() const;
@@ -605,10 +548,15 @@ public:
     
     void setLastKeyPressVisitedClickFocus(bool visited);
 
-#ifdef __NATRON_WIN32__
     void setApplicationConsoleActionVisible(bool visible);
-#endif
+
+protected:
+    // Reimplemented Protected Functions
+
+    //bool event(QEvent* event) OVERRIDE;
     
+    bool eventFilter(QObject *target, QEvent* e) OVERRIDE;
+
 Q_SIGNALS:
 
 
@@ -690,7 +638,7 @@ public Q_SLOTS:
 
     void openRecentFile();
 
-    void onProjectNameChanged(const QString & name);
+    void onProjectNameChanged(const QString & filePath, bool modified);
 
     void onNodeNameChanged(const QString & name);
 
@@ -736,16 +684,11 @@ public Q_SLOTS:
     void onRenderProgressDialogFinished();
     
     void onFocusChanged(QWidget* old, QWidget*);
-
-#ifdef __NATRON_WIN32__
     
     void onShowApplicationConsoleActionTriggered();
-    
-#endif
-    
+
 private:
 
-    
     void setCurrentPanelFocus(PanelWidget* widget);
     
     AppInstance* openProjectInternal(const std::string & absoluteFileName) WARN_UNUSED_RETURN;

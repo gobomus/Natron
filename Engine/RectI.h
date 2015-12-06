@@ -36,9 +36,10 @@
 #include "Global/GlobalDefines.h"
 #include "Global/Macros.h"
 
+#include "Engine/EngineFwd.h"
+
 GCC_DIAG_OFF(strict-overflow)
 
-class RectD;
 
 /**
  * @brief A rectangle where x1 < x2 and y1 < y2 such as width() == (x2 - x1) && height() == (y2 - y1)
@@ -420,15 +421,12 @@ public:
         y2 += dy;
     }
 
+#ifdef DEBUG
     void debug() const
     {
-        std::cout << "RectI is..." << std::endl;
-        std::cout << "left = " << x1 << std::endl;
-        std::cout << "bottom = " << y1 << std::endl;
-        std::cout << "right = " << x2 << std::endl;
-        std::cout << "top = " << y2 << std::endl;
+        std::cout << "x1 = "<<x1<<" y1 = "<<y1<<" x2 = "<<x2<<" y2 = "<<y2<< std::endl;
     }
-
+#endif
     std::vector<RectI> splitIntoSmallerRects(int splitsCount) const;
 
     static RectI fromOfxRectI(const OfxRectI & r)

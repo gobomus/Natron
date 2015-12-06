@@ -25,24 +25,22 @@
 #include <Python.h>
 // ***** END PYTHON BLOCK *****
 
+#include "Global/Macros.h"
+
 #include <map>
 
 #include "Engine/AppInstance.h"
 
-#include "Global/Macros.h"
+#include "Gui/GuiFwd.h"
 
-class NodeGui;
 
-class Gui;
-class ViewerTab;
-class Format;
-class KnobHolder;
 /**
  * @brief This little struct contains what enables file dialogs to show previews.
  * It is shared by all dialogs so that we don't have to recreate the nodes everytimes
  **/
-struct FileDialogPreviewProvider
+class FileDialogPreviewProvider
 {
+public:
     ViewerTab* viewerUI;
     boost::shared_ptr<Natron::Node> viewerNodeInternal;
     boost::shared_ptr<NodeGui> viewerNode;
@@ -124,6 +122,7 @@ public:
     virtual void saveProjectGui(boost::archive::xml_oarchive & archive) OVERRIDE FINAL;
     virtual void notifyRenderProcessHandlerStarted(const QString & sequenceName,
                                                    int firstFrame,int lastFrame,
+                                                   int frameStep,
                                                    const boost::shared_ptr<ProcessHandler> & process) OVERRIDE FINAL;
     virtual void setupViewersForViews(const std::vector<std::string>& viewNames) OVERRIDE FINAL;
 
@@ -196,8 +195,6 @@ public:
     
     virtual bool isDraftRenderEnabled() const OVERRIDE FINAL WARN_UNUSED_RETURN;
     
-    virtual void setUserIsPainting(const boost::shared_ptr<Natron::Node>& rotopaintNode) OVERRIDE FINAL;
-    virtual boost::shared_ptr<Natron::Node> getIsUserPainting() const OVERRIDE FINAL WARN_UNUSED_RETURN;
     
     virtual bool isRenderStatsActionChecked() const OVERRIDE FINAL;
     
@@ -216,17 +213,45 @@ public:
     virtual AppInstance* newProject()  OVERRIDE FINAL;
     
     void handleFileOpenEvent(const std::string& filename);
+    
+public:
 
     virtual void* getOfxHostOSHandle() const OVERRIDE FINAL;
     
-private:
+    
+    ///Rotopaint related
+    virtual void updateLastPaintStrokeData(int newAge,
+                                           const std::list<std::pair<Natron::Point,double> >& points,
+                                           const RectD& lastPointsBbox,
+                                           int strokeIndex) OVERRIDE FINAL;
+    
+    virtual void getLastPaintStrokePoints(std::list<std::list<std::pair<Natron::Point,double> > >* strokes, int* strokeIndex) const OVERRIDE FINAL;
+    
+    virtual void getRenderStrokeData(RectD* lastStrokeMovementBbox, std::list<std::pair<Natron::Point,double> >* lastStrokeMovementPoints,
+                                     double *distNextIn, boost::shared_ptr<Natron::Image>* strokeImage) const OVERRIDE FINAL;
+    
+    virtual int getStrokeLastIndex() const OVERRIDE FINAL;
+    
+    virtual void updateStrokeImage(const boost::shared_ptr<Natron::Image>& image, double distNextOut, bool setDistNextOut) OVERRIDE FINAL;
 
-    virtual void onGroupCreationFinished(const boost::shared_ptr<Natron::Node>& node,bool requestedByLoad) OVERRIDE FINAL;
+    virtual RectD getLastPaintStrokeBbox() const OVERRIDE FINAL;
+    
+    virtual void setUserIsPainting(const boost::shared_ptr<Natron::Node>& rotopaintNode,
+                                   const boost::shared_ptr<RotoStrokeItem>& stroke,
+                                   bool isPainting) OVERRIDE FINAL;
+    virtual void getActiveRotoDrawingStroke(boost::shared_ptr<Natron::Node>* node,
+                                            boost::shared_ptr<RotoStrokeItem>* stroke,
+                                            bool* isPainting) const OVERRIDE FINAL;
+    
+private:
+    
+    virtual void onGroupCreationFinished(const boost::shared_ptr<Natron::Node>& node,bool requestedByLoad,bool userEdited) OVERRIDE FINAL;
     
     virtual void createNodeGui(const boost::shared_ptr<Natron::Node> &node,
                                const boost::shared_ptr<Natron::Node>&  parentMultiInstance,
                                bool loadRequest,
                                bool autoConnect,
+                               bool userEdited,
                                double xPosHint,double yPosHint,
                                bool pushUndoRedoCommand) OVERRIDE FINAL;
     

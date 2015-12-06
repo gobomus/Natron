@@ -251,6 +251,7 @@ bool
 Application::event(QEvent* e)
 {
     switch ( e->type() ) {
+#if defined(Q_OS_MAC) || defined(Q_OS_SYMBIAN)
     case QEvent::FileOpen: {
         // This class is currently supported for Mac OS X and Symbian only
         // http://doc.qt.io/qt-4.8/qfileopenevent.html
@@ -276,11 +277,11 @@ Application::event(QEvent* e)
 #endif
             _app->setFileToOpen(file);
         }
-    }
-
         return true;
-    default:
+    }
+#endif
 
+    default:
         return QApplication::event(e);
     }
 }
@@ -935,6 +936,7 @@ GuiApplicationManager::populateShortcuts()
     registerKeybind(kShortcutGroupNodegraph, kShortcutIDActionGraphSelectAllVisible, kShortcutDescActionGraphSelectAllVisible, Qt::ShiftModifier | Qt::ControlModifier, Qt::Key_A);
     registerKeybind(kShortcutGroupNodegraph, kShortcutIDActionGraphEnableHints, kShortcutDescActionGraphEnableHints, Qt::NoModifier, Qt::Key_H);
     registerKeybind(kShortcutGroupNodegraph, kShortcutIDActionGraphAutoHideInputs, kShortcutDescActionGraphAutoHideInputs, Qt::NoModifier, (Qt::Key)0);
+    registerKeybind(kShortcutGroupNodegraph, kShortcutIDActionGraphHideInputs, kShortcutDescActionGraphHideInputs, Qt::NoModifier, (Qt::Key)0);
     registerKeybind(kShortcutGroupNodegraph, kShortcutIDActionGraphSwitchInputs, kShortcutDescActionGraphSwitchInputs, Qt::ShiftModifier, Qt::Key_X);
     registerKeybind(kShortcutGroupNodegraph, kShortcutIDActionGraphCopy, kShortcutDescActionGraphCopy, Qt::ControlModifier, Qt::Key_C);
     registerKeybind(kShortcutGroupNodegraph, kShortcutIDActionGraphPaste, kShortcutDescActionGraphPaste, Qt::ControlModifier, Qt::Key_V);

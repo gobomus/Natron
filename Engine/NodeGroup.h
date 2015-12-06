@@ -72,7 +72,7 @@ public:
     /**
      * @brief Same as getNodes() except that this function recurse in sub-groups.
      **/
-    void getNodes_recursive(NodeList& nodes) const;
+    void getNodes_recursive(NodeList& nodes, bool onlyActive) const;
     
     /**
      * @brief Adds a node to the collection. MT-safe.
@@ -99,7 +99,13 @@ public:
      **/
     void initNodeName(const std::string& pluginLabel,std::string* nodeName);
     
-    bool setNodeName(const std::string& baseName,bool appendDigit,bool errorIfExists,std::string* nodeName);
+    /**
+     * @brief Given the baseName, set in nodeName a possible script-name for the node.
+     * @param appendDigit If a node with the same script-name exists, try to add digits at the end until no match is found
+     * @param errorIfExists If a node with the same script-name exists, error
+     * This function throws a runtime exception with the error message in case of error.
+     **/
+    void setNodeName(const std::string& baseName,bool appendDigit,bool errorIfExists,std::string* nodeName);
     
     /**
      * @brief Returns true if there is one or more nodes in the collection.
@@ -141,6 +147,11 @@ public:
      * @brief Returns true if a node has the give name n in the group. This is not called recursively on subgroups.
      **/
     bool checkIfNodeNameExists(const std::string & n,const Natron::Node* caller) const;
+    
+    /**
+     * @brief Returns true if a node has the give label n in the group. This is not called recursively on subgroups.
+     **/
+    bool checkIfNodeLabelExists(const std::string & n,const Natron::Node* caller) const;
 
     /**
      * @brief Returns a pointer to a node whose name is the same as the name given in parameter.
@@ -232,27 +243,7 @@ public:
      * @brief Computes the union of the frame range of all readers in the group and subgroups.
      **/
     void recomputeFrameRangeForAllReaders(int* firstFrame,int* lastFrame);
-    
-    /**
-     * @brief Recursively sets render preferences for the rendering of a frame for the current thread.
-     * This is thread local storage
-     **/
-    void setParallelRenderArgs(int time,
-                               int view,
-                               bool isRenderUserInteraction,
-                               bool isSequential,
-                               bool canAbort,
-                               U64 renderAge,
-                               const boost::shared_ptr<Natron::Node>& treeRoot,
-                               const FrameRequestMap* request,
-                               int textureIndex,
-                               const TimeLine* timeline,
-                               const boost::shared_ptr<Natron::Node>& activeRotoPaintNode,
-                               bool isAnalysis,
-                               bool draftMode,
-                               bool viewerProgressReportEnabled,
-                               const boost::shared_ptr<RenderStats>& stats);
-    void invalidateParallelRenderArgs();
+
     
     void getParallelRenderArgs(std::map<boost::shared_ptr<Natron::Node>,ParallelRenderArgs >& argsMap) const;
     
@@ -298,36 +289,7 @@ private:
     boost::scoped_ptr<NodeCollectionPrivate> _imp;
 };
 
-struct ParallelRenderArgs;
-class ParallelRenderArgsSetter
-{
-    NodeCollection* collection;
-    std::map<boost::shared_ptr<Natron::Node>,ParallelRenderArgs > argsMap;
-    
-        
-public:
-    
-    ParallelRenderArgsSetter(NodeCollection* n,
-                             int time,
-                             int view,
-                             bool isRenderUserInteraction,
-                             bool isSequential,
-                             bool canAbort,
-                             U64 renderAge,
-                             const boost::shared_ptr<Natron::Node>& treeRoot,
-                             const FrameRequestMap* request,
-                             int textureIndex,
-                             const TimeLine* timeline,
-                             const boost::shared_ptr<Natron::Node>& activeRotoPaintNode,
-                             bool isAnalysis,
-                             bool draftMode,
-                             bool viewerProgressReportEnabled,
-                             const boost::shared_ptr<RenderStats>& stats);
-    
-    ParallelRenderArgsSetter(const std::map<boost::shared_ptr<Natron::Node>,ParallelRenderArgs >& args);
-    
-    virtual ~ParallelRenderArgsSetter();
-};
+
 
 
 struct NodeGroupPrivate;
@@ -391,7 +353,7 @@ public:
     
     virtual bool isInputMask(int inputNb) const OVERRIDE FINAL WARN_UNUSED_RETURN;
     
-    virtual std::string getDescription() const OVERRIDE FINAL WARN_UNUSED_RETURN;
+    virtual std::string getPluginDescription() const OVERRIDE FINAL WARN_UNUSED_RETURN;
     
     virtual std::string getInputLabel(int inputNb) const OVERRIDE FINAL WARN_UNUSED_RETURN;
     

@@ -25,19 +25,11 @@
 #include <Python.h>
 // ***** END PYTHON BLOCK *****
 
+#include "Global/Macros.h"
+
 #include "Engine/OutputEffectInstance.h"
+#include "Engine/EngineFwd.h"
 
-namespace Natron {
-namespace Color {
-class Lut;
-}
-}
-
-class KnobOutputFile;
-class KnobChoice;
-class KnobButton;
-class KnobInt;
-class KnobBool;
 
 class QtWriter
     : public Natron::OutputEffectInstance
@@ -77,7 +69,7 @@ public:
     virtual std::string getPluginID() const OVERRIDE;
     virtual std::string getPluginLabel() const OVERRIDE;
     virtual void getPluginGrouping(std::list<std::string>* grouping) const OVERRIDE FINAL;
-    virtual std::string getDescription() const OVERRIDE;
+    virtual std::string getPluginDescription() const OVERRIDE;
     virtual void getFrameRange(double *first,double *last) OVERRIDE;
     virtual int getMaxInputCount() const OVERRIDE
     {

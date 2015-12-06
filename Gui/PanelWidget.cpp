@@ -24,6 +24,8 @@
 
 #include "PanelWidget.h"
 #include <cassert>
+#include <QApplication>
+#include <QKeyEvent>
 
 #include "Gui/TabWidget.h"
 #include "Gui/Gui.h"
@@ -138,11 +140,16 @@ PanelWidget::leaveEventBase()
 }
 
 void
-PanelWidget::handleUnCaughtKeyPressEvent()
+PanelWidget::handleUnCaughtKeyPressEvent(QKeyEvent* e)
 {
     if (!_gui) {
         return;
     }
     _gui->setLastKeyPressVisitedClickFocus(_gui->getCurrentPanelFocus() == this);
-    
+    TabWidget* parentPane = getParentPane();
+    if (parentPane && parentPane->isFloatingWindowChild()) {
+        //We have to send the event to the Gui object, because it won't receive it as they are part from different windows
+        qApp->sendEvent(_gui, e);
+    }
+
 }

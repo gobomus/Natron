@@ -132,10 +132,10 @@ public:
     
 public Q_SLOTS:
     
-    void onCenterKeyframeSet(SequenceTime time,int dimension,int reason,bool added);
-    void onCenterKeyframeRemoved(SequenceTime time,int dimension,int reason);
-    void onCenterKeyframeMoved(int dimension,int oldTime,int newTime);
-    void onCenterKeyframesSet(const std::list<SequenceTime>& keys, int dimension, int reason);
+    void onCenterKeyframeSet(double time,int dimension,int reason,bool added);
+    void onCenterKeyframeRemoved(double time,int dimension,int reason);
+    void onCenterKeyframeMoved(int dimension,double oldTime,double newTime);
+    void onCenterKeyframesSet(const std::list<double>& keys, int dimension, int reason);
     void onCenterAnimationRemoved(int dimension);
     
     void onCenterKnobValueChanged(int dimension,int reason);
@@ -381,7 +381,7 @@ public:
     void s_keyframeSetOnTrackCenter(const boost::shared_ptr<TrackMarker>& marker,int key) { Q_EMIT keyframeSetOnTrackCenter(marker,key); }
     void s_keyframeRemovedOnTrackCenter(const boost::shared_ptr<TrackMarker>& marker,int key) { Q_EMIT keyframeRemovedOnTrackCenter(marker,key); }
     void s_allKeyframesRemovedOnTrackCenter(const boost::shared_ptr<TrackMarker>& marker) { Q_EMIT allKeyframesRemovedOnTrackCenter(marker); }
-    void s_multipleKeyframesSetOnTrackCenter(const boost::shared_ptr<TrackMarker>& marker, const std::list<int>& keys) { Q_EMIT multipleKeyframesSetOnTrackCenter(marker,keys); }
+    void s_multipleKeyframesSetOnTrackCenter(const boost::shared_ptr<TrackMarker>& marker, const std::list<double>& keys) { Q_EMIT multipleKeyframesSetOnTrackCenter(marker,keys); }
     
     void s_trackAboutToClone(const boost::shared_ptr<TrackMarker>& marker) { Q_EMIT trackAboutToClone(marker); }
     void s_trackCloned(const boost::shared_ptr<TrackMarker>& marker) { Q_EMIT trackCloned(marker); }
@@ -418,7 +418,7 @@ Q_SIGNALS:
     void keyframeSetOnTrackCenter(boost::shared_ptr<TrackMarker> marker, int);
     void keyframeRemovedOnTrackCenter(boost::shared_ptr<TrackMarker> marker, int);
     void allKeyframesRemovedOnTrackCenter(boost::shared_ptr<TrackMarker> marker);
-    void multipleKeyframesSetOnTrackCenter(boost::shared_ptr<TrackMarker> marker, std::list<int>);
+    void multipleKeyframesSetOnTrackCenter(boost::shared_ptr<TrackMarker> marker, std::list<double>);
     
     void trackAboutToClone(boost::shared_ptr<TrackMarker> marker);
     void trackCloned(boost::shared_ptr<TrackMarker> marker);

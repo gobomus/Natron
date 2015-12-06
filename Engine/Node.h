@@ -68,6 +68,13 @@ CLANG_DIAG_ON(deprecated)
 #define kReadOIIOAvailableViewsKnobName "availableViews"
 #define kWriteOIIOParamViewsSelector "viewsSelector"
 
+#define kWriteParamFrameStep "frameIncr"
+#define kWriteParamFrameStepLabel "Frame Increment"
+#define kWriteParamFrameStepHint "The number of frames the timeline should step before rendering the new frame. " \
+"If 1, all frames will be rendered, if 2 only 1 frame out of 2" \
+" etc...This number cannot be inferior to 1."
+
+
 
 namespace Natron {
 
@@ -158,6 +165,10 @@ public:
     void restoreKnobsLinks(const NodeSerialization & serialization,const std::list<boost::shared_ptr<Natron::Node> > & allNodes);
     
     void restoreUserKnobs(const NodeSerialization& serialization);
+    
+    void setPagesOrder(const std::list<std::string>& pages);
+    
+    std::list<std::string> getPagesOrder() const;
     
     bool isNodeCreated() const;
     
@@ -416,24 +427,19 @@ public:
     
     /////////////////////ROTO-PAINT related functionnalities//////////////////////
     //////////////////////////////////////////////////////////////////////////////
-    void updateLastPaintStrokeData(int newAge,const std::list<std::pair<Natron::Point,double> >& points,
-                                   const RectD& lastPointsBbox,
-                                   int strokeIndex);
+    
+    void prepareForNextPaintStrokeRender();
     
     //Used by nodes below the rotopaint tree to optimize the RoI
-    void setLastPaintStrokeDataNoRotopaint(const RectD& lastStrokeBbox);
+    void setLastPaintStrokeDataNoRotopaint();
     void invalidateLastPaintStrokeDataNoRotopaint();
     
-    void getPaintStrokeRoD(int time,RectD* bbox) const;
+    void getPaintStrokeRoD(double time,RectD* bbox) const;
     RectD getPaintStrokeRoD_duringPainting() const;
     
-    bool isFirstPaintStrokeRenderTick() const;
-    int getStrokeImageAge() const;
-    void updateStrokeImage(const boost::shared_ptr<Natron::Image>& image);
-    void getLastPaintStrokeRoD(RectD* pointsBbox) ;
     bool isLastPaintStrokeBitmapCleared() const;
     void clearLastPaintStrokeRoD();
-    void getLastPaintStrokePoints(int time,std::list<std::list<std::pair<Natron::Point,double> > >* strokes, int* strokeIndex) const;
+    void getLastPaintStrokePoints(double time,std::list<std::list<std::pair<Natron::Point,double> > >* strokes, int* strokeIndex) const;
     boost::shared_ptr<Natron::Image> getOrRenderLastStrokeImage(unsigned int mipMapLevel,
                                                                 const RectI& roi,
                                                                 double par,
@@ -565,10 +571,12 @@ public:
     void attachRotoItem(const boost::shared_ptr<RotoDrawableItem>& stroke);
     boost::shared_ptr<RotoDrawableItem> getAttachedRotoItem() const;
     
+    
     //This flag is used for the Roto plug-in and for the Merge inside the rotopaint tree
     //so that if the input of the roto node is RGB, it gets converted with alpha = 0, otherwise the user
     //won't be able to paint the alpha channel
     bool usesAlpha0ToConvertFromRGBToRGBA() const;
+    void setUseAlpha0ToConvertFromRGBToRGBA(bool use);
     
 protected:
     
@@ -607,7 +615,7 @@ public:
     /**
      * @brief Forwarded to the live effect instance
      **/
-    std::string getDescription() const;
+    std::string getPluginDescription() const;
     
     /**
      * @brief Returns the absolute file-path to the plug-in icon.
@@ -756,9 +764,9 @@ public:
     //only 1 clone can render at any time
     QMutex & getRenderInstancesSharedMutex();
 
-    void refreshPreviewsRecursivelyDownstream(int time);
+    void refreshPreviewsRecursivelyDownstream(double time);
 
-    void refreshPreviewsRecursivelyUpstream(int time);
+    void refreshPreviewsRecursivelyUpstream(double time);
 
     void incrementKnobsAge();
     
@@ -793,7 +801,7 @@ public:
      * @brief DO NOT EVER USE THIS FUNCTION. This is provided for compatibility with plug-ins that
      * do not respect the OpenFX specification.
      **/
-    boost::shared_ptr<Natron::Image> getImageBeingRendered(int time,unsigned int mipMapLevel,int view);
+    boost::shared_ptr<Natron::Image> getImageBeingRendered(double time,unsigned int mipMapLevel,int view);
     
     void beginInputEdition();
     
@@ -932,9 +940,9 @@ public:
         
     /**
      * @brief Set the node name.
-     * @returns True upon success, false otherwise. An error dialog will be displayed upon error.
+     * Throws a run-time error with the message in case of error
      **/
-    bool setScriptName(const std::string & name);
+    void setScriptName(const std::string & name);
 
     void setScriptName_no_error_check(const std::string & name);
     
@@ -1045,7 +1053,7 @@ public:
     
     void removeParameterFromPython(const std::string& parameterName);
 
-    double getHostMixingValue(int time) const;
+    double getHostMixingValue(double time) const;
     
     void removeAllImagesFromCacheWithMatchingIDAndDifferentKey(U64 nodeHashKey);
     void removeAllImagesFromCache();
@@ -1065,7 +1073,14 @@ public:
     
     void refreshIdentityState();
     
+    bool getHideInputsKnobValue() const;
+    void setHideInputsKnobValue(bool hidden);
+    
+    int getFrameStepKnobValue() const;
+    
 private:
+    
+    void refreshEnabledKnobsLabel(const Natron::ImageComponents& layer);
     
     void refreshCreatedViews(KnobI* knob);
     
@@ -1089,7 +1104,9 @@ private:
     
     bool refreshDraftFlagInternal(const std::vector<boost::shared_ptr<Natron::Node> >& inputs);
     
-    void setNameInternal(const std::string& name);
+    void setNameInternal(const std::string& name, bool throwErrors);
+    
+    std::string getFullyQualifiedNameInternal(const std::string& scriptName) const;
     
     void s_outputLayerChanged() { Q_EMIT outputLayerChanged(); }
 
@@ -1099,20 +1116,19 @@ public Q_SLOTS:
     void setKnobsAge(U64 newAge);
 
 
-
     void doRefreshEdgesGUI()
     {
         Q_EMIT refreshEdgesGUI();
     }
 
     /*will force a preview re-computation not matter of the project's preview mode*/
-    void computePreviewImage(int time)
+    void computePreviewImage(double time)
     {
         Q_EMIT previewRefreshRequested(time);
     }
 
     /*will refresh the preview only if the project is in auto-preview mode*/
-    void refreshPreviewImage(int time)
+    void refreshPreviewImage(double time)
     {
         Q_EMIT previewImageChanged(time);
     }
@@ -1133,6 +1149,8 @@ public Q_SLOTS:
     void doComputeHashOnMainThread();
     
 Q_SIGNALS:
+    
+    void hideInputsKnobChanged(bool hidden);
     
     void identityChanged(int inputNb);
     
@@ -1176,9 +1194,9 @@ Q_SIGNALS:
 
     void refreshEdgesGUI();
 
-    void previewImageChanged(int);
+    void previewImageChanged(double);
 
-    void previewRefreshRequested(int);
+    void previewRefreshRequested(double);
 
     void inputNIsRendering(int inputNb);
 

@@ -249,7 +249,12 @@ ViewerTab::startPause(bool b)
     abortRendering();
     if (b) {
         getGui()->getApp()->setLastViewerUsingTimeline(_imp->viewerNode->getNode());
-        _imp->viewerNode->getRenderEngine()->renderFromCurrentFrame(getGui()->getApp()->isRenderStatsActionChecked(), OutputSchedulerThread::eRenderDirectionForward);
+        std::vector<int> viewsToRender;
+        {
+            QMutexLocker k(&_imp->currentViewMutex);
+            viewsToRender.push_back(_imp->currentViewIndex);
+        }
+        _imp->viewerNode->getRenderEngine()->renderFromCurrentFrame(getGui()->getApp()->isRenderStatsActionChecked(), viewsToRender, OutputSchedulerThread::eRenderDirectionForward);
     }
 }
 
@@ -329,7 +334,12 @@ ViewerTab::startBackward(bool b)
     abortRendering();
     if (b) {
         getGui()->getApp()->setLastViewerUsingTimeline(_imp->viewerNode->getNode());
-        _imp->viewerNode->getRenderEngine()->renderFromCurrentFrame(getGui()->getApp()->isRenderStatsActionChecked(), OutputSchedulerThread::eRenderDirectionBackward);
+        std::vector<int> viewsToRender;
+        {
+            QMutexLocker k(&_imp->currentViewMutex);
+            viewsToRender.push_back(_imp->currentViewIndex);
+        }
+        _imp->viewerNode->getRenderEngine()->renderFromCurrentFrame(getGui()->getApp()->isRenderStatsActionChecked(), viewsToRender, OutputSchedulerThread::eRenderDirectionBackward);
 
     }
 }
@@ -675,7 +685,7 @@ ViewerTab::keyPressEvent(QKeyEvent* e)
         _imp->renderScaleCombo->setCurrentIndex(4);
     } else if (isKeybind(kShortcutGroupViewer, kShortcutIDActionZoomLevel100, modifiers, key) ) {
         _imp->viewer->zoomSlot(100);
-        _imp->zoomCombobox->setCurrentIndex_no_emit(4);
+        _imp->zoomCombobox->setCurrentIndex_no_emit(7);
     } else if (isKeybind(kShortcutGroupViewer, kShortcutIDActionZoomIn, modifiers, key) ) {
         zoomIn();
     } else if (isKeybind(kShortcutGroupViewer, kShortcutIDActionZoomOut, modifiers, key) ) {
@@ -738,7 +748,9 @@ ViewerTab::keyPressEvent(QKeyEvent* e)
         update();
     } else if (isKeybind(kShortcutGroupViewer, kShortcutIDSwitchInputAAndB, modifiers, key) ) {
         ///Put it after notifyOverlaysKeyDown() because Roto may intercept Enter
-        switchInputAAndB();
+        if (getViewer()->hasFocus()) {
+            switchInputAAndB();
+        }
     } else if (isKeybind(kShortcutGroupViewer, kShortcutIDShowLeftView, modifiers, key) ) {
         showView(0);
     } else if (isKeybind(kShortcutGroupViewer, kShortcutIDShowRightView, modifiers, key) ) {
@@ -751,7 +763,7 @@ ViewerTab::keyPressEvent(QKeyEvent* e)
         takeClickFocus();
         e->accept();
     } else {
-        handleUnCaughtKeyPressEvent();
+        handleUnCaughtKeyPressEvent(e);
     }
 } // keyPressEvent
 

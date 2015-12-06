@@ -28,7 +28,8 @@
 #include <limits>
 #include <stdexcept>
 
-#include <QDebug>
+#include <QtCore/QTextStream>
+#include <QtCore/QDebug>
 
 #include "Global/Macros.h"
 
@@ -801,7 +802,6 @@ OfxClipInstance::getImagePlaneInternal(OfxTime time, int view, const OfxRectD *o
 }
 
 
-
 OFX::Host::ImageEffect::Image*
 OfxClipInstance::getInputImageInternal(OfxTime time,
                                   int view,
@@ -819,7 +819,7 @@ OfxClipInstance::getInputImageInternal(OfxTime time,
     if (!ofxPlane) {
         
         EffectInstance::ComponentsNeededMap neededComps;
-        _nodeInstance->getThreadLocalNeedeComponents(&neededComps);
+        _nodeInstance->getThreadLocalNeededComponents(&neededComps);
         EffectInstance::ComponentsNeededMap::iterator found = neededComps.find(inputnb);
         if (found != neededComps.end()) {
             comp = found->second.front();
@@ -833,9 +833,7 @@ OfxClipInstance::getInputImageInternal(OfxTime time,
                 std::list<ImageComponents> comps = ofxComponentsToNatronComponents(getComponents());
                 assert(comps.size() == 1);
                 comp = comps.front();
-            } else {
-                comp = _nodeInstance->getNode()->findClosestSupportedComponents(inputnb, comp);
-            }
+            } 
         }
 
     } else {
@@ -863,21 +861,22 @@ OfxClipInstance::getInputImageInternal(OfxTime time,
      Get mipmaplevel, and transform concatenation data from the TLS
      */
     if (tls) {
-        if (!tls->isViewValid) {
+        if (view == -1) {
+            if (!tls->isViewValid) {
 #ifdef DEBUG
-            if (QThread::currentThread() != qApp->thread()) {
-                qDebug() << _nodeInstance->getNode()->getScriptName_mt_safe().c_str() << " is trying to call clipGetImage on a thread "
-                "not controlled by Natron (probably from the multi-thread suite).\n If you're a developer of that plug-in, please "
-                "fix it. Natron is now going to try to recover from that mistake but doing so can yield unpredictable results.";
-            }
+                if (QThread::currentThread() != qApp->thread()) {
+                    qDebug() << _nodeInstance->getNode()->getScriptName_mt_safe().c_str() << " is trying to call clipGetImage on a thread "
+                    "not controlled by Natron (probably from the multi-thread suite).\n If you're a developer of that plug-in, please "
+                    "fix it. Natron is now going to try to recover from that mistake but doing so can yield unpredictable results.";
+                }
 #endif
-            view = 0;
-        } else {
-            if (view == -1) {
+                view = 0;
+            } else {
                 view = tls->view;
             }
+            
         }
-        
+
         if (!tls->isMipmapLevelValid) {
             mipMapLevel = 0;
         } else {
@@ -1021,6 +1020,7 @@ OfxClipInstance::getInputImageInternal(OfxTime time,
         components = _components;
         nComps = natronComps.front().getNumComponents();
     }
+
     
      /*// this will dump the image as seen from the plug-in
      QString filename;
@@ -1195,7 +1195,11 @@ OfxClipInstance::ofxComponentsToNatronComponents(const std::string & comp)
     } else if (comp == kNatronOfxImageComponentXY) {
         ret.push_back(ImageComponents::getXYComponents());
     } else {
-        ret.push_back(ofxCustomCompToNatronComp(comp));
+        try {
+            ret.push_back(ofxCustomCompToNatronComp(comp));
+        } catch (...) {
+            
+        }
     }
     return ret;
 }
@@ -1296,14 +1300,13 @@ OfxImage::OfxImage(std::list<OfxImage*>* tlsImages,
         _imgAccess = access;
     }
     
-    
     ///We set the render window that was given to the render thread instead of the actual bounds of the image
     ///so we're sure the plug-in doesn't attempt to access outside pixels.
     setIntProperty(kOfxImagePropBounds, pluginsSeenBounds.left(), 0);
     setIntProperty(kOfxImagePropBounds, pluginsSeenBounds.bottom(), 1);
     setIntProperty(kOfxImagePropBounds, pluginsSeenBounds.right(), 2);
     setIntProperty(kOfxImagePropBounds, pluginsSeenBounds.top(), 3);
-#pragma message WARN("The Image RoD should be in pixels everywhere in Natron!")
+
     // http://openfx.sourceforge.net/Documentation/1.3/ofxProgrammingReference.html#kOfxImagePropRegionOfDefinition
     // " An image's region of definition, in *PixelCoordinates,* is the full frame area of the image plane that the image covers."
     // Natron::Image::getRoD() is in *CANONICAL* coordinates
