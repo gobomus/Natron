@@ -109,6 +109,8 @@ public Q_SLOTS:
     void updateSelectionFromSelectionRectangle(bool onRelease);
 
     void onSelectionCleared();
+    
+    void onTrackingStarted();
         
     void onTrackingEnded();
     

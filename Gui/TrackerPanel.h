@@ -133,7 +133,7 @@ public Q_SLOTS:
     void onKeyframeSetOnTrackCenter(const boost::shared_ptr<TrackMarker> &marker, int key);
     void onKeyframeRemovedOnTrackCenter(const boost::shared_ptr<TrackMarker> &marker, int key);
     void onAllKeyframesRemovedOnTrackCenter(const boost::shared_ptr<TrackMarker> &marker);
-    void onMultipleKeyframesSetOnTrackCenter(const boost::shared_ptr<TrackMarker> &marker, const std::list<int>& keys);
+    void onMultipleKeyframesSetOnTrackCenter(const boost::shared_ptr<TrackMarker> &marker, const std::list<double>& keys);
     
     void onSettingsPanelClosed(bool closed);
     void onTrackAboutToClone(const boost::shared_ptr<TrackMarker>& marker);

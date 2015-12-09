@@ -108,7 +108,7 @@ public:
     
     void getUserKeyframes(std::set<int>* keyframes) const;
     
-    void getCenterKeyframes(std::set<int>* keyframes) const;
+    void getCenterKeyframes(std::set<double>* keyframes) const;
     
     bool isEnabled() const;
     

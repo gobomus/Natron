@@ -573,7 +573,7 @@ TrackMarker::getUserKeyframes(std::set<int>* keyframes) const
 }
 
 void
-TrackMarker::getCenterKeyframes(std::set<int>* keyframes) const
+TrackMarker::getCenterKeyframes(std::set<double>* keyframes) const
 {
     boost::shared_ptr<Curve> curve = _imp->center->getCurve(0);
     assert(curve);
@@ -1412,6 +1412,18 @@ static bool trackStepLibMV(int trackIndex, const TrackArgsLibMV& args, int time)
     boost::shared_ptr<mv::AutoTrack> autoTrack = args.getLibMVAutoTrack();
     QMutex* autoTrackMutex = args.getAutoTrackMutex();
     
+    bool enabledChans[3];
+    args.getEnabledChannels(&enabledChans[0], &enabledChans[1], &enabledChans[2]);
+    
+
+    {
+        //Add the tracked marker
+        QMutexLocker k(autoTrackMutex);
+        natronTrackerToLibMVTracker(true, enabledChans, *track->natronMarker, trackIndex, time, args.getForward(), args.getFormatHeight(), &track->mvMarker);
+        autoTrack->AddMarker(track->mvMarker);
+    }
+    
+    
     //The frame on the mvMarker should have been set accordingly
     assert(track->mvMarker.frame == time);
 
@@ -1421,30 +1433,21 @@ static bool trackStepLibMV(int trackIndex, const TrackArgsLibMV& args, int time)
 #ifdef TRACE_LIB_MV
         qDebug() << QThread::currentThread() << "TrackStep:" << time << "is a keyframe";
 #endif
-#ifdef DEBUG
-        {
-            // Make sure the Marker belongs to the AutoTrack
-            QMutexLocker k(autoTrackMutex);
-            mv::Marker tmp;
-            bool ok = autoTrack->GetMarker(0, time, trackIndex, &tmp);
-            assert(ok);
-        }
-#endif
+        setKnobKeyframesFromMarker(track->mvMarker, args.getFormatHeight(), 0, track->natronMarker);
         
     } else {
         
         // Set the reference rame
-        mv::Marker m;
-        if (!autoTrack->GetMarker(track->mvMarker.clip, track->mvMarker.reference_frame, track->mvMarker.track, &m)) {
-            
-            bool enabledChans[3];
-            args.getEnabledChannels(&enabledChans[0], &enabledChans[1], &enabledChans[2]);
-            natronTrackerToLibMVTracker(true, enabledChans, *track->natronMarker, track->mvMarker.track, track->mvMarker.reference_frame, args.getForward(), args.getFormatHeight(), &m);
-            assert(track->mvMarker.source != mv::Marker::MANUAL);
-            autoTrack->AddMarker(m);
-        }
         track->mvMarker.reference_frame = track->natronMarker->getReferenceFrame(time, args.getForward());
         assert(track->mvMarker.reference_frame != track->mvMarker.frame);
+
+        //Make sure the reference frame as the same search window as the tracked frame and exists in the AutoTrack
+        {
+            QMutexLocker k(autoTrackMutex);
+            mv::Marker m;
+            natronTrackerToLibMVTracker(false, enabledChans, *track->natronMarker, track->mvMarker.track, track->mvMarker.reference_frame, args.getForward(), args.getFormatHeight(), &m);
+            autoTrack->AddMarker(m);
+        }
 
         
 #ifdef TRACE_LIB_MV
@@ -1472,15 +1475,15 @@ static bool trackStepLibMV(int trackIndex, const TrackArgsLibMV& args, int time)
         setKnobKeyframesFromMarker(track->mvMarker, args.getFormatHeight(), &result, track->natronMarker);
         
         //Add the marker to the autotrack
-        {
+        /*{
             QMutexLocker k(autoTrackMutex);
             autoTrack->AddMarker(track->mvMarker);
-        }
+        }*/
     } // if (track->mvMarker.source == mv::Marker::MANUAL) {
     
     //Refresh the marker for next iteration
-    int nextFrame = args.getForward() ? time + 1 : time - 1;
-    updateLibMvTrackMinimal(*track->natronMarker, nextFrame, args.getForward(), args.getFormatHeight(), &track->mvMarker);
+    //int nextFrame = args.getForward() ? time + 1 : time - 1;
+    //updateLibMvTrackMinimal(*track->natronMarker, nextFrame, args.getForward(), args.getFormatHeight(), &track->mvMarker);
     
     return true;
 }
@@ -2403,20 +2406,32 @@ FrameAccessorImpl::GetImage(int /*clip*/,
     
     assert(!planes.empty());
     const ImagePtr& sourceImage = planes.front();
-    
+    RectI sourceBounds = sourceImage->getBounds();
     RectI intersectedRoI;
-    roi.intersect(sourceImage->getBounds(), &intersectedRoI);
+    if (!roi.intersect(sourceBounds, &intersectedRoI)) {
+#ifdef TRACE_LIB_MV
+        qDebug() << QThread::currentThread() << "FrameAccessor::GetImage():" << "RoI does not intersect the source image bounds (RoI x1="
+        << roi.x1 << "y1=" << roi.y1 << "x2=" << roi.x2 << "y2=" << roi.y2 << ")";
+#endif
+        return (mv::FrameAccessor::Key)0;
+
+    }
+    
+#ifdef TRACE_LIB_MV
+    qDebug() << QThread::currentThread() << "FrameAccessor::GetImage():" << "renderRoi (frame" << frame << ") OK  (BOUNDS= x1="
+    << sourceBounds.x1 << "y1=" << sourceBounds.y1 << "x2=" << sourceBounds.x2 << "y2=" << sourceBounds.y2 << ") (ROI = " << roi.x1 << "y1=" << roi.y1 << "x2=" << roi.x2 << "y2=" << roi.y2 << ")";
+#endif
     
     /*
      Copy the Natron image to the LivMV float image
      */
     FrameAccessorCacheEntry entry;
-    entry.image.reset(new MvFloatImage(roi.height(), roi.width()));
-    entry.bounds = roi;
+    entry.image.reset(new MvFloatImage(intersectedRoI.height(), intersectedRoI.width()));
+    entry.bounds = intersectedRoI;
     entry.referenceCount = 1;
     natronImageToLibMvFloatImage(_enabledChannels,
                                  sourceImage.get(),
-                                 roi,
+                                 intersectedRoI,
                                  *entry.image);
     // we ignore the transform parameter and do it in natronImageToLibMvFloatImage instead
     
@@ -2430,7 +2445,7 @@ FrameAccessorImpl::GetImage(int /*clip*/,
     }
 #ifdef TRACE_LIB_MV
     qDebug() << QThread::currentThread() << "FrameAccessor::GetImage():" << "Rendered frame" << frame << "with RoI x1="
-    << roi.x1 << "y1=" << roi.y1 << "x2=" << roi.x2 << "y2=" << roi.y2;
+    << intersectedRoI.x1 << "y1=" << intersectedRoI.y1 << "x2=" << intersectedRoI.x2 << "y2=" << intersectedRoI.y2;
 #endif
     return (mv::FrameAccessor::Key)entry.image.get();
 }
@@ -2531,10 +2546,8 @@ TrackerContext::trackMarkers(const std::list<boost::shared_ptr<TrackMarker> >& m
         for (std::set<int>::iterator it2 = userKeys.begin(); it2 != userKeys.end(); ++it2) {
             
             if (*it2 == start) {
-                isStartingTimeKeyframe = true;
-                natronTrackerToLibMVTracker(true, enabledChannels, *t->natronMarker, trackIndex, *it2, forward, formatHeight, &t->mvMarker);
-                assert(t->mvMarker.source == mv::Marker::MANUAL);
-                trackContext->AddMarker(t->mvMarker);
+                //Will be added in the track step
+                continue;
             } else {
                 mv::Marker marker;
                 natronTrackerToLibMVTracker(false, enabledChannels, *t->natronMarker, trackIndex, *it2, forward, formatHeight, &marker);
@@ -2547,17 +2560,15 @@ TrackerContext::trackMarkers(const std::list<boost::shared_ptr<TrackMarker> >& m
         
         
         //For all already tracked frames which are not keyframes, add them to the AutoTrack too
-        std::set<int> centerKeys;
+        std::set<double> centerKeys;
         t->natronMarker->getCenterKeyframes(&centerKeys);
-        for (std::set<int>::iterator it2 = centerKeys.begin(); it2 != centerKeys.end(); ++it2) {
+        for (std::set<double>::iterator it2 = centerKeys.begin(); it2 != centerKeys.end(); ++it2) {
             if (userKeys.find(*it2) != userKeys.end()) {
                 continue;
             }
             if (*it2 == start) {
-                isStartingTimeKeyframe = true;
-                natronTrackerToLibMVTracker(true, enabledChannels, *t->natronMarker, trackIndex, *it2, forward, formatHeight, &t->mvMarker);
-                assert(t->mvMarker.source == mv::Marker::TRACKED);
-                trackContext->AddMarker(t->mvMarker);
+                //Will be added in the track step
+                continue;
             } else {
                 mv::Marker marker;
                 natronTrackerToLibMVTracker(false, enabledChannels, *t->natronMarker, trackIndex, *it2, forward, formatHeight, &marker);
@@ -2566,16 +2577,7 @@ TrackerContext::trackMarkers(const std::list<boost::shared_ptr<TrackMarker> >& m
             }
         }
         
-        if (!isStartingTimeKeyframe) {
-            // Also add a marker for the start time if it has not yet been added
-            natronTrackerToLibMVTracker(true, enabledChannels, *t->natronMarker, trackIndex, start, forward, formatHeight, &t->mvMarker);
-            assert(t->mvMarker.source != mv::Marker::MANUAL);
-            
-            // Set knob values at this time with a 0 correlation score
-            //setKnobKeyframesFromMarker(t->mvMarker, formatHeight, NULL, t->natronMarker);
-            
-            trackContext->AddMarker(t->mvMarker);
-        }
+        
         
         
         t->mvOptions = mvOptions;

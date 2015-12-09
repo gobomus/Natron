@@ -21,7 +21,13 @@ INCLUDEPATH += $$PWD/../libs/libmv/third_party
 INCLUDEPATH += $$PWD/../libs/libmv/third_party/Eigen3
 INCLUDEPATH += $$PWD/../libs/libmv
 
-DEFINES += CERES_HAVE_PTHREAD CERES_NO_SUITESPARSE CERES_NO_CXSPARSE CERES_NO_LAPACK CERES_HAVE_RWLOCK
+DEFINES += CERES_HAVE_PTHREAD CERES_NO_SUITESPARSE CERES_NO_CXSPARSE CERES_HAVE_RWLOCK
+
+# Comment to make ceres use a lapack library
+DEFINES += CERES_NO_LAPACK
+
+# Uncomment to make ceres use openmp
+#DEFINES += CERES_USE_OPENMP
 
 #If undefined, make sure to add to sources all the files in ceres/internal/ceres/generated
 DEFINES += CERES_RESTRICT_SCHUR_SPECIALIZATION

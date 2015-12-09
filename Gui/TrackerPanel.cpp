@@ -224,7 +224,7 @@ typedef std::vector< TrackDatas> TrackItems;
 struct TrackKeys
 {
     std::set<int> userKeys;
-    std::set<int> centerKeys;
+    std::set<double> centerKeys;
     bool visible;
     
     TrackKeys(): userKeys(), centerKeys(), visible(false) {}
@@ -360,8 +360,8 @@ TrackerPanel::TrackerPanel(const boost::shared_ptr<NodeGui>& n,
                      this, SLOT(onKeyframeRemovedOnTrackCenter(boost::shared_ptr<TrackMarker>,int)));
     QObject::connect(context.get(), SIGNAL(allKeyframesRemovedOnTrackCenter(boost::shared_ptr<TrackMarker>)),
                      this, SLOT(onAllKeyframesRemovedOnTrackCenter(boost::shared_ptr<TrackMarker>)));
-    QObject::connect(context.get(), SIGNAL(multipleKeyframesSetOnTrackCenter(boost::shared_ptr<TrackMarker>,std::list<int>)),
-                     this, SLOT(onMultipleKeyframesSetOnTrackCenter(boost::shared_ptr<TrackMarker>,std::list<int>)));
+    QObject::connect(context.get(), SIGNAL(multipleKeyframesSetOnTrackCenter(boost::shared_ptr<TrackMarker>,std::list<double>)),
+                     this, SLOT(onMultipleKeyframesSetOnTrackCenter(boost::shared_ptr<TrackMarker>,std::list<double>)));
     
     
     QObject::connect(context.get(), SIGNAL(enabledChanged(boost::shared_ptr<TrackMarker>,int)),this,
@@ -1358,7 +1358,7 @@ TrackerPanel::onTrackAboutToClone(const boost::shared_ptr<TrackMarker>& marker)
             for (std::set<int>::iterator it = found->second.userKeys.begin(); it!=found->second.userKeys.end(); ++it) {
                 keys.push_back(*it);
             }
-            for (std::set<int>::iterator it = found->second.centerKeys.begin(); it!=found->second.centerKeys.end(); ++it) {
+            for (std::set<double>::iterator it = found->second.centerKeys.begin(); it!=found->second.centerKeys.end(); ++it) {
                 keys.push_back(*it);
             }
 
@@ -1387,7 +1387,7 @@ TrackerPanel::onTrackCloned(const boost::shared_ptr<TrackMarker>& marker)
         for (std::set<int>::iterator it = k.userKeys.begin(); it!=k.userKeys.end(); ++it) {
             keys.push_back(*it);
         }
-        for (std::set<int>::iterator it = k.centerKeys.begin(); it!=k.centerKeys.end(); ++it) {
+        for (std::set<double>::iterator it = k.centerKeys.begin(); it!=k.centerKeys.end(); ++it) {
             keys.push_back(*it);
         }
     
@@ -1414,13 +1414,14 @@ TrackerPanel::onSelectionAboutToChangeInternal(const std::list<boost::shared_ptr
             found->second.centerKeys.clear();
         }
         
-        std::set<int> userKeys,centerKeys;
+        std::set<int> userKeys;
+        std::set<double> centerKeys;
         (*it)->getUserKeyframes(&userKeys);
         (*it)->getCenterKeyframes(&centerKeys);
         for (std::set<int>::iterator it2 = userKeys.begin(); it2 != userKeys.end(); ++it2) {
             toRemove.push_back(*it2);
         }
-        for (std::set<int>::iterator it2 = centerKeys.begin(); it2 != centerKeys.end(); ++it2) {
+        for (std::set<double>::iterator it2 = centerKeys.begin(); it2 != centerKeys.end(); ++it2) {
             toRemove.push_back(*it2);
         }
     }
@@ -1491,7 +1492,7 @@ TrackerPanel::selectInternal(const std::list<boost::shared_ptr<TrackMarker> >& m
             k.visible = true;
             (*it)->getCenterKeyframes(&k.centerKeys);
             (*it)->getUserKeyframes(&k.userKeys);
-            for (std::set<int>::iterator it2 = k.centerKeys.begin(); it2 != k.centerKeys.end(); ++it2) {
+            for (std::set<double>::iterator it2 = k.centerKeys.begin(); it2 != k.centerKeys.end(); ++it2) {
                 keysToAdd.push_back(*it2);
             }
             for (std::set<int>::iterator it2 = k.userKeys.begin(); it2 != k.userKeys.end(); ++it2) {
@@ -1669,7 +1670,7 @@ TrackerPanel::onKeyframeSetOnTrackCenter(const boost::shared_ptr<TrackMarker> &m
         _imp->keys[marker] = k;
     } else {
         
-        std::pair<std::set<int>::iterator,bool> ret = found->second.centerKeys.insert(key);
+        std::pair<std::set<double>::iterator,bool> ret = found->second.centerKeys.insert(key);
         if (ret.second && found->second.visible) {
             boost::shared_ptr<TimeLine> timeline = _imp->node.lock()->getNode()->getApp()->getTimeLine();
             _imp->updateTrackKeysInfoBar(timeline->currentFrame());
@@ -1686,7 +1687,7 @@ TrackerPanel::onKeyframeRemovedOnTrackCenter(const boost::shared_ptr<TrackMarker
     if (found == _imp->keys.end()) {
         return;
     }
-    std::set<int>::iterator it2 = found->second.centerKeys.find(key);
+    std::set<double>::iterator it2 = found->second.centerKeys.find(key);
     if ( it2 != found->second.centerKeys.end() ) {
         found->second.centerKeys.erase(it2);
         if (found->second.visible) {
@@ -1704,7 +1705,7 @@ TrackerPanel::onAllKeyframesRemovedOnTrackCenter(const boost::shared_ptr<TrackMa
     }
     std::list<SequenceTime> toRemove;
     
-    for (std::set<int>::iterator it2 = it->second.centerKeys.begin(); it2 != it->second.centerKeys.end(); ++it2) {
+    for (std::set<double>::iterator it2 = it->second.centerKeys.begin(); it2 != it->second.centerKeys.end(); ++it2) {
         toRemove.push_back(*it2);
     }
     it->second.centerKeys.clear();
@@ -1716,20 +1717,20 @@ TrackerPanel::onAllKeyframesRemovedOnTrackCenter(const boost::shared_ptr<TrackMa
 }
 
 void
-TrackerPanel::onMultipleKeyframesSetOnTrackCenter(const boost::shared_ptr<TrackMarker>& marker, const std::list<int>& keys)
+TrackerPanel::onMultipleKeyframesSetOnTrackCenter(const boost::shared_ptr<TrackMarker>& marker, const std::list<double>& keys)
 {
     TrackKeysMap::iterator found = _imp->keys.find(marker);
     if (found == _imp->keys.end()) {
         TrackKeys k;
-        for (std::list<int>::const_iterator it = keys.begin(); it!=keys.end(); ++it) {
+        for (std::list<double>::const_iterator it = keys.begin(); it!=keys.end(); ++it) {
             k.centerKeys.insert(*it);
         }
         _imp->keys[marker] = k;
     } else {
         
         std::list<int> reallyInserted;
-        for (std::list<int>::const_iterator it = keys.begin(); it!=keys.end(); ++it) {
-            std::pair<std::set<int>::iterator,bool> ret = found->second.centerKeys.insert(*it);
+        for (std::list<double>::const_iterator it = keys.begin(); it!=keys.end(); ++it) {
+            std::pair<std::set<double>::iterator,bool> ret = found->second.centerKeys.insert(*it);
             if (ret.second) {
                 reallyInserted.push_back(*it);
             }

@@ -234,6 +234,8 @@ struct TrackerGuiPrivate
     RenderScale selectedMarkerScale;
     boost::weak_ptr<Image> selectedMarkerImg;
     
+    bool isTracking;
+    
     TrackerGuiPrivate(TrackerGui* publicInterface,
                       const boost::shared_ptr<TrackerPanelV1> & panelv1,
                       TrackerPanel* panel,
@@ -280,6 +282,7 @@ struct TrackerGuiPrivate
     , showMarkerTexture(false)
     , selectedMarkerScale()
     , selectedMarkerImg()
+    , isTracking(false)
     {
         glGenBuffers(1, &pboID);
         selectedMarkerScale.x = selectedMarkerScale.y = 1.;
@@ -543,6 +546,7 @@ TrackerGui::createGui()
         QObject::connect(context.get(), SIGNAL(allKeyframesRemovedOnTrack(boost::shared_ptr<TrackMarker>)), this , SLOT(onAllKeyframesRemovedOnTrack(boost::shared_ptr<TrackMarker>)));
         QObject::connect(context.get(), SIGNAL(onNodeInputChanged(int)), this , SLOT(onTrackerInputChanged(int)));
         QObject::connect(context.get(), SIGNAL(trackingFinished()), this , SLOT(onTrackingEnded()));
+        QObject::connect(context.get(), SIGNAL(trackingStarted()), this, SLOT(onTrackingStarted()));
         
         QPixmap addKeyOnPix,addKeyOffPix;
         QIcon addKeyIc;
@@ -3394,12 +3398,19 @@ TrackerGui::onUpdateViewerClicked(bool clicked)
 }
 
 void
+TrackerGui::onTrackingStarted()
+{
+    _imp->isTracking = true;
+}
+
+void
 TrackerGui::onTrackingEnded()
 {
     _imp->trackBwButton->setChecked(false);
     _imp->trackFwButton->setChecked(false);
     _imp->trackBwButton->setDown(false);
     _imp->trackFwButton->setDown(false);
+    _imp->isTracking = false;
 }
 
 void
@@ -3740,6 +3751,9 @@ TrackerGuiPrivate::refreshSelectedMarkerTexture()
 {
     
     assert(QThread::currentThread() == qApp->thread());
+    if (isTracking) {
+        return;
+    }
     boost::shared_ptr<TrackMarker> marker = selectedMarker.lock();
     if (!marker) {
         return;
