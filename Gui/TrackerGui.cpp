@@ -2660,6 +2660,11 @@ TrackerGui::penMotion(double time,
                     centerKnob->setValuesAtTime(time, centerKnob->getValueAtTime(time,0) + delta.x,
                                           centerKnob->getValueAtTime(time,1) + delta.y,
                                           Natron::eValueChangedReasonPluginEdited);
+                    for (int i = 0; i < 4; ++i) {
+                        for (int d = 0; d < patternCorners[i]->getDimension(); ++d) {
+                            patternCorners[i]->setValueAtTime(time, patternCorners[i]->getValueAtTime(i, d), d);
+                        }
+                    }
                 }
                 updateSelectedMarkerTexture();
                 if (_imp->createKeyOnMoveButton->isChecked()) {

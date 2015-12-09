@@ -1073,6 +1073,8 @@ public:
         return _libmvAutotrack;
     }
     
+    void getEnabledChannels(bool* r, bool* g, bool* b) const;
+    
     void getRedrawAreasNeeded(int time, std::list<RectD>* canonicalRects) const
     {
         for (std::vector<boost::shared_ptr<TrackMarkerAndOptions> >::const_iterator it = _tracks.begin(); it!=_tracks.end(); ++it) {
@@ -1137,7 +1139,7 @@ TrackArgsV1::getRedrawAreasNeeded(int time, std::list<RectD>* canonicalRects) co
         canonicalRects->push_back(rect);
     }
 }
-
+/*
 static void updateBbox(const Natron::Point& p, RectD* bbox)
 {
     bbox->x1 = std::min(p.x, bbox->x1);
@@ -1145,7 +1147,7 @@ static void updateBbox(const Natron::Point& p, RectD* bbox)
     bbox->y1 = std::min(p.x, bbox->y1);
     bbox->y2 = std::max(p.x, bbox->y2);
 }
-
+*/
 static double invertYCoordinate(double yIn, double formatHeight)
 {
     return formatHeight - 1 - yIn;
@@ -1178,24 +1180,29 @@ static void setKnobKeyframesFromMarker(const mv::Marker& mvMarker,
     
     Natron::Point center;
     center.x = (double)mvMarker.center(0);
-    center.y = (double)mvMarker.center(1);
+    center.y = (double)invertYCoordinate(mvMarker.center(1), formatHeight);
+    
+    boost::shared_ptr<KnobDouble> offsetKnob = natronMarker->getOffsetKnob();
+    Natron::Point offset;
+    offset.x = offsetKnob->getValueAtTime(time,0);
+    offset.y = offsetKnob->getValueAtTime(time,1);
     
     // Set the center
     boost::shared_ptr<KnobDouble> centerKnob = natronMarker->getCenterKnob();
     centerKnob->setValuesAtTime(time, center.x, center.y, Natron::eValueChangedReasonNatronInternalEdited);
     
     Natron::Point topLeftCorner,topRightCorner,btmRightCorner,btmLeftCorner;
-    topLeftCorner.x = mvMarker.patch.coordinates(0,0) - center.x;
-    topLeftCorner.y = invertYCoordinate(mvMarker.patch.coordinates(0,1) - center.y,formatHeight);
+    topLeftCorner.x = mvMarker.patch.coordinates(0,0) - offset.x - center.x;
+    topLeftCorner.y = invertYCoordinate(mvMarker.patch.coordinates(0,1),formatHeight) - offset.y - center.y;
     
-    topRightCorner.x = mvMarker.patch.coordinates(1,0) - center.x;
-    topRightCorner.y = invertYCoordinate(mvMarker.patch.coordinates(1,1) - center.y,formatHeight);
+    topRightCorner.x = mvMarker.patch.coordinates(1,0) - offset.x - center.x;
+    topRightCorner.y = invertYCoordinate(mvMarker.patch.coordinates(1,1),formatHeight) - offset.y - center.y;
     
-    btmRightCorner.x = mvMarker.patch.coordinates(2,0) - center.x;
-    btmRightCorner.y = invertYCoordinate(mvMarker.patch.coordinates(2,1) - center.y,formatHeight);
+    btmRightCorner.x = mvMarker.patch.coordinates(2,0) - offset.x - center.x;
+    btmRightCorner.y = invertYCoordinate(mvMarker.patch.coordinates(2,1),formatHeight) - offset.y - center.y;
     
-    btmLeftCorner.x = mvMarker.patch.coordinates(3,0) - center.x;
-    btmLeftCorner.y = invertYCoordinate(mvMarker.patch.coordinates(3,1) - center.y,formatHeight);
+    btmLeftCorner.x = mvMarker.patch.coordinates(3,0) - offset.x - center.x;
+    btmLeftCorner.y = invertYCoordinate(mvMarker.patch.coordinates(3,1),formatHeight) - offset.y - center.y;
     
     boost::shared_ptr<KnobDouble> pntTopLeftKnob = natronMarker->getPatternTopLeftKnob();
     boost::shared_ptr<KnobDouble> pntTopRightKnob = natronMarker->getPatternTopRightKnob();
@@ -1226,15 +1233,19 @@ static void updateLibMvTrackMinimal(const TrackMarker& marker,
         mvMarker->source = mv::Marker::TRACKED;
     }
     mvMarker->frame = time;
-    mvMarker->center(0) = centerKnob->getValueAtTime(time, 0);
-    mvMarker->center(1) = centerKnob->getValueAtTime(time, 1);
+    
+    Natron::Point nCenter;
+    nCenter.x = centerKnob->getValueAtTime(time, 0);
+    nCenter.y = centerKnob->getValueAtTime(time, 1);
+    mvMarker->center(0) = nCenter.x;
+    mvMarker->center(1) = invertYCoordinate(nCenter.y, formatHeight);
     
     Natron::Point searchWndBtmLeft,searchWndTopRight;
-    searchWndBtmLeft.x = searchWindowBtmLeftKnob->getValueAtTime(time, 0);
-    searchWndBtmLeft.y = searchWindowBtmLeftKnob->getValueAtTime(time, 1);
+    searchWndBtmLeft.x = searchWindowBtmLeftKnob->getValueAtTime(mvMarker->reference_frame, 0);
+    searchWndBtmLeft.y = searchWindowBtmLeftKnob->getValueAtTime(mvMarker->reference_frame, 1);
     
-    searchWndTopRight.x = searchWindowTopRightKnob->getValueAtTime(time, 0);
-    searchWndTopRight.y = searchWindowTopRightKnob->getValueAtTime(time, 1);
+    searchWndTopRight.x = searchWindowTopRightKnob->getValueAtTime(mvMarker->reference_frame, 0);
+    searchWndTopRight.y = searchWindowTopRightKnob->getValueAtTime(mvMarker->reference_frame, 1);
     
     Natron::Point offset;
     offset.x = offsetKnob->getValueAtTime(time,0);
@@ -1242,13 +1253,14 @@ static void updateLibMvTrackMinimal(const TrackMarker& marker,
     
     //See natronTrackerToLibMVTracker below for coordinates system
     mvMarker->search_region.min(0) = searchWndBtmLeft.x + mvMarker->center(0) + offset.x;
-    mvMarker->search_region.min(1) = invertYCoordinate(searchWndTopRight.y + mvMarker->center(1) + offset.y,formatHeight);
+    mvMarker->search_region.min(1) = invertYCoordinate(searchWndTopRight.y + nCenter.x + offset.y,formatHeight);
     mvMarker->search_region.max(0) = searchWndTopRight.x + mvMarker->center(0) + offset.x;
-    mvMarker->search_region.max(1) = invertYCoordinate(searchWndBtmLeft.y + mvMarker->center(1) + offset.y,formatHeight);
+    mvMarker->search_region.max(1) = invertYCoordinate(searchWndBtmLeft.y + nCenter.y + offset.y,formatHeight);
 }
 
 /// Converts a Natron track marker to the one used in LibMV. This is expensive: many calls to getValue are made
-static void natronTrackerToLibMVTracker(bool trackChannels[3],
+static void natronTrackerToLibMVTracker(bool useRefFrameForSearchWindow,
+                                        bool trackChannels[3],
                                         const TrackMarker& marker,
                                         int trackIndex,
                                         int time,
@@ -1277,8 +1289,11 @@ static void natronTrackerToLibMVTracker(bool trackChannels[3],
     } else {
         mvMarker->source = mv::Marker::TRACKED;
     }
-    mvMarker->center(0) = centerKnob->getValueAtTime(time, 0);
-    mvMarker->center(1) = centerKnob->getValueAtTime(time, 1);
+    Natron::Point nCenter;
+    nCenter.x = centerKnob->getValueAtTime(time, 0);
+    nCenter.y = centerKnob->getValueAtTime(time, 1);
+    mvMarker->center(0) = nCenter.x;
+    mvMarker->center(1) = invertYCoordinate(nCenter.y, formatHeight);
     mvMarker->model_type = mv::Marker::POINT;
     mvMarker->model_id = 0;
     mvMarker->track = trackIndex;
@@ -1289,11 +1304,12 @@ static void natronTrackerToLibMVTracker(bool trackChannels[3],
     (trackChannels[2] ? LIBMV_MARKER_CHANNEL_B : 0);
     
     Natron::Point searchWndBtmLeft,searchWndTopRight;
-    searchWndBtmLeft.x = searchWindowBtmLeftKnob->getValueAtTime(time, 0);
-    searchWndBtmLeft.y = searchWindowBtmLeftKnob->getValueAtTime(time, 1);
+    int searchWinTime = useRefFrameForSearchWindow ? mvMarker->reference_frame : time;
+    searchWndBtmLeft.x = searchWindowBtmLeftKnob->getValueAtTime(searchWinTime, 0);
+    searchWndBtmLeft.y = searchWindowBtmLeftKnob->getValueAtTime(searchWinTime, 1);
     
-    searchWndTopRight.x = searchWindowTopRightKnob->getValueAtTime(time, 0);
-    searchWndTopRight.y = searchWindowTopRightKnob->getValueAtTime(time, 1);
+    searchWndTopRight.x = searchWindowTopRightKnob->getValueAtTime(searchWinTime, 0);
+    searchWndTopRight.y = searchWindowTopRightKnob->getValueAtTime(searchWinTime, 1);
     
     Natron::Point offset;
     offset.x = offsetKnob->getValueAtTime(time,0);
@@ -1313,12 +1329,12 @@ static void natronTrackerToLibMVTracker(bool trackChannels[3],
     bl.x = patternBtmLeftKnob->getValueAtTime(time, 0);
     bl.y = patternBtmLeftKnob->getValueAtTime(time, 1);
     
-    RectD patternBbox;
+    /*RectD patternBbox;
     patternBbox.setupInfinity();
     updateBbox(tl, &patternBbox);
     updateBbox(tr, &patternBbox);
     updateBbox(br, &patternBbox);
-    updateBbox(bl, &patternBbox);
+    updateBbox(bl, &patternBbox);*/
     
     // The search-region is laid out as such:
     //
@@ -1332,10 +1348,10 @@ static void natronTrackerToLibMVTracker(bool trackChannels[3],
     //    |        +-------------------------+
     //    v   (min.x, max.y)           (max.x, max.y)
     //
-    mvMarker->search_region.min(0) = searchWndBtmLeft.x + mvMarker->center(0) + offset.x;
-    mvMarker->search_region.min(1) = invertYCoordinate(searchWndTopRight.y + mvMarker->center(1) + offset.y,formatHeight);
-    mvMarker->search_region.max(0) = searchWndTopRight.x + mvMarker->center(0) + offset.x;
-    mvMarker->search_region.max(1) = invertYCoordinate(searchWndBtmLeft.y + mvMarker->center(1) + offset.y,formatHeight);
+    mvMarker->search_region.min(0) = searchWndBtmLeft.x + nCenter.x + offset.x;
+    mvMarker->search_region.min(1) = invertYCoordinate(searchWndTopRight.y + nCenter.y + offset.y,formatHeight);
+    mvMarker->search_region.max(0) = searchWndTopRight.x + nCenter.x + offset.x;
+    mvMarker->search_region.max(1) = invertYCoordinate(searchWndBtmLeft.y + nCenter.y + offset.y,formatHeight);
     
     
     // The patch is a quad (4 points); generally in 2D or 3D (here 2D)
@@ -1356,17 +1372,28 @@ static void natronTrackerToLibMVTracker(bool trackChannels[3],
     //    y
     //
     // Each row is one of the corners coordinates; either (x, y) or (x, y, z).
-    mvMarker->patch.coordinates(0,0) = tl.x + mvMarker->center(0);
-    mvMarker->patch.coordinates(0,1) = invertYCoordinate(tl.y + mvMarker->center(1),formatHeight);
+    // TrackMarker extracts the patch coordinates as such:
+    /*
+     Quad2Df offset_quad = marker.patch;
+     Vec2f origin = marker.search_region.Rounded().min;
+     offset_quad.coordinates.rowwise() -= origin.transpose();
+     QuadToArrays(offset_quad, x, y);
+     x[4] = marker.center.x() - origin(0);
+     y[4] = marker.center.y() - origin(1);
+     */
+    // The patch coordinates should be canonical
     
-    mvMarker->patch.coordinates(1,0) = tr.x + mvMarker->center(0);
-    mvMarker->patch.coordinates(1,1) = invertYCoordinate(tr.y + mvMarker->center(1),formatHeight);
+    mvMarker->patch.coordinates(0,0) = tl.x + nCenter.x + offset.x;
+    mvMarker->patch.coordinates(0,1) = invertYCoordinate(tl.y + nCenter.y + offset.y,formatHeight);
     
-    mvMarker->patch.coordinates(2,0) = br.x + mvMarker->center(0);
-    mvMarker->patch.coordinates(2,1) = invertYCoordinate(br.y + mvMarker->center(1),formatHeight);
+    mvMarker->patch.coordinates(1,0) = tr.x + nCenter.x + offset.x;
+    mvMarker->patch.coordinates(1,1) = invertYCoordinate(tr.y + nCenter.y + offset.y,formatHeight);
     
-    mvMarker->patch.coordinates(3,0) = bl.x + mvMarker->center(0);
-    mvMarker->patch.coordinates(3,1) = invertYCoordinate(bl.y + mvMarker->center(1),formatHeight);
+    mvMarker->patch.coordinates(2,0) = br.x + nCenter.x + offset.x;
+    mvMarker->patch.coordinates(2,1) = invertYCoordinate(br.y + nCenter.y + offset.y,formatHeight);
+    
+    mvMarker->patch.coordinates(3,0) = bl.x + nCenter.x + offset.x;
+    mvMarker->patch.coordinates(3,1) = invertYCoordinate(bl.y + nCenter.y + offset.y,formatHeight);
 }
 
 /*
@@ -1407,8 +1434,18 @@ static bool trackStepLibMV(int trackIndex, const TrackArgsLibMV& args, int time)
     } else {
         
         // Set the reference rame
+        mv::Marker m;
+        if (!autoTrack->GetMarker(track->mvMarker.clip, track->mvMarker.reference_frame, track->mvMarker.track, &m)) {
+            
+            bool enabledChans[3];
+            args.getEnabledChannels(&enabledChans[0], &enabledChans[1], &enabledChans[2]);
+            natronTrackerToLibMVTracker(true, enabledChans, *track->natronMarker, track->mvMarker.track, track->mvMarker.reference_frame, args.getForward(), args.getFormatHeight(), &m);
+            assert(track->mvMarker.source != mv::Marker::MANUAL);
+            autoTrack->AddMarker(m);
+        }
         track->mvMarker.reference_frame = track->natronMarker->getReferenceFrame(time, args.getForward());
         assert(track->mvMarker.reference_frame != track->mvMarker.frame);
+
         
 #ifdef TRACE_LIB_MV
         qDebug() << QThread::currentThread() << ">>>> Tracking marker" << trackIndex << "at frame" << time <<
@@ -1419,7 +1456,7 @@ static bool trackStepLibMV(int trackIndex, const TrackArgsLibMV& args, int time)
         libmv::TrackRegionResult result;
         if (!autoTrack->TrackMarker(&track->mvMarker, &result, &track->mvOptions) || !result.is_usable()) {
 #ifdef TRACE_LIB_MV
-            qDebug() << QThread::currentThread() << "Tracking FAILED for track" << trackIndex << "at frame" << time;
+            qDebug() << QThread::currentThread() << "Tracking FAILED (" << (int)result.termination <<  ") for track" << trackIndex << "at frame" << time;
 #endif
             return false;
         }
@@ -2130,6 +2167,13 @@ public:
         
     }
     
+    void getEnabledChannels(bool* r, bool* g, bool* b) const
+    {
+        *r = _enabledChannels[0];
+        *g = _enabledChannels[1];
+        *b = _enabledChannels[2];
+    }
+    
     // Get a possibly-filtered version of a frame of a video. Downscale will
     // cause the input image to get downscaled by 2^downscale for pyramid access.
     // Region is always in original-image coordinates, and describes the
@@ -2158,6 +2202,12 @@ private:
     
 };
 
+void
+TrackArgsLibMV::getEnabledChannels(bool* r, bool* g, bool* b) const
+{
+    _fa->getEnabledChannels(r,g,b);
+}
+
 
 template <bool doR, bool doG, bool doB>
 void natronImageToLibMvFloatImageForChannels(const Natron::Image* source,
@@ -2172,7 +2222,7 @@ void natronImageToLibMvFloatImageForChannels(const Natron::Image* source,
     assert(compsCount == 3);
     unsigned int srcRowElements = source->getRowElements();
     
-    
+    assert(source->getBounds().contains(roi));
     const float* src_pixels = (const float*)racc.pixelAt(roi.x1, roi.y2 - 1);
     assert(src_pixels);
     float* dst_pixels = mvImg.Data();
@@ -2188,7 +2238,7 @@ void natronImageToLibMvFloatImageForChannels(const Natron::Image* source,
     int h = roi.height();
     int w = roi.width();
     for (int y = 0; y < h ; ++y,
-         src_pixels += (srcRowElements - compsCount * w)) {
+         src_pixels -= (srcRowElements + compsCount * w)) {
         
         for (int x = 0; x < w; ++x,
              src_pixels += compsCount,
@@ -2269,28 +2319,26 @@ FrameAccessorImpl::GetImage(int /*clip*/,
     /*
      Check if a frame exists in the cache with matching key and bounds enclosing the given region
      */
-    {
+    RectI roi;
+    if (region) {
+        convertLibMVRegionToRectI(*region,_formatHeight, &roi);
+
         QMutexLocker k(&_cacheMutex);
         std::pair<FrameAccessorCache::iterator,FrameAccessorCache::iterator> range = _cache.equal_range(key);
         for (FrameAccessorCache::iterator it = range.first; it != range.second; ++it) {
-            if (region) {
-                RectI roi;
-                convertLibMVRegionToRectI(*region,_formatHeight, &roi);
-                if (roi.x1 >= it->second.bounds.x1 && roi.x2 <= it->second.bounds.x2 &&
-                    roi.y1 >= it->second.bounds.y1 && roi.y2 <= it->second.bounds.y2) {
-                    // LibMV is kinda dumb on this we must necessarily copy the data either via CopyFrom or the
-                    // assignment constructor
+            if (roi.x1 >= it->second.bounds.x1 && roi.x2 <= it->second.bounds.x2 &&
+                roi.y1 >= it->second.bounds.y1 && roi.y2 <= it->second.bounds.y2) {
+                // LibMV is kinda dumb on this we must necessarily copy the data either via CopyFrom or the
+                // assignment constructor
 #ifdef TRACE_LIB_MV
-                    qDebug() << QThread::currentThread() << "FrameAccessor::GetImage():" << "Found cached image at frame" << frame << "with RoI x1="
-                    << region->min(0) << "y1=" << region->max(1) << "x2=" << region->max(0) << "y2=" << region->min(1);
+                qDebug() << QThread::currentThread() << "FrameAccessor::GetImage():" << "Found cached image at frame" << frame << "with RoI x1="
+                << region->min(0) << "y1=" << region->max(1) << "x2=" << region->max(0) << "y2=" << region->min(1);
 #endif
-                    destination->CopyFrom<float>(*it->second.image);
-                    ++it->second.referenceCount;
-                    return (mv::FrameAccessor::Key)it->second.image.get();
-                }
-            } else if (it->second.bounds.isNull()) {
-                
+                destination->CopyFrom<float>(*it->second.image);
+                ++it->second.referenceCount;
+                return (mv::FrameAccessor::Key)it->second.image.get();
             }
+            
         }
     }
     
@@ -2298,11 +2346,9 @@ FrameAccessorImpl::GetImage(int /*clip*/,
     RenderScale scale;
     scale.y = scale.x = Image::getScaleFromMipMapLevel((unsigned int)downscale);
     
-    RectI roi;
+    
     RectD precomputedRoD;
-    if (region) {
-        convertLibMVRegionToRectI(*region,_formatHeight, &roi);
-    } else {
+    if (!region) {
         bool isProjectFormat;
         Natron::StatusEnum stat = _trackerInput->getLiveInstance()->getRegionOfDefinition_public(_trackerInput->getHashValue(), frame, scale, 0, &precomputedRoD, &isProjectFormat);
         if (stat == eStatusFailed) {
@@ -2486,12 +2532,12 @@ TrackerContext::trackMarkers(const std::list<boost::shared_ptr<TrackMarker> >& m
             
             if (*it2 == start) {
                 isStartingTimeKeyframe = true;
-                natronTrackerToLibMVTracker(enabledChannels, *t->natronMarker, trackIndex, *it2, forward, formatHeight, &t->mvMarker);
+                natronTrackerToLibMVTracker(true, enabledChannels, *t->natronMarker, trackIndex, *it2, forward, formatHeight, &t->mvMarker);
                 assert(t->mvMarker.source == mv::Marker::MANUAL);
                 trackContext->AddMarker(t->mvMarker);
             } else {
                 mv::Marker marker;
-                natronTrackerToLibMVTracker(enabledChannels, *t->natronMarker, trackIndex, *it2, forward, formatHeight, &marker);
+                natronTrackerToLibMVTracker(false, enabledChannels, *t->natronMarker, trackIndex, *it2, forward, formatHeight, &marker);
                 assert(marker.source == mv::Marker::MANUAL);
                 trackContext->AddMarker(marker);
             }
@@ -2499,9 +2545,30 @@ TrackerContext::trackMarkers(const std::list<boost::shared_ptr<TrackMarker> >& m
             
         }
         
+        
+        //For all already tracked frames which are not keyframes, add them to the AutoTrack too
+        std::set<int> centerKeys;
+        t->natronMarker->getCenterKeyframes(&centerKeys);
+        for (std::set<int>::iterator it2 = centerKeys.begin(); it2 != centerKeys.end(); ++it2) {
+            if (userKeys.find(*it2) != userKeys.end()) {
+                continue;
+            }
+            if (*it2 == start) {
+                isStartingTimeKeyframe = true;
+                natronTrackerToLibMVTracker(true, enabledChannels, *t->natronMarker, trackIndex, *it2, forward, formatHeight, &t->mvMarker);
+                assert(t->mvMarker.source == mv::Marker::TRACKED);
+                trackContext->AddMarker(t->mvMarker);
+            } else {
+                mv::Marker marker;
+                natronTrackerToLibMVTracker(false, enabledChannels, *t->natronMarker, trackIndex, *it2, forward, formatHeight, &marker);
+                assert(marker.source == mv::Marker::TRACKED);
+                trackContext->AddMarker(marker);
+            }
+        }
+        
         if (!isStartingTimeKeyframe) {
             // Also add a marker for the start time if it has not yet been added
-            natronTrackerToLibMVTracker(enabledChannels, *t->natronMarker, trackIndex, start, forward, formatHeight, &t->mvMarker);
+            natronTrackerToLibMVTracker(true, enabledChannels, *t->natronMarker, trackIndex, start, forward, formatHeight, &t->mvMarker);
             assert(t->mvMarker.source != mv::Marker::MANUAL);
             
             // Set knob values at this time with a 0 correlation score
