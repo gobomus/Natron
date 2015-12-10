@@ -2542,7 +2542,6 @@ TrackerContext::trackMarkers(const std::list<boost::shared_ptr<TrackMarker> >& m
         t->natronMarker->getUserKeyframes(&userKeys);
         
         // Add a libmv marker for all keyframes
-        bool isStartingTimeKeyframe = false;
         for (std::set<int>::iterator it2 = userKeys.begin(); it2 != userKeys.end(); ++it2) {
             
             if (*it2 == start) {
@@ -3086,7 +3085,7 @@ TrackScheduler<TrackArgsType>::run()
             ///Ok all tracks are finished now for this frame, refresh viewer if needed
             if (isUpdateViewerOnTrackingEnabled && viewer) {
                 //This will not refresh the viewer since we blocked it explicitly
-                timeline->seekFrame(cur, true, 0, Natron::eTimelineChangeReasonUserSeek);
+                timeline->seekFrame(cur, true, 0, Natron::eTimelineChangeReasonOtherSeek);
                 
                 ///Beyond TRACKER_MAX_TRACKS_FOR_PARTIAL_VIEWER_UPDATE it becomes more costly to render all partial rectangles
                 ///than just render the whole viewer RoI
@@ -3138,7 +3137,7 @@ TrackScheduler<TrackArgsType>::run()
         }
         if (isUpdateViewerOnTrackingEnabled) {
             //Refresh all viewers to the current frame
-            timeline->seekFrame(lastValidFrame, true, 0, Natron::eTimelineChangeReasonUserSeek);
+            timeline->seekFrame(lastValidFrame, true, 0, Natron::eTimelineChangeReasonOtherSeek);
         }
         
         ///Flag that we're no longer working

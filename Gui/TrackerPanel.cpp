@@ -572,12 +572,12 @@ TrackerPanel::TrackerPanel(const boost::shared_ptr<NodeGui>& n,
     _imp->buttonsLayout->setContentsMargins(0, 0, 0, 0);
     _imp->addButton = new Button(QIcon(),"+",_imp->buttonsContainer);
     _imp->addButton->setFixedSize(NATRON_SMALL_BUTTON_SIZE,NATRON_SMALL_BUTTON_SIZE);
-    _imp->addButton->setToolTip(Natron::convertFromPlainText(tr("Add new."), Qt::WhiteSpaceNormal));
+    _imp->addButton->setToolTip(Natron::convertFromPlainText(tr("Add new track"), Qt::WhiteSpaceNormal));
     _imp->buttonsLayout->addWidget(_imp->addButton);
     QObject::connect( _imp->addButton, SIGNAL( clicked(bool) ), this, SLOT( onAddButtonClicked() ) );
     
     _imp->removeButton = new Button(QIcon(),"-",_imp->buttonsContainer);
-    _imp->removeButton->setToolTip(Natron::convertFromPlainText(tr("Remove selection."), Qt::WhiteSpaceNormal));
+    _imp->removeButton->setToolTip(Natron::convertFromPlainText(tr("Remove selected tracks"), Qt::WhiteSpaceNormal));
     _imp->removeButton->setFixedSize(NATRON_SMALL_BUTTON_SIZE,NATRON_SMALL_BUTTON_SIZE);
     _imp->buttonsLayout->addWidget(_imp->removeButton);
     QObject::connect( _imp->removeButton, SIGNAL( clicked(bool) ), this, SLOT( onRemoveButtonClicked() ) );
@@ -587,7 +587,7 @@ TrackerPanel::TrackerPanel(const boost::shared_ptr<NodeGui>& n,
     _imp->selectAllButton = new Button(QIcon(selectAll),"",_imp->buttonsContainer);
     _imp->selectAllButton->setFixedSize(NATRON_SMALL_BUTTON_SIZE,NATRON_SMALL_BUTTON_SIZE);
     _imp->selectAllButton->setIconSize(QSize(NATRON_SMALL_BUTTON_SIZE,NATRON_SMALL_BUTTON_SIZE));
-    _imp->selectAllButton->setToolTip(Natron::convertFromPlainText(tr("Select all."), Qt::WhiteSpaceNormal));
+    _imp->selectAllButton->setToolTip(Natron::convertFromPlainText(tr("Select all tracks"), Qt::WhiteSpaceNormal));
     _imp->buttonsLayout->addWidget(_imp->selectAllButton);
     QObject::connect( _imp->selectAllButton, SIGNAL( clicked(bool) ), this, SLOT( onSelectAllButtonClicked() ) );
     
