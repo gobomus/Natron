@@ -36,7 +36,7 @@ QMAKE_CLEAN += ofxTestLog.txt test_dot_generator0.jpg
 
 #OpenFX C api includes and OpenFX c++ layer includes that are located in the submodule under /submodules/OpenFX
 INCLUDEPATH += $$PWD/../submodules/OpenFX/include
-INCLUDEPATH += $$PWD/../submodules/OpenFX_extensions
+INCLUDEPATH += $$PWD/../OpenFX/Extensions
 INCLUDEPATH += $$PWD/../submodules/OpenFX/HostSupport/include
 INCLUDEPATH += $$PWD/..
 INCLUDEPATH += $$PWD/../submodules/SequenceParsing

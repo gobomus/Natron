@@ -47,8 +47,8 @@ precompile_header {
 #OpenFX C api includes and OpenFX c++ layer includes that are located in the submodule under /submodules/OpenFX
 INCLUDEPATH += $$PWD/../submodules/OpenFX/include
 DEPENDPATH  += $$PWD/../submodules/OpenFX/include
-INCLUDEPATH += $$PWD/../submodules/OpenFX_extensions
-DEPENDPATH  += $$PWD/../submodules/OpenFX_extensions
+INCLUDEPATH += $$PWD/../OpenFX/Extensions
+DEPENDPATH  += $$PWD/../OpenFX/Extensions
 INCLUDEPATH += $$PWD/../submodules/OpenFX/HostSupport/include
 DEPENDPATH  += $$PWD/../submodules/OpenFX/HostSupport/include
 INCLUDEPATH += $$PWD/..

@@ -101,7 +101,7 @@ SOURCES += \
     ../submodules/OpenFX/HostSupport/src/ofxhPluginCache.cpp \
     ../submodules/OpenFX/HostSupport/src/ofxhPropertySuite.cpp \
     ../submodules/OpenFX/HostSupport/src/ofxhUtilities.cpp \
-    ../submodules/OpenFX_extensions/ofxhParametricParam.cpp \
+    Extensions/ofxhParametricParam.cpp \
     ../submodules/OpenFX/Support/Library/ofxsCore.cpp \
     ../submodules/OpenFX/Support/Library/ofxsImageEffect.cpp \
     ../submodules/OpenFX/Support/Library/ofxsInteract.cpp \
@@ -148,7 +148,7 @@ HEADERS += \
     ../submodules/OpenFX/include/nuke/fnOfxExtensions.h \
     ../submodules/OpenFX/include/nuke/fnPublicOfxExtensions.h \
     ../submodules/OpenFX/include/tuttle/ofxReadWrite.h \
-    ../submodules/OpenFX_extensions/ofxhParametricParam.h \
+    Extensions/ofxhParametricParam.h \
     ../submodules/OpenFX/Support/include/ofxsCore.h \
     ../submodules/OpenFX/Support/include/ofxsImageEffect.h \
     ../submodules/OpenFX/Support/include/ofxsInteract.h \
