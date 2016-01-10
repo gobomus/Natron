@@ -39,7 +39,7 @@ precompile_header {
 INCLUDEPATH += $$PWD/../submodules/OpenFX/include
 DEPENDPATH  += $$PWD/../submodules/OpenFX/include
 INCLUDEPATH += $$PWD/../OpenFX/Extensions
-DEPENDPATH  += $$PWD/../Extensions/Extensions
+DEPENDPATH  += $$PWD/../OpenFX/Extensions
 INCLUDEPATH += $$PWD/../submodules/OpenFX/HostSupport/include
 DEPENDPATH  += $$PWD/../submodules/OpenFX/HostSupport/include
 INCLUDEPATH += $$PWD/..

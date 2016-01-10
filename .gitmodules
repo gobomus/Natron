@@ -7,3 +7,21 @@
 [submodule "google-breakpad"]
 	path = google-breakpad
 	url = https://github.com/MrKepzie/google-breakpad
+[submodule "submodules/openfx"]
+	path = submodules/openfx
+	url = https://github.com/devernay/openfx
+[submodule "submodules/openfx-supportext"]
+	path = submodules/openfx-supportext
+	url = https://github.com/devernay/openfx-supportext
+[submodule "submodules/openfx-io"]
+	path = submodules/openfx-io
+	url = https://github.com/MrKepzie/openfx-io
+[submodule "submodules/openfx-misc"]
+	path = submodules/openfx-misc
+	url = https://github.com/devernay/openfx-misc
+[submodule "submodules/openfx-arena"]
+	path = submodules/openfx-arena
+	url = https://github.com/olear/openfx-arena
+[submodule "submodules/SequenceParsing"]
+	path = submodules/SequenceParsing
+	url = https://github.com/MrKepzie/SequenceParsing
