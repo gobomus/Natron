@@ -13,3 +13,15 @@
 [submodule "google-breakpad"]
 	path = google-breakpad
 	url = https://github.com/MrKepzie/google-breakpad
+[submodule "libs/openfx-io"]
+	path = libs/openfx-io
+	url = https://github.com/MrKepzie/openfx-io
+[submodule "libs/openfx-supportext"]
+	path = libs/openfx-supportext
+	url = https://github.com/devernay/openfx-supportext
+[submodule "libs/openfx-misc"]
+	path = libs/openfx-misc
+	url = https://github.com/devernay/openfx-misc
+[submodule "libs/openfx-arena"]
+	path = libs/openfx-arena
+	url = https://github.com/olear/openfx-arena
