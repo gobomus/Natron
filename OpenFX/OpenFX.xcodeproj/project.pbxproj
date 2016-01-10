@@ -1,0 +1,1286 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 46;
+	objects = {
+		D7BA7D76DAB5DD13389D6332 = {
+			buildActionMask = 2147483647;
+			files = (
+				);
+			generatedFileNames = (
+				);
+			isa = PBXShellScriptBuildPhase;
+			name = "Qt Qmake";
+			neededFileNames = (
+				);
+			shellPath = "/bin/sh";
+			shellScript = "make\ -C\ /Users/alexandre/development/Natron/OpenFX\ -f\ \'OpenFX.xcodeproj/qt_makeqmake.mak\'";
+		};
+		365F98B3C278DDAD55A5B32D = {
+			isa = PBXFileReference;
+			name = "ofxhBinary.cpp";
+			path = "../submodules/OpenFX/HostSupport/src/ofxhBinary.cpp";
+			refType = 4;
+			sourceTree = "SOURCE_ROOT";
+			lastKnownFileType = "sourcecode.cpp.cpp";
+		};
+		450416993B06B07EBA79DF72 = {
+			fileRef = "365F98B3C278DDAD55A5B32D";
+			isa = PBXBuildFile;
+			settings = {
+				ATTRIBUTES = (
+					);
+			};
+		};
+		4BFFE5C3D67254555CE10B90 = {
+			isa = PBXFileReference;
+			name = "ofxhClip.cpp";
+			path = "../submodules/OpenFX/HostSupport/src/ofxhClip.cpp";
+			refType = 4;
+			sourceTree = "SOURCE_ROOT";
+			lastKnownFileType = "sourcecode.cpp.cpp";
+		};
+		C23D052F9F43B28BA50A5181 = {
+			fileRef = "4BFFE5C3D67254555CE10B90";
+			isa = PBXBuildFile;
+			settings = {
+				ATTRIBUTES = (
+					);
+			};
+		};
+		464E6A77D71AD32AFDE579A9 = {
+			isa = PBXFileReference;
+			name = "ofxhHost.cpp";
+			path = "../submodules/OpenFX/HostSupport/src/ofxhHost.cpp";
+			refType = 4;
+			sourceTree = "SOURCE_ROOT";
+			lastKnownFileType = "sourcecode.cpp.cpp";
+		};
+		8D48F9ACF9B9C69AD4686D59 = {
+			fileRef = "464E6A77D71AD32AFDE579A9";
+			isa = PBXBuildFile;
+			settings = {
+				ATTRIBUTES = (
+					);
+			};
+		};
+		F86FD2D519A7A7B498F5AC2E = {
+			isa = PBXFileReference;
+			name = "ofxhImageEffect.cpp";
+			path = "../submodules/OpenFX/HostSupport/src/ofxhImageEffect.cpp";
+			refType = 4;
+			sourceTree = "SOURCE_ROOT";
+			lastKnownFileType = "sourcecode.cpp.cpp";
+		};
+		DE8D4E9EAF1EADA9650892E8 = {
+			fileRef = "F86FD2D519A7A7B498F5AC2E";
+			isa = PBXBuildFile;
+			settings = {
+				ATTRIBUTES = (
+					);
+			};
+		};
+		B50E95A09F9B1FD6FD55E840 = {
+			isa = PBXFileReference;
+			name = "ofxhImageEffectAPI.cpp";
+			path = "../submodules/OpenFX/HostSupport/src/ofxhImageEffectAPI.cpp";
+			refType = 4;
+			sourceTree = "SOURCE_ROOT";
+			lastKnownFileType = "sourcecode.cpp.cpp";
+		};
+		BA28A1CEE3ECD3B5A41A9E89 = {
+			fileRef = "B50E95A09F9B1FD6FD55E840";
+			isa = PBXBuildFile;
+			settings = {
+				ATTRIBUTES = (
+					);
+			};
+		};
+		16CBEA6C8A3E0B4FC1F4E1F2 = {
+			isa = PBXFileReference;
+			name = "ofxhInteract.cpp";
+			path = "../submodules/OpenFX/HostSupport/src/ofxhInteract.cpp";
+			refType = 4;
+			sourceTree = "SOURCE_ROOT";
+			lastKnownFileType = "sourcecode.cpp.cpp";
+		};
+		B8CC38CDD1815D6C695D3075 = {
+			fileRef = "16CBEA6C8A3E0B4FC1F4E1F2";
+			isa = PBXBuildFile;
+			settings = {
+				ATTRIBUTES = (
+					);
+			};
+		};
+		C296600A50DDE99549F3A248 = {
+			isa = PBXFileReference;
+			name = "ofxhMemory.cpp";
+			path = "../submodules/OpenFX/HostSupport/src/ofxhMemory.cpp";
+			refType = 4;
+			sourceTree = "SOURCE_ROOT";
+			lastKnownFileType = "sourcecode.cpp.cpp";
+		};
+		59E72D479786C1AD4664E416 = {
+			fileRef = "C296600A50DDE99549F3A248";
+			isa = PBXBuildFile;
+			settings = {
+				ATTRIBUTES = (
+					);
+			};
+		};
+		B61E87F2158BC2EB8D182161 = {
+			isa = PBXFileReference;
+			name = "ofxhParam.cpp";
+			path = "../submodules/OpenFX/HostSupport/src/ofxhParam.cpp";
+			refType = 4;
+			sourceTree = "SOURCE_ROOT";
+			lastKnownFileType = "sourcecode.cpp.cpp";
+		};
+		A8994E81364E5A9F3E5266FF = {
+			fileRef = "B61E87F2158BC2EB8D182161";
+			isa = PBXBuildFile;
+			settings = {
+				ATTRIBUTES = (
+					);
+			};
+		};
+		3EA7C848A39EB2B859A58ED8 = {
+			isa = PBXFileReference;
+			name = "ofxhPluginAPICache.cpp";
+			path = "../submodules/OpenFX/HostSupport/src/ofxhPluginAPICache.cpp";
+			refType = 4;
+			sourceTree = "SOURCE_ROOT";
+			lastKnownFileType = "sourcecode.cpp.cpp";
+		};
+		C1C1BFC9E408379027FEF851 = {
+			fileRef = "3EA7C848A39EB2B859A58ED8";
+			isa = PBXBuildFile;
+			settings = {
+				ATTRIBUTES = (
+					);
+			};
+		};
+		33C0E060FA2E642939602643 = {
+			isa = PBXFileReference;
+			name = "ofxhPluginCache.cpp";
+			path = "../submodules/OpenFX/HostSupport/src/ofxhPluginCache.cpp";
+			refType = 4;
+			sourceTree = "SOURCE_ROOT";
+			lastKnownFileType = "sourcecode.cpp.cpp";
+		};
+		E3A3CF71E1E336E6C9011BF1 = {
+			fileRef = "33C0E060FA2E642939602643";
+			isa = PBXBuildFile;
+			settings = {
+				ATTRIBUTES = (
+					);
+			};
+		};
+		EF32D0BD7425485AA2086876 = {
+			isa = PBXFileReference;
+			name = "ofxhPropertySuite.cpp";
+			path = "../submodules/OpenFX/HostSupport/src/ofxhPropertySuite.cpp";
+			refType = 4;
+			sourceTree = "SOURCE_ROOT";
+			lastKnownFileType = "sourcecode.cpp.cpp";
+		};
+		94103C75AAB4E9600906996B = {
+			fileRef = "EF32D0BD7425485AA2086876";
+			isa = PBXBuildFile;
+			settings = {
+				ATTRIBUTES = (
+					);
+			};
+		};
+		E5D7D95D8565175061C1CF86 = {
+			isa = PBXFileReference;
+			name = "ofxhUtilities.cpp";
+			path = "../submodules/OpenFX/HostSupport/src/ofxhUtilities.cpp";
+			refType = 4;
+			sourceTree = "SOURCE_ROOT";
+			lastKnownFileType = "sourcecode.cpp.cpp";
+		};
+		FC4581ACE0842CF44F1CE10D = {
+			fileRef = "E5D7D95D8565175061C1CF86";
+			isa = PBXBuildFile;
+			settings = {
+				ATTRIBUTES = (
+					);
+			};
+		};
+		C5952FCB4EAE35F6C727357E = {
+			isa = PBXFileReference;
+			name = "ofxhParametricParam.cpp";
+			path = "../submodules/OpenFX_extensions/ofxhParametricParam.cpp";
+			refType = 4;
+			sourceTree = "SOURCE_ROOT";
+			lastKnownFileType = "sourcecode.cpp.cpp";
+		};
+		2D05E3FEA1AADEAE849636AD = {
+			fileRef = "C5952FCB4EAE35F6C727357E";
+			isa = PBXBuildFile;
+			settings = {
+				ATTRIBUTES = (
+					);
+			};
+		};
+		A7626F3B5AD55CF479C7B18A = {
+			isa = PBXFileReference;
+			name = "ofxsCore.cpp";
+			path = "../submodules/OpenFX/Support/Library/ofxsCore.cpp";
+			refType = 4;
+			sourceTree = "SOURCE_ROOT";
+			lastKnownFileType = "sourcecode.cpp.cpp";
+		};
+		051A980EC039D313BC65B870 = {
+			fileRef = "A7626F3B5AD55CF479C7B18A";
+			isa = PBXBuildFile;
+			settings = {
+				ATTRIBUTES = (
+					);
+			};
+		};
+		AE5AEB984B6B9A28E15C635F = {
+			isa = PBXFileReference;
+			name = "ofxsImageEffect.cpp";
+			path = "../submodules/OpenFX/Support/Library/ofxsImageEffect.cpp";
+			refType = 4;
+			sourceTree = "SOURCE_ROOT";
+			lastKnownFileType = "sourcecode.cpp.cpp";
+		};
+		25C99B5F3B9603A9009E5FF8 = {
+			fileRef = "AE5AEB984B6B9A28E15C635F";
+			isa = PBXBuildFile;
+			settings = {
+				ATTRIBUTES = (
+					);
+			};
+		};
+		9DBD35AC83A9A2214B7038EF = {
+			isa = PBXFileReference;
+			name = "ofxsInteract.cpp";
+			path = "../submodules/OpenFX/Support/Library/ofxsInteract.cpp";
+			refType = 4;
+			sourceTree = "SOURCE_ROOT";
+			lastKnownFileType = "sourcecode.cpp.cpp";
+		};
+		C2FED14CBB325C9A27BF462D = {
+			fileRef = "9DBD35AC83A9A2214B7038EF";
+			isa = PBXBuildFile;
+			settings = {
+				ATTRIBUTES = (
+					);
+			};
+		};
+		59F5CDAE328B7243F2ACE472 = {
+			isa = PBXFileReference;
+			name = "ofxsLog.cpp";
+			path = "../submodules/OpenFX/Support/Library/ofxsLog.cpp";
+			refType = 4;
+			sourceTree = "SOURCE_ROOT";
+			lastKnownFileType = "sourcecode.cpp.cpp";
+		};
+		8BBC02AD4F635CBCE6D7B302 = {
+			fileRef = "59F5CDAE328B7243F2ACE472";
+			isa = PBXBuildFile;
+			settings = {
+				ATTRIBUTES = (
+					);
+			};
+		};
+		2AF5238F81A1E92766477033 = {
+			isa = PBXFileReference;
+			name = "ofxsMultiThread.cpp";
+			path = "../submodules/OpenFX/Support/Library/ofxsMultiThread.cpp";
+			refType = 4;
+			sourceTree = "SOURCE_ROOT";
+			lastKnownFileType = "sourcecode.cpp.cpp";
+		};
+		5E6B5685AE1A25D633E48B5C = {
+			fileRef = "2AF5238F81A1E92766477033";
+			isa = PBXBuildFile;
+			settings = {
+				ATTRIBUTES = (
+					);
+			};
+		};
+		554D8F2DA6E768F65BC5E69B = {
+			isa = PBXFileReference;
+			name = "ofxsParams.cpp";
+			path = "../submodules/OpenFX/Support/Library/ofxsParams.cpp";
+			refType = 4;
+			sourceTree = "SOURCE_ROOT";
+			lastKnownFileType = "sourcecode.cpp.cpp";
+		};
+		06A84BA6E7D0B5D1973C8813 = {
+			fileRef = "554D8F2DA6E768F65BC5E69B";
+			isa = PBXBuildFile;
+			settings = {
+				ATTRIBUTES = (
+					);
+			};
+		};
+		0B91D2FA2E8D3A2D4CAEC78C = {
+			isa = PBXFileReference;
+			name = "ofxsProperty.cpp";
+			path = "../submodules/OpenFX/Support/Library/ofxsProperty.cpp";
+			refType = 4;
+			sourceTree = "SOURCE_ROOT";
+			lastKnownFileType = "sourcecode.cpp.cpp";
+		};
+		C55F5CE4B106F9A4DD41E7C1 = {
+			fileRef = "0B91D2FA2E8D3A2D4CAEC78C";
+			isa = PBXBuildFile;
+			settings = {
+				ATTRIBUTES = (
+					);
+			};
+		};
+		0FB3ABA98B4A0FF78362DB2D = {
+			isa = PBXFileReference;
+			name = "ofxsPropertyValidation.cpp";
+			path = "../submodules/OpenFX/Support/Library/ofxsPropertyValidation.cpp";
+			refType = 4;
+			sourceTree = "SOURCE_ROOT";
+			lastKnownFileType = "sourcecode.cpp.cpp";
+		};
+		AE3568B22CB0EF485760D14D = {
+			fileRef = "0FB3ABA98B4A0FF78362DB2D";
+			isa = PBXBuildFile;
+			settings = {
+				ATTRIBUTES = (
+					);
+			};
+		};
+		DA2A0802D8DC0258C1DC36CE = {
+			isa = PBXFileReference;
+			name = "ofxhBinary.h";
+			path = "../submodules/OpenFX/HostSupport/include/ofxhBinary.h";
+			refType = 4;
+			sourceTree = "SOURCE_ROOT";
+		};
+		9AA2E6E3303ECC02DF3FA1A7 = {
+			isa = PBXFileReference;
+			name = "ofxhClip.h";
+			path = "../submodules/OpenFX/HostSupport/include/ofxhClip.h";
+			refType = 4;
+			sourceTree = "SOURCE_ROOT";
+		};
+		50246D1CC32C383DADB40530 = {
+			isa = PBXFileReference;
+			name = "ofxhHost.h";
+			path = "../submodules/OpenFX/HostSupport/include/ofxhHost.h";
+			refType = 4;
+			sourceTree = "SOURCE_ROOT";
+		};
+		758085FCC66B9CAB04B1569D = {
+			isa = PBXFileReference;
+			name = "ofxhImageEffect.h";
+			path = "../submodules/OpenFX/HostSupport/include/ofxhImageEffect.h";
+			refType = 4;
+			sourceTree = "SOURCE_ROOT";
+		};
+		115034005C8EF1EAA6FA3495 = {
+			isa = PBXFileReference;
+			name = "ofxhImageEffectAPI.h";
+			path = "../submodules/OpenFX/HostSupport/include/ofxhImageEffectAPI.h";
+			refType = 4;
+			sourceTree = "SOURCE_ROOT";
+		};
+		0935FB9B7091F2F59C01976B = {
+			isa = PBXFileReference;
+			name = "ofxhInteract.h";
+			path = "../submodules/OpenFX/HostSupport/include/ofxhInteract.h";
+			refType = 4;
+			sourceTree = "SOURCE_ROOT";
+		};
+		73108B4C31CF8DD8EAACD7FD = {
+			isa = PBXFileReference;
+			name = "ofxhMemory.h";
+			path = "../submodules/OpenFX/HostSupport/include/ofxhMemory.h";
+			refType = 4;
+			sourceTree = "SOURCE_ROOT";
+		};
+		D18265645465C37FFBDD2B41 = {
+			isa = PBXFileReference;
+			name = "ofxhParam.h";
+			path = "../submodules/OpenFX/HostSupport/include/ofxhParam.h";
+			refType = 4;
+			sourceTree = "SOURCE_ROOT";
+		};
+		D2048444353C05C942272907 = {
+			isa = PBXFileReference;
+			name = "ofxhPluginAPICache.h";
+			path = "../submodules/OpenFX/HostSupport/include/ofxhPluginAPICache.h";
+			refType = 4;
+			sourceTree = "SOURCE_ROOT";
+		};
+		0D6FE0368C4461B50AC26DD1 = {
+			isa = PBXFileReference;
+			name = "ofxhPluginCache.h";
+			path = "../submodules/OpenFX/HostSupport/include/ofxhPluginCache.h";
+			refType = 4;
+			sourceTree = "SOURCE_ROOT";
+		};
+		6A2BA986BE58D81E2326526F = {
+			isa = PBXFileReference;
+			name = "ofxhProgress.h";
+			path = "../submodules/OpenFX/HostSupport/include/ofxhProgress.h";
+			refType = 4;
+			sourceTree = "SOURCE_ROOT";
+		};
+		C8F65065811D642CBFDDA866 = {
+			isa = PBXFileReference;
+			name = "ofxhPropertySuite.h";
+			path = "../submodules/OpenFX/HostSupport/include/ofxhPropertySuite.h";
+			refType = 4;
+			sourceTree = "SOURCE_ROOT";
+		};
+		20A5B23639836009951529C6 = {
+			isa = PBXFileReference;
+			name = "ofxhTimeLine.h";
+			path = "../submodules/OpenFX/HostSupport/include/ofxhTimeLine.h";
+			refType = 4;
+			sourceTree = "SOURCE_ROOT";
+		};
+		C2E990F73F0294304EFE1CEE = {
+			isa = PBXFileReference;
+			name = "ofxhUtilities.h";
+			path = "../submodules/OpenFX/HostSupport/include/ofxhUtilities.h";
+			refType = 4;
+			sourceTree = "SOURCE_ROOT";
+		};
+		70ECBEE18676965A66CBB1E8 = {
+			isa = PBXFileReference;
+			name = "ofxhXml.h";
+			path = "../submodules/OpenFX/HostSupport/include/ofxhXml.h";
+			refType = 4;
+			sourceTree = "SOURCE_ROOT";
+		};
+		6095D7B57350F401D788467E = {
+			isa = PBXFileReference;
+			name = "ofxCore.h";
+			path = "../submodules/OpenFX/include/ofxCore.h";
+			refType = 4;
+			sourceTree = "SOURCE_ROOT";
+		};
+		7EB6E21989970955CE8AD6D2 = {
+			isa = PBXFileReference;
+			name = "ofxDialog.h";
+			path = "../submodules/OpenFX/include/ofxDialog.h";
+			refType = 4;
+			sourceTree = "SOURCE_ROOT";
+		};
+		894C632CF57B850EDEC0E2F7 = {
+			isa = PBXFileReference;
+			name = "ofxImageEffect.h";
+			path = "../submodules/OpenFX/include/ofxImageEffect.h";
+			refType = 4;
+			sourceTree = "SOURCE_ROOT";
+		};
+		FA4337A0330E2092274B5927 = {
+			isa = PBXFileReference;
+			name = "ofxInteract.h";
+			path = "../submodules/OpenFX/include/ofxInteract.h";
+			refType = 4;
+			sourceTree = "SOURCE_ROOT";
+		};
+		FFBA9A0B6A6A5AFBD8E20DE4 = {
+			isa = PBXFileReference;
+			name = "ofxKeySyms.h";
+			path = "../submodules/OpenFX/include/ofxKeySyms.h";
+			refType = 4;
+			sourceTree = "SOURCE_ROOT";
+		};
+		8C21A0360EE7DF2A72E62913 = {
+			isa = PBXFileReference;
+			name = "ofxMemory.h";
+			path = "../submodules/OpenFX/include/ofxMemory.h";
+			refType = 4;
+			sourceTree = "SOURCE_ROOT";
+		};
+		E6EABB7F4C3C3112B3680F67 = {
+			isa = PBXFileReference;
+			name = "ofxMessage.h";
+			path = "../submodules/OpenFX/include/ofxMessage.h";
+			refType = 4;
+			sourceTree = "SOURCE_ROOT";
+		};
+		3255C883D57CAC41EDC86D87 = {
+			isa = PBXFileReference;
+			name = "ofxMultiThread.h";
+			path = "../submodules/OpenFX/include/ofxMultiThread.h";
+			refType = 4;
+			sourceTree = "SOURCE_ROOT";
+		};
+		BF30D12B07F0A6215BA367BB = {
+			isa = PBXFileReference;
+			name = "ofxNatron.h";
+			path = "../submodules/OpenFX/include/ofxNatron.h";
+			refType = 4;
+			sourceTree = "SOURCE_ROOT";
+		};
+		87A29E61D2DAA7D380D61702 = {
+			isa = PBXFileReference;
+			name = "ofxOpenGLRender.h";
+			path = "../submodules/OpenFX/include/ofxOpenGLRender.h";
+			refType = 4;
+			sourceTree = "SOURCE_ROOT";
+		};
+		3C8C728FE8CFB17D58B2781A = {
+			isa = PBXFileReference;
+			name = "ofxParam.h";
+			path = "../submodules/OpenFX/include/ofxParam.h";
+			refType = 4;
+			sourceTree = "SOURCE_ROOT";
+		};
+		0BD2A9521E10C8C5316A62FD = {
+			isa = PBXFileReference;
+			name = "ofxParametricParam.h";
+			path = "../submodules/OpenFX/include/ofxParametricParam.h";
+			refType = 4;
+			sourceTree = "SOURCE_ROOT";
+		};
+		25BC638392E809CBE3301067 = {
+			isa = PBXFileReference;
+			name = "ofxPixels.h";
+			path = "../submodules/OpenFX/include/ofxPixels.h";
+			refType = 4;
+			sourceTree = "SOURCE_ROOT";
+		};
+		A5C055DF1A07F8F48CA07C4F = {
+			isa = PBXFileReference;
+			name = "ofxProgress.h";
+			path = "../submodules/OpenFX/include/ofxProgress.h";
+			refType = 4;
+			sourceTree = "SOURCE_ROOT";
+		};
+		BF7775961815D0E5CA70038A = {
+			isa = PBXFileReference;
+			name = "ofxProperty.h";
+			path = "../submodules/OpenFX/include/ofxProperty.h";
+			refType = 4;
+			sourceTree = "SOURCE_ROOT";
+		};
+		4E5580EF2739BA90FBE8FC28 = {
+			isa = PBXFileReference;
+			name = "ofxSonyVegas.h";
+			path = "../submodules/OpenFX/include/ofxSonyVegas.h";
+			refType = 4;
+			sourceTree = "SOURCE_ROOT";
+		};
+		6693123BE62B6AF7850E61DF = {
+			isa = PBXFileReference;
+			name = "ofxTimeLine.h";
+			path = "../submodules/OpenFX/include/ofxTimeLine.h";
+			refType = 4;
+			sourceTree = "SOURCE_ROOT";
+		};
+		322B2BB9FDEA96AE0C980152 = {
+			isa = PBXFileReference;
+			name = "camera.h";
+			path = "../submodules/OpenFX/include/nuke/camera.h";
+			refType = 4;
+			sourceTree = "SOURCE_ROOT";
+		};
+		C50F11D2698B2AF436887B80 = {
+			isa = PBXFileReference;
+			name = "fnOfxExtensions.h";
+			path = "../submodules/OpenFX/include/nuke/fnOfxExtensions.h";
+			refType = 4;
+			sourceTree = "SOURCE_ROOT";
+		};
+		C34861D38D106F1484433C0F = {
+			isa = PBXFileReference;
+			name = "fnPublicOfxExtensions.h";
+			path = "../submodules/OpenFX/include/nuke/fnPublicOfxExtensions.h";
+			refType = 4;
+			sourceTree = "SOURCE_ROOT";
+		};
+		C7202E791A1C00C6B7C66E7A = {
+			isa = PBXFileReference;
+			name = "ofxReadWrite.h";
+			path = "../submodules/OpenFX/include/tuttle/ofxReadWrite.h";
+			refType = 4;
+			sourceTree = "SOURCE_ROOT";
+		};
+		BB44BE4A6DE2249B1F0ECB0E = {
+			isa = PBXFileReference;
+			name = "ofxhParametricParam.h";
+			path = "../submodules/OpenFX_extensions/ofxhParametricParam.h";
+			refType = 4;
+			sourceTree = "SOURCE_ROOT";
+		};
+		BC5C31757AC71F90802D6B3C = {
+			isa = PBXFileReference;
+			name = "ofxsCore.h";
+			path = "../submodules/OpenFX/Support/include/ofxsCore.h";
+			refType = 4;
+			sourceTree = "SOURCE_ROOT";
+		};
+		091A718858BC91787E994581 = {
+			isa = PBXFileReference;
+			name = "ofxsImageEffect.h";
+			path = "../submodules/OpenFX/Support/include/ofxsImageEffect.h";
+			refType = 4;
+			sourceTree = "SOURCE_ROOT";
+		};
+		CE37B160CB9EABA781A6C2E6 = {
+			isa = PBXFileReference;
+			name = "ofxsInteract.h";
+			path = "../submodules/OpenFX/Support/include/ofxsInteract.h";
+			refType = 4;
+			sourceTree = "SOURCE_ROOT";
+		};
+		6585ED633AEAD5BC3371EB00 = {
+			isa = PBXFileReference;
+			name = "ofxsLog.h";
+			path = "../submodules/OpenFX/Support/include/ofxsLog.h";
+			refType = 4;
+			sourceTree = "SOURCE_ROOT";
+		};
+		43CC510BDD10D3FDE3DB7F38 = {
+			isa = PBXFileReference;
+			name = "ofxsMemory.h";
+			path = "../submodules/OpenFX/Support/include/ofxsMemory.h";
+			refType = 4;
+			sourceTree = "SOURCE_ROOT";
+		};
+		39FBCC6C8650989917C778EA = {
+			isa = PBXFileReference;
+			name = "ofxsMessage.h";
+			path = "../submodules/OpenFX/Support/include/ofxsMessage.h";
+			refType = 4;
+			sourceTree = "SOURCE_ROOT";
+		};
+		E035DD2817C313A7F43E1395 = {
+			isa = PBXFileReference;
+			name = "ofxsMultiThread.h";
+			path = "../submodules/OpenFX/Support/include/ofxsMultiThread.h";
+			refType = 4;
+			sourceTree = "SOURCE_ROOT";
+		};
+		2CF5C9744EDAB8E5CD4E15F3 = {
+			isa = PBXFileReference;
+			name = "ofxsParam.h";
+			path = "../submodules/OpenFX/Support/include/ofxsParam.h";
+			refType = 4;
+			sourceTree = "SOURCE_ROOT";
+		};
+		1BD03386F74BBC76784E94DF = {
+			isa = PBXFileReference;
+			name = "ofxsSupportPrivate.h";
+			path = "../submodules/OpenFX/Support/Library/ofxsSupportPrivate.h";
+			refType = 4;
+			sourceTree = "SOURCE_ROOT";
+		};
+		635EC5FED77DBA2AAAFB23E4 = {
+			isa = PBXFileReference;
+			name = "OpenFX.pro";
+			path = "OpenFX.pro";
+			refType = 4;
+			sourceTree = "SOURCE_ROOT";
+		};
+		883D7615C4D2DE3FA1218F12 = {
+			isa = PBXGroup;
+			children = (
+				"4458B98565818D7E2682FA2D");
+			name = "Headers";
+			refType = 4;
+			sourceTree = "<Group>";
+		};
+		4458B98565818D7E2682FA2D = {
+			isa = PBXGroup;
+			children = (
+				"ED8595DBE266DF7F05BEDE17");
+			name = "..";
+			refType = 4;
+			sourceTree = "<Group>";
+		};
+		ED8595DBE266DF7F05BEDE17 = {
+			isa = PBXGroup;
+			children = (
+				"9C92BA8E73B2C83D1FF1174F",
+				"17AA3EDD08931E2E18F9086E");
+			name = "submodules";
+			refType = 4;
+			sourceTree = "<Group>";
+		};
+		9C92BA8E73B2C83D1FF1174F = {
+			isa = PBXGroup;
+			children = (
+				"0303D575CA68C56DB0C2EC04",
+				"58ABEDDEBC8D8332955E345E",
+				"5CCB885477468F1F5E863ECF");
+			name = "OpenFX";
+			refType = 4;
+			sourceTree = "<Group>";
+		};
+		0303D575CA68C56DB0C2EC04 = {
+			isa = PBXGroup;
+			children = (
+				"FCE87447171E4DE8589B1FD7");
+			name = "HostSupport";
+			refType = 4;
+			sourceTree = "<Group>";
+		};
+		FCE87447171E4DE8589B1FD7 = {
+			isa = PBXGroup;
+			children = (
+				"DA2A0802D8DC0258C1DC36CE",
+				"9AA2E6E3303ECC02DF3FA1A7",
+				"50246D1CC32C383DADB40530",
+				"758085FCC66B9CAB04B1569D",
+				"115034005C8EF1EAA6FA3495",
+				"0935FB9B7091F2F59C01976B",
+				"73108B4C31CF8DD8EAACD7FD",
+				"D18265645465C37FFBDD2B41",
+				"D2048444353C05C942272907",
+				"0D6FE0368C4461B50AC26DD1",
+				"6A2BA986BE58D81E2326526F",
+				"C8F65065811D642CBFDDA866",
+				"20A5B23639836009951529C6",
+				"C2E990F73F0294304EFE1CEE",
+				"70ECBEE18676965A66CBB1E8");
+			name = "include";
+			refType = 4;
+			sourceTree = "<Group>";
+		};
+		5CCB885477468F1F5E863ECF = {
+			isa = PBXGroup;
+			children = (
+				"5F218CEB3B9A0394445C13FD",
+				"B3E73C69F509655FFBAC01CA");
+			name = "Support";
+			refType = 4;
+			sourceTree = "<Group>";
+		};
+		B3E73C69F509655FFBAC01CA = {
+			isa = PBXGroup;
+			children = (
+				"1BD03386F74BBC76784E94DF");
+			name = "Library";
+			refType = 4;
+			sourceTree = "<Group>";
+		};
+		5F218CEB3B9A0394445C13FD = {
+			isa = PBXGroup;
+			children = (
+				"BC5C31757AC71F90802D6B3C",
+				"091A718858BC91787E994581",
+				"CE37B160CB9EABA781A6C2E6",
+				"6585ED633AEAD5BC3371EB00",
+				"43CC510BDD10D3FDE3DB7F38",
+				"39FBCC6C8650989917C778EA",
+				"E035DD2817C313A7F43E1395",
+				"2CF5C9744EDAB8E5CD4E15F3");
+			name = "include";
+			refType = 4;
+			sourceTree = "<Group>";
+		};
+		58ABEDDEBC8D8332955E345E = {
+			isa = PBXGroup;
+			children = (
+				"6095D7B57350F401D788467E",
+				"7EB6E21989970955CE8AD6D2",
+				"894C632CF57B850EDEC0E2F7",
+				"FA4337A0330E2092274B5927",
+				"FFBA9A0B6A6A5AFBD8E20DE4",
+				"8C21A0360EE7DF2A72E62913",
+				"E6EABB7F4C3C3112B3680F67",
+				"3255C883D57CAC41EDC86D87",
+				"BF30D12B07F0A6215BA367BB",
+				"87A29E61D2DAA7D380D61702",
+				"3C8C728FE8CFB17D58B2781A",
+				"0BD2A9521E10C8C5316A62FD",
+				"25BC638392E809CBE3301067",
+				"A5C055DF1A07F8F48CA07C4F",
+				"BF7775961815D0E5CA70038A",
+				"4E5580EF2739BA90FBE8FC28",
+				"6693123BE62B6AF7850E61DF",
+				"084A1BA4D250D77A15119376",
+				"40E9FF9EA4EE660411816E80");
+			name = "include";
+			refType = 4;
+			sourceTree = "<Group>";
+		};
+		084A1BA4D250D77A15119376 = {
+			isa = PBXGroup;
+			children = (
+				"322B2BB9FDEA96AE0C980152",
+				"C50F11D2698B2AF436887B80",
+				"C34861D38D106F1484433C0F");
+			name = "nuke";
+			refType = 4;
+			sourceTree = "<Group>";
+		};
+		40E9FF9EA4EE660411816E80 = {
+			isa = PBXGroup;
+			children = (
+				"C7202E791A1C00C6B7C66E7A");
+			name = "tuttle";
+			refType = 4;
+			sourceTree = "<Group>";
+		};
+		17AA3EDD08931E2E18F9086E = {
+			isa = PBXGroup;
+			children = (
+				"BB44BE4A6DE2249B1F0ECB0E");
+			name = "OpenFX_extensions";
+			refType = 4;
+			sourceTree = "<Group>";
+		};
+		BFA3A29D17FD123C907B6E35 = {
+			isa = PBXGroup;
+			children = (
+				"7EF6D462A2947542CC1B1993");
+			name = "..";
+			refType = 4;
+			sourceTree = "<Group>";
+		};
+		7EF6D462A2947542CC1B1993 = {
+			isa = PBXGroup;
+			children = (
+				"635F4DD799C8A70F43FB802D",
+				"8D33A11A007F4DB48DF22BD6");
+			name = "submodules";
+			refType = 4;
+			sourceTree = "<Group>";
+		};
+		635F4DD799C8A70F43FB802D = {
+			isa = PBXGroup;
+			children = (
+				"726C40AEC5B02F860682A7A2",
+				"B542E15BA3CE55DFD0A059AD");
+			name = "OpenFX";
+			refType = 4;
+			sourceTree = "<Group>";
+		};
+		726C40AEC5B02F860682A7A2 = {
+			isa = PBXGroup;
+			children = (
+				"5DA8DD14A3A286A440D65BBF");
+			name = "HostSupport";
+			refType = 4;
+			sourceTree = "<Group>";
+		};
+		5DA8DD14A3A286A440D65BBF = {
+			isa = PBXGroup;
+			children = (
+				"365F98B3C278DDAD55A5B32D",
+				"4BFFE5C3D67254555CE10B90",
+				"464E6A77D71AD32AFDE579A9",
+				"F86FD2D519A7A7B498F5AC2E",
+				"B50E95A09F9B1FD6FD55E840",
+				"16CBEA6C8A3E0B4FC1F4E1F2",
+				"C296600A50DDE99549F3A248",
+				"B61E87F2158BC2EB8D182161",
+				"3EA7C848A39EB2B859A58ED8",
+				"33C0E060FA2E642939602643",
+				"EF32D0BD7425485AA2086876",
+				"E5D7D95D8565175061C1CF86");
+			name = "src";
+			refType = 4;
+			sourceTree = "<Group>";
+		};
+		B542E15BA3CE55DFD0A059AD = {
+			isa = PBXGroup;
+			children = (
+				"7C6797009BD75FE3CA0E3CD6");
+			name = "Support";
+			refType = 4;
+			sourceTree = "<Group>";
+		};
+		7C6797009BD75FE3CA0E3CD6 = {
+			isa = PBXGroup;
+			children = (
+				"A7626F3B5AD55CF479C7B18A",
+				"AE5AEB984B6B9A28E15C635F",
+				"9DBD35AC83A9A2214B7038EF",
+				"59F5CDAE328B7243F2ACE472",
+				"2AF5238F81A1E92766477033",
+				"554D8F2DA6E768F65BC5E69B",
+				"0B91D2FA2E8D3A2D4CAEC78C",
+				"0FB3ABA98B4A0FF78362DB2D");
+			name = "Library";
+			refType = 4;
+			sourceTree = "<Group>";
+		};
+		8D33A11A007F4DB48DF22BD6 = {
+			isa = PBXGroup;
+			children = (
+				"C5952FCB4EAE35F6C727357E");
+			name = "OpenFX_extensions";
+			refType = 4;
+			sourceTree = "<Group>";
+		};
+		FB61758D0F0FDA4BA867C3D5 = {
+			isa = PBXGroup;
+			children = (
+				"BFA3A29D17FD123C907B6E35");
+			name = "Sources";
+			refType = 4;
+			sourceTree = "<Group>";
+		};
+		7CABE3C80E79AD2B307756D2 = {
+			isa = PBXGroup;
+			children = (
+				"635EC5FED77DBA2AAAFB23E4");
+			name = "Sources [qmake]";
+			refType = 4;
+			sourceTree = "<Group>";
+		};
+		A0A52A2ADF7A1E2A99738674 = {
+			buildActionMask = 2147483647;
+			files = (
+				);
+			generatedFileNames = (
+				"450416993B06B07EBA79DF72",
+				"C23D052F9F43B28BA50A5181",
+				"8D48F9ACF9B9C69AD4686D59",
+				"DE8D4E9EAF1EADA9650892E8",
+				"BA28A1CEE3ECD3B5A41A9E89",
+				"B8CC38CDD1815D6C695D3075",
+				"59E72D479786C1AD4664E416",
+				"A8994E81364E5A9F3E5266FF",
+				"C1C1BFC9E408379027FEF851",
+				"E3A3CF71E1E336E6C9011BF1",
+				"94103C75AAB4E9600906996B",
+				"FC4581ACE0842CF44F1CE10D",
+				"2D05E3FEA1AADEAE849636AD",
+				"051A980EC039D313BC65B870",
+				"25C99B5F3B9603A9009E5FF8",
+				"C2FED14CBB325C9A27BF462D",
+				"8BBC02AD4F635CBCE6D7B302",
+				"5E6B5685AE1A25D633E48B5C",
+				"06A84BA6E7D0B5D1973C8813",
+				"C55F5CE4B106F9A4DD41E7C1",
+				"AE3568B22CB0EF485760D14D");
+			isa = PBXShellScriptBuildPhase;
+			name = "Qt Preprocessors";
+			neededFileNames = (
+				"450416993B06B07EBA79DF72",
+				"C23D052F9F43B28BA50A5181",
+				"8D48F9ACF9B9C69AD4686D59",
+				"DE8D4E9EAF1EADA9650892E8",
+				"BA28A1CEE3ECD3B5A41A9E89",
+				"B8CC38CDD1815D6C695D3075",
+				"59E72D479786C1AD4664E416",
+				"A8994E81364E5A9F3E5266FF",
+				"C1C1BFC9E408379027FEF851",
+				"E3A3CF71E1E336E6C9011BF1",
+				"94103C75AAB4E9600906996B",
+				"FC4581ACE0842CF44F1CE10D",
+				"2D05E3FEA1AADEAE849636AD",
+				"051A980EC039D313BC65B870",
+				"25C99B5F3B9603A9009E5FF8",
+				"C2FED14CBB325C9A27BF462D",
+				"8BBC02AD4F635CBCE6D7B302",
+				"5E6B5685AE1A25D633E48B5C",
+				"06A84BA6E7D0B5D1973C8813",
+				"C55F5CE4B106F9A4DD41E7C1",
+				"AE3568B22CB0EF485760D14D");
+			shellPath = "/bin/sh";
+			shellScript = "make\ -C\ /Users/alexandre/development/Natron/OpenFX\ -f\ \'OpenFX.xcodeproj/qt_preprocess.mak\'";
+		};
+		C29B8785722055ED95EF7B57 = {
+			buildActionMask = 2147483647;
+			files = (
+				"450416993B06B07EBA79DF72",
+				"C23D052F9F43B28BA50A5181",
+				"8D48F9ACF9B9C69AD4686D59",
+				"DE8D4E9EAF1EADA9650892E8",
+				"BA28A1CEE3ECD3B5A41A9E89",
+				"B8CC38CDD1815D6C695D3075",
+				"59E72D479786C1AD4664E416",
+				"A8994E81364E5A9F3E5266FF",
+				"C1C1BFC9E408379027FEF851",
+				"E3A3CF71E1E336E6C9011BF1",
+				"94103C75AAB4E9600906996B",
+				"FC4581ACE0842CF44F1CE10D",
+				"2D05E3FEA1AADEAE849636AD",
+				"051A980EC039D313BC65B870",
+				"25C99B5F3B9603A9009E5FF8",
+				"C2FED14CBB325C9A27BF462D",
+				"8BBC02AD4F635CBCE6D7B302",
+				"5E6B5685AE1A25D633E48B5C",
+				"06A84BA6E7D0B5D1973C8813",
+				"C55F5CE4B106F9A4DD41E7C1",
+				"AE3568B22CB0EF485760D14D");
+			isa = PBXSourcesBuildPhase;
+			name = "Build Sources";
+		};
+		2A1043669E6E5A7426EA502A = {
+			buildActionMask = 2147483647;
+			files = (
+				);
+			isa = PBXFrameworksBuildPhase;
+			name = "Frameworks & Libraries";
+		};
+		05596AB53D8D521C69802C27 = {
+			children = (
+				"FB61758D0F0FDA4BA867C3D5",
+				"883D7615C4D2DE3FA1218F12",
+				"7CABE3C80E79AD2B307756D2");
+			isa = PBXGroup;
+			name = "OpenFX";
+			path = "";
+			refType = 4;
+			sourceTree = "<Group>";
+		};
+		8AC49A0436F663624F5AA3C1 = {
+			isa = PBXFileReference;
+			explicitFileType = "compiled.mach-o.dylib";
+			path = "libOpenFX.a";
+			refType = 3;
+			sourceTree = BUILT_PRODUCTS_DIR;
+		};
+		068F80C7519D0528FB08E821 = {
+			children = (
+				"8AC49A0436F663624F5AA3C1");
+			isa = PBXGroup;
+			name = "Products";
+			refType = 4;
+		};
+		B302B6ABE210CA1F9CEB692E = {
+			buildPhases = (
+				"D7BA7D76DAB5DD13389D6332",
+				"A0A52A2ADF7A1E2A99738674",
+				"C29B8785722055ED95EF7B57",
+				"2A1043669E6E5A7426EA502A");
+			buildSettings = {
+				CC = "/usr/bin/clang";
+				CPLUSPLUS = "/usr/bin/clang++";
+				LEXFLAGS = "";
+				YACCFLAGS = "-d";
+				OTHER_REZFLAGS = "";
+				SECTORDER_FLAGS = "";
+				WARNING_CFLAGS = "";
+				PREBINDING = NO;
+				BUILD_ROOT = "/Users/alexandre/development/Natron/OpenFX";
+				INSTALL_PATH = "";
+				DYLIB_CURRENT_VERSION = "1.0.0";
+				DYLIB_COMPATIBILITY_VERSION = "1.0";
+				MACOSX_DEPLOYMENT_TARGET = "10.11";
+				LIBRARY_STYLE = "STATIC";
+				PRODUCT_NAME = "OpenFX";
+			};
+			conditionalBuildSettings = {
+			};
+			dependencies = (
+				);
+			productReference = "8AC49A0436F663624F5AA3C1";
+			shouldUseHeadermap = 1;
+			buildConfigurationList = 17B3380A4D6A7D415E7F2E1E;
+			isa = PBXNativeTarget;
+			name = "OpenFX";
+			productName = "OpenFX";
+			productType = "com.apple.product-type.library.static";
+			startupPath = "<<ProjectDirectory>>";
+		};
+		4B72B24813252891014BCF61 = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				COPY_PHASE_STRIP = "NO";
+				GCC_GENERATE_DEBUGGING_SYMBOLS = "YES";
+				GCC_OPTIMIZATION_LEVEL = "0";
+				PRODUCT_NAME = "OpenFX";
+				GCC_PRECOMPILE_PREFIX_HEADER = "YES";
+				GCC_PREFIX_HEADER = "pch.h";
+				HEADER_SEARCH_PATHS = (
+					"../submodules/OpenFX/include",
+					"../submodules/OpenFX_extensions",
+					"../submodules/OpenFX/HostSupport/include",
+					"../submodules/OpenFX/include/nuke",
+					"../submodules/OpenFX/include/tuttle",
+					"/usr/local/include",
+					"/System/Library/Frameworks/CarbonCore.framework/Headers",
+					"/opt/local/libexec/qt4/share/mkspecs/macx-xcode");
+				LIBRARY_SEARCH_PATHS = (
+					);
+				FRAMEWORK_SEARCH_PATHS = (
+					);
+				INFOPLIST_FILE = "Info.plist";
+				OTHER_CFLAGS = (
+					"-pipe",
+					"-g",
+					"-Wall",
+					"-W",
+					"-fPIC",
+					"-DOFX_EXTENSIONS_NUKE",
+					"-DOFX_EXTENSIONS_TUTTLE",
+					"-DOFX_EXTENSIONS_VEGAS",
+					"-DOFX_SUPPORTS_PARAMETRIC",
+					"-DOFX_EXTENSIONS_TUTTLE",
+					"-DOFX_EXTENSIONS_NATRON",
+					"-DOFX_SUPPORTS_OPENGLRENDER",
+					"-DOFX_SUPPORTS_MULTITHREAD",
+					"-DOFX_SUPPORTS_DIALOG",
+					"-DDEBUG",
+					"-DNATRON_BUILD_NUMBER=0");
+				OTHER_CPLUSPLUSFLAGS = (
+					"-pipe",
+					"-ftemplate-depth-1024",
+					"-g",
+					"-Wall",
+					"-W",
+					"-fPIC",
+					"-DOFX_EXTENSIONS_NUKE",
+					"-DOFX_EXTENSIONS_TUTTLE",
+					"-DOFX_EXTENSIONS_VEGAS",
+					"-DOFX_SUPPORTS_PARAMETRIC",
+					"-DOFX_EXTENSIONS_TUTTLE",
+					"-DOFX_EXTENSIONS_NATRON",
+					"-DOFX_SUPPORTS_OPENGLRENDER",
+					"-DOFX_SUPPORTS_MULTITHREAD",
+					"-DOFX_SUPPORTS_DIALOG",
+					"-DDEBUG",
+					"-DNATRON_BUILD_NUMBER=0");
+				ARCHS = "x86_64";
+			};
+			name = "Debug";
+		};
+		BEC09A62E69C3553534FF35E = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				COPY_PHASE_STRIP = "NO";
+				GCC_GENERATE_DEBUGGING_SYMBOLS = "YES";
+				GCC_OPTIMIZATION_LEVEL = "0";
+				PRODUCT_NAME = "OpenFX";
+				GCC_PRECOMPILE_PREFIX_HEADER = "YES";
+				GCC_PREFIX_HEADER = "pch.h";
+				LIBRARY_STYLE = "STATIC";
+				PRODUCT_NAME = "OpenFX";
+			};
+			name = "Debug";
+		};
+		2C641C3335766025DD51B7BD = {
+			buildRules = (
+				);
+			buildSettings = {
+				COPY_PHASE_STRIP = "NO";
+				GCC_GENERATE_DEBUGGING_SYMBOLS = "YES";
+				GCC_OPTIMIZATION_LEVEL = "0";
+				PRODUCT_NAME = "OpenFX";
+			};
+			isa = "PBXBuildStyle";
+			name = "Debug";
+		};
+		D70590BEB531B51029F711BB = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				COPY_PHASE_STRIP = "YES";
+				GCC_GENERATE_DEBUGGING_SYMBOLS = "NO";
+				PRODUCT_NAME = "OpenFX";
+				GCC_PRECOMPILE_PREFIX_HEADER = "YES";
+				GCC_PREFIX_HEADER = "pch.h";
+				HEADER_SEARCH_PATHS = (
+					"../submodules/OpenFX/include",
+					"../submodules/OpenFX_extensions",
+					"../submodules/OpenFX/HostSupport/include",
+					"../submodules/OpenFX/include/nuke",
+					"../submodules/OpenFX/include/tuttle",
+					"/usr/local/include",
+					"/System/Library/Frameworks/CarbonCore.framework/Headers",
+					"/opt/local/libexec/qt4/share/mkspecs/macx-xcode");
+				LIBRARY_SEARCH_PATHS = (
+					);
+				FRAMEWORK_SEARCH_PATHS = (
+					);
+				INFOPLIST_FILE = "Info.plist";
+				OTHER_CFLAGS = (
+					"-pipe",
+					"-g",
+					"-Wall",
+					"-W",
+					"-fPIC",
+					"-DOFX_EXTENSIONS_NUKE",
+					"-DOFX_EXTENSIONS_TUTTLE",
+					"-DOFX_EXTENSIONS_VEGAS",
+					"-DOFX_SUPPORTS_PARAMETRIC",
+					"-DOFX_EXTENSIONS_TUTTLE",
+					"-DOFX_EXTENSIONS_NATRON",
+					"-DOFX_SUPPORTS_OPENGLRENDER",
+					"-DOFX_SUPPORTS_MULTITHREAD",
+					"-DOFX_SUPPORTS_DIALOG",
+					"-DDEBUG",
+					"-DNATRON_BUILD_NUMBER=0");
+				OTHER_CPLUSPLUSFLAGS = (
+					"-pipe",
+					"-ftemplate-depth-1024",
+					"-g",
+					"-Wall",
+					"-W",
+					"-fPIC",
+					"-DOFX_EXTENSIONS_NUKE",
+					"-DOFX_EXTENSIONS_TUTTLE",
+					"-DOFX_EXTENSIONS_VEGAS",
+					"-DOFX_SUPPORTS_PARAMETRIC",
+					"-DOFX_EXTENSIONS_TUTTLE",
+					"-DOFX_EXTENSIONS_NATRON",
+					"-DOFX_SUPPORTS_OPENGLRENDER",
+					"-DOFX_SUPPORTS_MULTITHREAD",
+					"-DOFX_SUPPORTS_DIALOG",
+					"-DDEBUG",
+					"-DNATRON_BUILD_NUMBER=0");
+				ARCHS = "x86_64";
+			};
+			name = "Release";
+		};
+		8C7174830A1E4DCBA0332EC1 = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				COPY_PHASE_STRIP = "YES";
+				GCC_GENERATE_DEBUGGING_SYMBOLS = "NO";
+				PRODUCT_NAME = "OpenFX";
+				GCC_PRECOMPILE_PREFIX_HEADER = "YES";
+				GCC_PREFIX_HEADER = "pch.h";
+				LIBRARY_STYLE = "STATIC";
+				PRODUCT_NAME = "OpenFX";
+			};
+			name = "Release";
+		};
+		26DE8D2AEA4B3714B41E931F = {
+			buildRules = (
+				);
+			buildSettings = {
+				COPY_PHASE_STRIP = "YES";
+				GCC_GENERATE_DEBUGGING_SYMBOLS = "NO";
+				PRODUCT_NAME = "OpenFX";
+			};
+			isa = "PBXBuildStyle";
+			name = "Release";
+		};
+		CC82A9286117DFED018F418F = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				"4B72B24813252891014BCF61",
+				"D70590BEB531B51029F711BB");
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationIsName = "Debug";
+		};
+		17B3380A4D6A7D415E7F2E1E = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				"BEC09A62E69C3553534FF35E",
+				"8C7174830A1E4DCBA0332EC1");
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationIsName = "Debug";
+		};
+		91B15E841AA80083484172DE = {
+			buildStyles = (
+				"2C641C3335766025DD51B7BD",
+				"26DE8D2AEA4B3714B41E931F");
+			hasScannedForEncodings = 1;
+			isa = PBXProject;
+			mainGroup = "05596AB53D8D521C69802C27";
+			buildConfigurationList = "CC82A9286117DFED018F418F";
+			projectDirPath = "";
+			targets = (
+				"B302B6ABE210CA1F9CEB692E");
+		};
+	};
+	rootObject = "91B15E841AA80083484172DE";
+}

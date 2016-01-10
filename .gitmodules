@@ -1,5 +1,5 @@
-[submodule "libs/OpenFX"]
-	path = libs/OpenFX
+[submodule "submodules/OpenFX"]
+	path = submodules/OpenFX
 	url = https://github.com/devernay/openfx.git
 [submodule "Tests/google-test"]
 	path = Tests/google-test
@@ -7,21 +7,21 @@
 [submodule "Tests/google-mock"]
 	path = Tests/google-mock
 	url = https://github.com/MrKepzie/google-mock
-[submodule "libs/SequenceParsing"]
-	path = libs/SequenceParsing
+[submodule "submodules/SequenceParsing"]
+	path = submodules/SequenceParsing
 	url = https://github.com/MrKepzie/SequenceParsing
 [submodule "google-breakpad"]
 	path = google-breakpad
 	url = https://github.com/MrKepzie/google-breakpad
-[submodule "libs/openfx-io"]
-	path = libs/openfx-io
+[submodule "submodules/openfx-io"]
+	path = submodules/openfx-io
 	url = https://github.com/MrKepzie/openfx-io
-[submodule "libs/openfx-supportext"]
-	path = libs/openfx-supportext
+[submodule "submodules/openfx-supportext"]
+	path = submodules/openfx-supportext
 	url = https://github.com/devernay/openfx-supportext
-[submodule "libs/openfx-misc"]
-	path = libs/openfx-misc
+[submodule "submodules/openfx-misc"]
+	path = submodules/openfx-misc
 	url = https://github.com/devernay/openfx-misc
-[submodule "libs/openfx-arena"]
-	path = libs/openfx-arena
+[submodule "submodules/openfx-arena"]
+	path = submodules/openfx-arena
 	url = https://github.com/olear/openfx-arena

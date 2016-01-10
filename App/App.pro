@@ -43,10 +43,10 @@ macx {
   QMAKE_PKGINFO_TYPEINFO = Ntrn
 }
 
-#OpenFX C api includes and OpenFX c++ layer includes that are located in the submodule under /libs/OpenFX
-INCLUDEPATH += $$PWD/../libs/OpenFX/include
-INCLUDEPATH += $$PWD/../libs/OpenFX_extensions
-INCLUDEPATH += $$PWD/../libs/OpenFX/HostSupport/include
+#OpenFX C api includes and OpenFX c++ layer includes that are located in the submodule under /submodules/OpenFX
+INCLUDEPATH += $$PWD/../submodules/OpenFX/include
+INCLUDEPATH += $$PWD/../submodules/OpenFX_extensions
+INCLUDEPATH += $$PWD/../submodules/OpenFX/HostSupport/include
 INCLUDEPATH += $$PWD/..
 
 #System library is required on windows to map network share names from drive letters

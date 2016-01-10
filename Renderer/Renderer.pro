@@ -33,10 +33,10 @@ win32 {
 	RC_FILE += ../Natron.rc
 }
 
-#OpenFX C api includes and OpenFX c++ layer includes that are located in the submodule under /libs/OpenFX
-INCLUDEPATH += $$PWD/../libs/OpenFX/include
-INCLUDEPATH += $$PWD/../libs/OpenFX_extensions
-INCLUDEPATH += $$PWD/../libs/OpenFX/HostSupport/include
+#OpenFX C api includes and OpenFX c++ layer includes that are located in the submodule under /submodules/OpenFX
+INCLUDEPATH += $$PWD/../submodules/OpenFX/include
+INCLUDEPATH += $$PWD/../submodules/OpenFX_extensions
+INCLUDEPATH += $$PWD/../submodules/OpenFX/HostSupport/include
 INCLUDEPATH += $$PWD/..
 
 

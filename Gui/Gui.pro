@@ -35,15 +35,15 @@ precompile_header {
 }
 
 
-#OpenFX C api includes and OpenFX c++ layer includes that are located in the submodule under /libs/OpenFX
-INCLUDEPATH += $$PWD/../libs/OpenFX/include
-DEPENDPATH  += $$PWD/../libs/OpenFX/include
-INCLUDEPATH += $$PWD/../libs/OpenFX_extensions
-DEPENDPATH  += $$PWD/../libs/OpenFX_extensions
-INCLUDEPATH += $$PWD/../libs/OpenFX/HostSupport/include
-DEPENDPATH  += $$PWD/../libs/OpenFX/HostSupport/include
+#OpenFX C api includes and OpenFX c++ layer includes that are located in the submodule under /submodules/OpenFX
+INCLUDEPATH += $$PWD/../submodules/OpenFX/include
+DEPENDPATH  += $$PWD/../submodules/OpenFX/include
+INCLUDEPATH += $$PWD/../submodules/OpenFX_extensions
+DEPENDPATH  += $$PWD/../submodules/OpenFX_extensions
+INCLUDEPATH += $$PWD/../submodules/OpenFX/HostSupport/include
+DEPENDPATH  += $$PWD/../submodules/OpenFX/HostSupport/include
 INCLUDEPATH += $$PWD/..
-INCLUDEPATH += $$PWD/../libs/SequenceParsing
+INCLUDEPATH += $$PWD/../submodules/SequenceParsing
 
 DEPENDPATH += $$PWD/../Engine
 DEPENDPATH += $$PWD/../Global
@@ -346,28 +346,28 @@ HEADERS += \
     ViewerTab.h \
     ViewerTabPrivate.h \
     ZoomContext.h \
-    ../libs/OpenFX/include/ofxCore.h \
-    ../libs/OpenFX/include/ofxDialog.h \
-    ../libs/OpenFX/include/ofxImageEffect.h \
-    ../libs/OpenFX/include/ofxInteract.h \
-    ../libs/OpenFX/include/ofxKeySyms.h \
-    ../libs/OpenFX/include/ofxMemory.h \
-    ../libs/OpenFX/include/ofxMessage.h \
-    ../libs/OpenFX/include/ofxMultiThread.h \
-    ../libs/OpenFX/include/ofxNatron.h \
-    ../libs/OpenFX/include/ofxOpenGLRender.h \
-    ../libs/OpenFX/include/ofxParam.h \
-    ../libs/OpenFX/include/ofxParametricParam.h \
-    ../libs/OpenFX/include/ofxPixels.h \
-    ../libs/OpenFX/include/ofxProgress.h \
-    ../libs/OpenFX/include/ofxProperty.h \
-    ../libs/OpenFX/include/ofxSonyVegas.h \
-    ../libs/OpenFX/include/ofxTimeLine.h \
-    ../libs/OpenFX/include/nuke/camera.h \
-    ../libs/OpenFX/include/nuke/fnOfxExtensions.h \
-    ../libs/OpenFX/include/nuke/fnPublicOfxExtensions.h \
-    ../libs/OpenFX/include/tuttle/ofxReadWrite.h \
-    ../libs/OpenFX_extensions/ofxhParametricParam.h \
+    ../submodules/OpenFX/include/ofxCore.h \
+    ../submodules/OpenFX/include/ofxDialog.h \
+    ../submodules/OpenFX/include/ofxImageEffect.h \
+    ../submodules/OpenFX/include/ofxInteract.h \
+    ../submodules/OpenFX/include/ofxKeySyms.h \
+    ../submodules/OpenFX/include/ofxMemory.h \
+    ../submodules/OpenFX/include/ofxMessage.h \
+    ../submodules/OpenFX/include/ofxMultiThread.h \
+    ../submodules/OpenFX/include/ofxNatron.h \
+    ../submodules/OpenFX/include/ofxOpenGLRender.h \
+    ../submodules/OpenFX/include/ofxParam.h \
+    ../submodules/OpenFX/include/ofxParametricParam.h \
+    ../submodules/OpenFX/include/ofxPixels.h \
+    ../submodules/OpenFX/include/ofxProgress.h \
+    ../submodules/OpenFX/include/ofxProperty.h \
+    ../submodules/OpenFX/include/ofxSonyVegas.h \
+    ../submodules/OpenFX/include/ofxTimeLine.h \
+    ../submodules/OpenFX/include/nuke/camera.h \
+    ../submodules/OpenFX/include/nuke/fnOfxExtensions.h \
+    ../submodules/OpenFX/include/nuke/fnPublicOfxExtensions.h \
+    ../submodules/OpenFX/include/tuttle/ofxReadWrite.h \
+    ../submodules/OpenFX_extensions/ofxhParametricParam.h \
     NatronGui/natrongui_python.h \
     NatronGui/pyguiapplication_wrapper.h \
     NatronGui/guiapp_wrapper.h \

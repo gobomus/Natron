@@ -24,7 +24,7 @@ CONFIG += ordered
 gbreakpad: SUBDIRS += BreakpadClient CrashReporter CrashReporterCLI
 
 SUBDIRS += \
-    HostSupport \
+    OpenFX \
     Engine \
     Renderer \
     Gui \
