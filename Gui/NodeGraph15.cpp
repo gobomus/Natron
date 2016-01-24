@@ -1,6 +1,6 @@
 /* ***** BEGIN LICENSE BLOCK *****
  * This file is part of Natron <http://www.natron.fr/>,
- * Copyright (C) 2015 INRIA and Alexandre Gauthier-Foichat
+ * Copyright (C) 2016 INRIA and Alexandre Gauthier-Foichat
  *
  * Natron is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -30,6 +30,7 @@ CLANG_DIAG_OFF(deprecated)
 CLANG_DIAG_OFF(uninitialized)
 #include <QMouseEvent>
 #include <QCursor>
+#include <QApplication>
 CLANG_DIAG_ON(deprecated)
 CLANG_DIAG_ON(uninitialized)
 GCC_DIAG_UNUSED_PRIVATE_FIELD_ON
@@ -38,7 +39,7 @@ GCC_DIAG_UNUSED_PRIVATE_FIELD_ON
 #include "Engine/EffectInstance.h"
 #include "Engine/Node.h"
 
-#include "Gui/BackDropGui.h"
+#include "Gui/BackdropGui.h"
 #include "Gui/Edge.h"
 #include "Gui/Gui.h"
 #include "Gui/GuiAppInstance.h"
@@ -51,14 +52,14 @@ GCC_DIAG_UNUSED_PRIVATE_FIELD_ON
 #define NATRON_AUTO_SCROLL_TIMEOUT_MS 50
 
 
-using namespace Natron;
+NATRON_NAMESPACE_ENTER;
 
 static bool handleConnectionError(const boost::shared_ptr<NodeGui>& outputNode, const boost::shared_ptr<NodeGui>& inputNode, int inputNb)
 {
-    Natron::Node::CanConnectInputReturnValue linkRetCode = outputNode->getNode()->canConnectInput(inputNode->getNode(), inputNb);
+    Node::CanConnectInputReturnValue linkRetCode = outputNode->getNode()->canConnectInput(inputNode->getNode(), inputNb);
 
-    if (linkRetCode != Natron::Node::eCanConnectInput_ok && linkRetCode != Natron::Node::eCanConnectInput_inputAlreadyConnected) {
-        if (linkRetCode == Natron::Node::eCanConnectInput_differentPars) {
+    if (linkRetCode != Node::eCanConnectInput_ok && linkRetCode != Node::eCanConnectInput_inputAlreadyConnected) {
+        if (linkRetCode == Node::eCanConnectInput_differentPars) {
             
             QString error = QString("%1" + QObject::tr(" and ") + "%2"  + QObject::tr(" don't have the same pixel aspect ratio (")
                                     + "%3 / %4 " +  QObject::tr(") and ") + "%1 " + QObject::tr(" doesn't support inputs with different pixel aspect ratio. This might yield unwanted results."))
@@ -66,42 +67,42 @@ static bool handleConnectionError(const boost::shared_ptr<NodeGui>& outputNode, 
             .arg(inputNode->getNode()->getLabel().c_str())
             .arg(outputNode->getNode()->getLiveInstance()->getPreferredAspectRatio())
             .arg(inputNode->getNode()->getLiveInstance()->getPreferredAspectRatio());
-            Natron::warningDialog(QObject::tr("Different pixel aspect").toStdString(),
+            Dialogs::warningDialog(QObject::tr("Different pixel aspect").toStdString(),
                                 error.toStdString());
             return true;
-        } else if (linkRetCode == Natron::Node::eCanConnectInput_differentFPS) {
+        } else if (linkRetCode == Node::eCanConnectInput_differentFPS) {
             
             QString error = QString("%1" + QObject::tr(" and ") + "%2"  + QObject::tr(" don't have the same frame rate (") + "%3 / %4). " + QObject::tr("This might yield unwanted results. Either change the FPS from the Read node parameters or change the settings of the project."))
             .arg(outputNode->getNode()->getLabel().c_str())
             .arg(inputNode->getNode()->getLabel().c_str())
             .arg(outputNode->getNode()->getLiveInstance()->getPreferredFrameRate())
             .arg(inputNode->getNode()->getLiveInstance()->getPreferredFrameRate());
-            Natron::warningDialog(QObject::tr("Different frame rate").toStdString(),
+            Dialogs::warningDialog(QObject::tr("Different frame rate").toStdString(),
                                 error.toStdString());
             return true;
-        } else if (linkRetCode == Natron::Node::eCanConnectInput_groupHasNoOutput) {
+        } else if (linkRetCode == Node::eCanConnectInput_groupHasNoOutput) {
             QString error = QString(QObject::tr("You cannot connect ") + "%1 " + QObject::tr(" to ") + " %2 " + QObject::tr("because it is a group which does "
                                                                                                  "not have an Output node."))
             .arg(outputNode->getNode()->getLabel().c_str())
             .arg(inputNode->getNode()->getLabel().c_str());
-            Natron::errorDialog(QObject::tr("Different frame rate").toStdString(),
+            Dialogs::errorDialog(QObject::tr("Different frame rate").toStdString(),
                                 error.toStdString());
             
-        } else if (linkRetCode == Natron::Node::eCanConnectInput_multiResNotSupported) {
+        } else if (linkRetCode == Node::eCanConnectInput_multiResNotSupported) {
             QString error = QString(QObject::tr("You cannot connect ") + "%1" + QObject::tr(" to ") + "%2 " + QObject::tr("because multi-resolution is not supported on ") + "%1 "
                                     + QObject::tr("which means that it cannot receive images with a lower left corner different than (0,0) and cannot have "
                                          "multiple inputs/outputs with different image sizes.\n"
                                                   "To overcome this, use a Resize or Crop node upstream to change the image size.")).arg(outputNode->getNode()->getLabel().c_str())
             .arg(inputNode->getNode()->getLabel().c_str());
-            Natron::errorDialog(QObject::tr("Multi-resolution not supported").toStdString(),
+            Dialogs::errorDialog(QObject::tr("Multi-resolution not supported").toStdString(),
                                 error.toStdString());;
         }
         return false;
     }
     
-    if (linkRetCode == Natron::Node::eCanConnectInput_ok && outputNode->getNode()->getLiveInstance()->isReader() &&
+    if (linkRetCode == Node::eCanConnectInput_ok && outputNode->getNode()->getLiveInstance()->isReader() &&
         inputNode->getNode()->getPluginID() != PLUGINID_OFX_RUNSCRIPT) {
-        Natron::warningDialog(QObject::tr("Reader input").toStdString(), QObject::tr("Connecting an input to a Reader node "
+        Dialogs::warningDialog(QObject::tr("Reader input").toStdString(), QObject::tr("Connecting an input to a Reader node "
                                                                    "is only useful when using the RunScript node "
                                                                    "so that the Reader automatically reads an image "
                                                                    "when the render of the RunScript is done.").toStdString());
@@ -135,7 +136,7 @@ NodeGraph::mouseReleaseEvent(QMouseEvent* e)
         for (std::list<boost::shared_ptr<NodeGui> >::iterator it = _imp->_nodes.begin(); it != _imp->_nodes.end(); ++it) {
             boost::shared_ptr<NodeGui> & n = *it;
             
-            BackDropGui* isBd = dynamic_cast<BackDropGui*>(n.get());
+            BackdropGui* isBd = dynamic_cast<BackdropGui*>(n.get());
             if (isBd) {
                 continue;
             }
@@ -285,7 +286,7 @@ NodeGraph::mouseReleaseEvent(QMouseEvent* e)
 
                 
                     
-                    boost::shared_ptr<Natron::Node> mergeNode = getGui()->getApp()->createNode(args);
+                    boost::shared_ptr<Node> mergeNode = getGui()->getApp()->createNode(args);
                     
                     if (mergeNode) {
                         
@@ -338,6 +339,17 @@ NodeGraph::scrollViewIfNeeded(const QPointF& scenePos)
     
     if (dx != 0 || dy != 0) {
         moveRootInternal(-dx, -dy);
+        /*if (_imp->_evtState == eEventStateDraggingArrow && _imp->_arrowSelected) {
+            
+        } else if (_imp->_evtState == eEventStateDraggingNode && !_imp->_selection.empty()) {
+            Qt::KeyboardModifiers mods = qApp->keyboardModifiers();
+            QPointF lastMousePosScene = mapToScene(_imp->_lastMousePos);
+            QPoint newPos = _imp->_lastMousePos + QPoint(dx,dy);
+            QPointF newPosScene = mapToScene(newPos);
+            moveSelectedNodesBy(mods.testFlag(Qt::ShiftModifier), mods.testFlag(Qt::ControlModifier), lastMousePosScene, newPosScene, visibleSceneRect(), false);
+            _imp->_lastMousePos = newPos;
+        }*/
+
         _imp->_refreshOverlays = true;
         update();
     } else {
@@ -389,3 +401,5 @@ NodeGraph::onAutoScrollTimerTriggered()
     QPointF cursorPos = mapToScene(mapFromGlobal(QCursor::pos()));
     scrollViewIfNeeded(cursorPos);
 }
+
+NATRON_NAMESPACE_EXIT;

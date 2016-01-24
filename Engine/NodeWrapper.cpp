@@ -1,6 +1,6 @@
 /* ***** BEGIN LICENSE BLOCK *****
  * This file is part of Natron <http://www.natron.fr/>,
- * Copyright (C) 2015 INRIA and Alexandre Gauthier-Foichat
+ * Copyright (C) 2016 INRIA and Alexandre Gauthier-Foichat
  *
  * Natron is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -33,6 +33,8 @@
 #include "Engine/RotoWrapper.h"
 #include "Engine/Hash64.h"
 
+NATRON_NAMESPACE_ENTER;
+
 ImageLayer::ImageLayer(const std::string& layerName,
            const std::string& componentsPrettyName,
            const std::vector<std::string>& componentsName)
@@ -41,7 +43,7 @@ ImageLayer::ImageLayer(const std::string& layerName,
     
 }
 
-ImageLayer::ImageLayer(const Natron::ImageComponents& internalComps)
+ImageLayer::ImageLayer(const ImageComponents& internalComps)
 : _comps(internalComps)
 {
     
@@ -106,42 +108,42 @@ ImageLayer::operator<(const ImageLayer& other) const
  */
 ImageLayer ImageLayer::getNoneComponents()
 {
-    return ImageLayer(Natron::ImageComponents::getNoneComponents());
+    return ImageLayer(ImageComponents::getNoneComponents());
 }
 
 ImageLayer ImageLayer::getRGBAComponents()
 {
-    return ImageLayer(Natron::ImageComponents::getRGBAComponents());
+    return ImageLayer(ImageComponents::getRGBAComponents());
 }
 
 ImageLayer ImageLayer::getRGBComponents()
 {
-    return ImageLayer(Natron::ImageComponents::getRGBComponents());
+    return ImageLayer(ImageComponents::getRGBComponents());
 }
 
 ImageLayer ImageLayer::getAlphaComponents()
 {
-    return ImageLayer(Natron::ImageComponents::getAlphaComponents());
+    return ImageLayer(ImageComponents::getAlphaComponents());
 }
 
 ImageLayer ImageLayer::getBackwardMotionComponents()
 {
-    return ImageLayer(Natron::ImageComponents::getBackwardMotionComponents());
+    return ImageLayer(ImageComponents::getBackwardMotionComponents());
 }
 
 ImageLayer ImageLayer::getForwardMotionComponents()
 {
-    return ImageLayer(Natron::ImageComponents::getForwardMotionComponents());
+    return ImageLayer(ImageComponents::getForwardMotionComponents());
 }
 
 ImageLayer ImageLayer::getDisparityLeftComponents()
 {
-    return ImageLayer(Natron::ImageComponents::getDisparityLeftComponents());
+    return ImageLayer(ImageComponents::getDisparityLeftComponents());
 }
 
 ImageLayer ImageLayer::getDisparityRightComponents()
 {
-    return ImageLayer(Natron::ImageComponents::getDisparityRightComponents());
+    return ImageLayer(ImageComponents::getDisparityRightComponents());
 }
 
 UserParamHolder::UserParamHolder()
@@ -163,7 +165,7 @@ UserParamHolder::setHolder(KnobHolder* holder)
     _holder = holder;
 }
 
-Effect::Effect(const boost::shared_ptr<Natron::Node>& node)
+Effect::Effect(const boost::shared_ptr<Node>& node)
 : Group()
 , UserParamHolder(node ? node->getLiveInstance() : 0)
 , _node(node)
@@ -183,7 +185,7 @@ Effect::~Effect()
     
 }
 
-boost::shared_ptr<Natron::Node>
+boost::shared_ptr<Node>
 Effect::getInternalNode() const
 {
     return _node;
@@ -212,10 +214,10 @@ Effect::canConnectInput(int inputNumber,const Effect* node) const
     if (!node->getInternalNode()) {
         return false;
     }
-    Natron::Node::CanConnectInputReturnValue ret = _node->canConnectInput(node->getInternalNode(),inputNumber);
-    return ret == Natron::Node::eCanConnectInput_ok ||
-    ret == Natron::Node::eCanConnectInput_differentFPS ||
-    ret == Natron::Node::eCanConnectInput_differentPars;
+    Node::CanConnectInputReturnValue ret = _node->canConnectInput(node->getInternalNode(),inputNumber);
+    return ret == Node::eCanConnectInput_ok ||
+    ret == Node::eCanConnectInput_differentFPS ||
+    ret == Node::eCanConnectInput_differentPars;
 }
 
 bool
@@ -237,7 +239,7 @@ Effect::disconnectInput(int inputNumber)
 Effect*
 Effect::getInput(int inputNumber) const
 {
-    boost::shared_ptr<Natron::Node> node = _node->getRealInput(inputNumber);
+    boost::shared_ptr<Node> node = _node->getRealInput(inputNumber);
     if (node) {
         return new Effect(node);
     }
@@ -308,6 +310,7 @@ Effect::createParamWrapperForKnob(const boost::shared_ptr<KnobI>& knob)
     boost::shared_ptr<KnobGroup> isGroup = boost::dynamic_pointer_cast<KnobGroup>(knob);
     boost::shared_ptr<KnobPage> isPage = boost::dynamic_pointer_cast<KnobPage>(knob);
     boost::shared_ptr<KnobParametric> isParametric = boost::dynamic_pointer_cast<KnobParametric>(knob);
+    boost::shared_ptr<KnobSeparator> isSep = boost::dynamic_pointer_cast<KnobSeparator>(knob);
     
     if (isInt) {
         switch (dims) {
@@ -353,6 +356,8 @@ Effect::createParamWrapperForKnob(const boost::shared_ptr<KnobI>& knob)
         return new ParametricParam(isParametric);
     } else if (isButton) {
         return new ButtonParam(isButton);
+    } else if (isSep) {
+        return new SeparatorParam(isSep);
     }
     return NULL;
 }
@@ -601,6 +606,17 @@ UserParamHolder::createButtonParam(const std::string& name, const std::string& l
     }
 }
 
+SeparatorParam*
+UserParamHolder::createSeparatorParam(const std::string& name, const std::string& label)
+{
+    boost::shared_ptr<KnobSeparator> knob = _holder->createSeparatorKnob(name, label);
+    if (knob) {
+        return new SeparatorParam(knob);
+    } else {
+        return 0;
+    }
+}
+
 GroupParam*
 UserParamHolder::createGroupParam(const std::string& name, const std::string& label)
 {
@@ -615,6 +631,10 @@ UserParamHolder::createGroupParam(const std::string& name, const std::string& la
 PageParam*
 UserParamHolder::createPageParam(const std::string& name, const std::string& label)
 {
+    if (!_holder) {
+        assert(false);
+        return 0;
+    }
     boost::shared_ptr<KnobPage> knob = _holder->createPageKnob(name, label);
     if (knob) {
         return new PageParam(knob);
@@ -708,11 +728,10 @@ Effect::getRegionOfDefinition(double time,int view) const
         return rod;
     }
     U64 hash = _node->getHashValue();
-    RenderScale s;
-    s.x = s.y = 1.;
+    RenderScale s(1.);
     bool isProject;
-    Natron::StatusEnum stat = _node->getLiveInstance()->getRegionOfDefinition_public(hash, time, s, view, &rod, &isProject);
-    if (stat != Natron::eStatusOK) {
+    StatusEnum stat = _node->getLiveInstance()->getRegionOfDefinition_public(hash, time, s, view, &rod, &isProject);
+    if (stat != eStatusOK) {
         return RectD();
     }
     return rod;
@@ -742,7 +761,7 @@ Effect::addUserPlane(const std::string& planeName, const std::vector<std::string
     for (std::size_t i = 0; i < channels.size(); ++i) {
         compsGlobal.append(channels[i]);
     }
-    Natron::ImageComponents comp(planeName,compsGlobal,channels);
+    ImageComponents comp(planeName,compsGlobal,channels);
     return _node->addUserComponents(comp);
 }
 
@@ -753,9 +772,9 @@ Effect::getAvailableLayers() const
     if (!_node) {
         return ret;
     }
-    Natron::EffectInstance::ComponentsAvailableMap availComps;
-    _node->getLiveInstance()->getComponentsAvailable(true, _node->getLiveInstance()->getCurrentTime(), &availComps);
-    for (Natron::EffectInstance::ComponentsAvailableMap::iterator it = availComps.begin(); it != availComps.end(); ++it) {
+    EffectInstance::ComponentsAvailableMap availComps;
+    _node->getLiveInstance()->getComponentsAvailable(true, true, _node->getLiveInstance()->getCurrentTime(), &availComps);
+    for (EffectInstance::ComponentsAvailableMap::iterator it = availComps.begin(); it != availComps.end(); ++it) {
         NodePtr node = it->second.lock();
         if (node) {
             Effect* effect = new Effect(node);
@@ -774,3 +793,5 @@ Effect::setPagesOrder(const std::list<std::string>& pages)
     }
     _node->setPagesOrder(pages);
 }
+
+NATRON_NAMESPACE_EXIT;

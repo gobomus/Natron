@@ -1,6 +1,6 @@
 /* ***** BEGIN LICENSE BLOCK *****
  * This file is part of Natron <http://www.natron.fr/>,
- * Copyright (C) 2015 INRIA and Alexandre Gauthier-Foichat
+ * Copyright (C) 2016 INRIA and Alexandre Gauthier-Foichat
  *
  * Natron is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -59,14 +59,14 @@
 #include "Gui/ViewerGL.h"
 
 
-using namespace Natron;
+NATRON_NAMESPACE_ENTER;
 
 void
 ViewerTab::onInputChanged(int inputNb)
 {
     ///rebuild the name maps
     NodePtr inp;
-    const std::vector<boost::shared_ptr<Natron::Node> > &inputs  = _imp->viewerNode->getNode()->getGuiInputs();
+    const std::vector<boost::shared_ptr<Node> > &inputs  = _imp->viewerNode->getNode()->getGuiInputs();
     if (inputNb >= 0 && inputNb < (int)inputs.size()) {
         if (inputs[inputNb]) {
             inp = inputs[inputNb];
@@ -153,7 +153,7 @@ ViewerTab::manageSlotsForInfoWidget(int textureIndex,
 }
 
 void
-ViewerTab::setImageFormat(int textureIndex,const Natron::ImageComponents& components,Natron::ImageBitDepthEnum depth)
+ViewerTab::setImageFormat(int textureIndex,const ImageComponents& components,ImageBitDepthEnum depth)
 {
     _imp->infoWidget[textureIndex]->setImageFormat(components,depth);
 }
@@ -249,6 +249,20 @@ ViewerTab::onTimelineBoundariesChanged(SequenceTime first,
 
     _imp->frameRangeEdit->setText(text);
     _imp->frameRangeEdit->adjustSize();
+    
+    if (getGui() ) {
+        const std::list<ViewerTab*> & activeNodes = getGui()->getViewersList();
+        for (std::list<ViewerTab*>::const_iterator it = activeNodes.begin(); it != activeNodes.end(); ++it) {
+            ViewerInstance* viewer = (*it)->getInternalNode();
+            if (viewer) {
+                RenderEngine* engine = viewer->getRenderEngine();
+                if (engine && engine->hasThreadsWorking()) {
+                    engine->abortRendering(true,false);
+                    engine->renderCurrentFrame(false, true);
+                }
+            }
+        }
+    }
 }
 
 
@@ -537,16 +551,12 @@ ViewerTab::manageTimelineSlot(bool disconnectPrevious,const boost::shared_ptr<Ti
 {
     if (disconnectPrevious) {
         boost::shared_ptr<TimeLine> previous = _imp->timeLineGui->getTimeline();
-        QObject::disconnect( _imp->nextKeyFrame_Button,SIGNAL( clicked(bool) ),previous.get(), SLOT( goToNextKeyframe() ) );
-        QObject::disconnect( _imp->previousKeyFrame_Button,SIGNAL( clicked(bool) ),previous.get(), SLOT( goToPreviousKeyframe() ) );
         QObject::disconnect( previous.get(),SIGNAL( frameChanged(SequenceTime,int) ),
                          this, SLOT( onTimeLineTimeChanged(SequenceTime,int) ) );
         
 
     }
     
-    QObject::connect( _imp->nextKeyFrame_Button,SIGNAL( clicked(bool) ),timeline.get(), SLOT( goToNextKeyframe() ) );
-    QObject::connect( _imp->previousKeyFrame_Button,SIGNAL( clicked(bool) ),timeline.get(), SLOT( goToPreviousKeyframe() ) );
     QObject::connect( timeline.get(),SIGNAL( frameChanged(SequenceTime,int) ),
                      this, SLOT( onTimeLineTimeChanged(SequenceTime,int) ) );
 
@@ -1134,7 +1144,7 @@ ViewerTab::synchronizeOtherViewersProjection()
     for (std::list<ViewerTab*>::const_iterator it = viewers.begin(); it != viewers.end(); ++it) {
         if ((*it) != this) {
             (*it)->getViewer()->setProjection(left, bottom, factor, par);
-            (*it)->getInternalNode()->renderCurrentFrame(false);
+            (*it)->getInternalNode()->renderCurrentFrame(true);
             
         }
     }
@@ -1225,3 +1235,5 @@ ViewerTab::toggleTripleSync(bool toggled)
     }
 
 }
+
+NATRON_NAMESPACE_EXIT;

@@ -1,6 +1,6 @@
 /* ***** BEGIN LICENSE BLOCK *****
  * This file is part of Natron <http://www.natron.fr/>,
- * Copyright (C) 2015 INRIA and Alexandre Gauthier-Foichat
+ * Copyright (C) 2016 INRIA and Alexandre Gauthier-Foichat
  *
  * Natron is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -52,6 +52,7 @@ GCC_DIAG_UNUSED_LOCAL_TYPEDEFS_ON
 #include "Engine/Image.h"
 #include "Engine/ImageParams.h"
 #include "Engine/Interpolation.h"
+#include "Engine/Project.h"
 #include "Engine/KnobSerialization.h"
 #include "Engine/RenderStats.h"
 #include "Engine/RotoDrawableItemSerialization.h"
@@ -89,7 +90,7 @@ GCC_DIAG_UNUSED_LOCAL_TYPEDEFS_ON
 #define ROTO_PRESSURE_LEVELS 512
 
 
-using namespace Natron;
+NATRON_NAMESPACE_ENTER;
 
 
 ////////////////////////////////////RotoDrawableItem////////////////////////////////////
@@ -111,10 +112,10 @@ RotoDrawableItem::RotoDrawableItem(const boost::shared_ptr<RotoContext>& context
     
     std::vector<std::string> operators;
     std::vector<std::string> tooltips;
-    getNatronCompositingOperators(&operators, &tooltips);
+    Merge::getOperatorStrings(&operators, &tooltips);
     
     _imp->compOperator->populateChoices(operators,tooltips);
-    _imp->compOperator->setDefaultValueFromLabel(getNatronOperationString(eMergeCopy));
+    _imp->compOperator->setDefaultValueFromLabel(Merge::getOperatorString(eMergeCopy));
     
 }
 
@@ -134,23 +135,23 @@ RotoDrawableItem::setNodesThreadSafetyForRotopainting()
     
     assert(boost::dynamic_pointer_cast<RotoStrokeItem>(boost::dynamic_pointer_cast<RotoDrawableItem>(shared_from_this())));
     
-    getContext()->getNode()->setRenderThreadSafety(Natron::eRenderSafetyInstanceSafe);
+    getContext()->getNode()->setRenderThreadSafety(eRenderSafetyInstanceSafe);
     getContext()->setWhileCreatingPaintStrokeOnMergeNodes(true);
     if (_imp->effectNode) {
         _imp->effectNode->setWhileCreatingPaintStroke(true);
-        _imp->effectNode->setRenderThreadSafety(Natron::eRenderSafetyInstanceSafe);
+        _imp->effectNode->setRenderThreadSafety(eRenderSafetyInstanceSafe);
     }
     if (_imp->mergeNode) {
         _imp->mergeNode->setWhileCreatingPaintStroke(true);
-        _imp->mergeNode->setRenderThreadSafety(Natron::eRenderSafetyInstanceSafe);
+        _imp->mergeNode->setRenderThreadSafety(eRenderSafetyInstanceSafe);
     }
     if (_imp->timeOffsetNode) {
         _imp->timeOffsetNode->setWhileCreatingPaintStroke(true);
-        _imp->timeOffsetNode->setRenderThreadSafety(Natron::eRenderSafetyInstanceSafe);
+        _imp->timeOffsetNode->setRenderThreadSafety(eRenderSafetyInstanceSafe);
     }
     if (_imp->frameHoldNode) {
         _imp->frameHoldNode->setWhileCreatingPaintStroke(true);
-        _imp->frameHoldNode->setRenderThreadSafety(Natron::eRenderSafetyInstanceSafe);
+        _imp->frameHoldNode->setRenderThreadSafety(eRenderSafetyInstanceSafe);
     }
 }
 
@@ -164,7 +165,7 @@ RotoDrawableItem::createNodes(bool connectNodes)
     }
     
     boost::shared_ptr<RotoContext> context = getContext();
-    boost::shared_ptr<Natron::Node> node = context->getNode();
+    boost::shared_ptr<Node> node = context->getNode();
   
     
     AppInstance* app = node->getApp();
@@ -189,27 +190,27 @@ RotoDrawableItem::createNodes(bool connectNodes)
     }
   
     switch (type) {
-        case Natron::eRotoStrokeTypeBlur:
+        case eRotoStrokeTypeBlur:
             pluginId = PLUGINID_OFX_BLURCIMG;
             break;
-        case Natron::eRotoStrokeTypeEraser:
+        case eRotoStrokeTypeEraser:
             pluginId = PLUGINID_OFX_CONSTANT;
             break;
-        case Natron::eRotoStrokeTypeSolid:
+        case eRotoStrokeTypeSolid:
             pluginId = PLUGINID_OFX_ROTO;
             break;
-        case Natron::eRotoStrokeTypeClone:
-        case Natron::eRotoStrokeTypeReveal:
+        case eRotoStrokeTypeClone:
+        case eRotoStrokeTypeReveal:
             pluginId = PLUGINID_OFX_TRANSFORM;
             break;
-        case Natron::eRotoStrokeTypeBurn:
-        case Natron::eRotoStrokeTypeDodge:
+        case eRotoStrokeTypeBurn:
+        case eRotoStrokeTypeDodge:
             //uses merge
             break;
-        case Natron::eRotoStrokeTypeSharpen:
+        case eRotoStrokeTypeSharpen:
             //todo
             break;
-        case Natron::eRotoStrokeTypeSmear:
+        case eRotoStrokeTypeSmear:
             pluginId = PLUGINID_NATRON_ROTOSMEAR;
             break;
     }
@@ -231,6 +232,9 @@ RotoDrawableItem::createNodes(bool connectNodes)
                             boost::shared_ptr<NodeCollection>());
         args.createGui = false;
         _imp->effectNode = app->createNode(args);
+        if (!_imp->effectNode) {
+            throw std::runtime_error("Rotopaint requires the plug-in " + pluginId.toStdString() + " in order to work");
+        }
         assert(_imp->effectNode);
         
         if (type == eRotoStrokeTypeClone || type == eRotoStrokeTypeReveal) {
@@ -250,6 +254,9 @@ RotoDrawableItem::createNodes(bool connectNodes)
                                     boost::shared_ptr<NodeCollection>());
                 args.createGui = false;
                 _imp->timeOffsetNode = app->createNode(args);
+                if (!_imp->timeOffsetNode) {
+                    throw std::runtime_error("Rotopaint requires the plug-in " PLUGINID_OFX_TIMEOFFSET " in order to work");
+                }
                 assert(_imp->timeOffsetNode);
               
             }
@@ -269,6 +276,9 @@ RotoDrawableItem::createNodes(bool connectNodes)
                                     boost::shared_ptr<NodeCollection>());
                 args.createGui = false;
                 _imp->frameHoldNode = app->createNode(args);
+                if (!_imp->frameHoldNode) {
+                    throw std::runtime_error("Rotopaint requires the plug-in " PLUGINID_OFX_FRAMEHOLD " in order to work");
+                }
                 assert(_imp->frameHoldNode);
                
             }
@@ -290,10 +300,9 @@ RotoDrawableItem::createNodes(bool connectNodes)
                         boost::shared_ptr<NodeCollection>());
     args.createGui = false;
     
-    bool ok = _imp->mergeNode = app->createNode(args);
-    assert(ok);
-    if (!ok) {
-        throw std::logic_error("RotoDrawableItem::createNodes");
+   _imp->mergeNode = app->createNode(args);
+    if (!_imp->mergeNode) {
+        throw std::runtime_error("Rotopaint requires the plug-in " PLUGINID_OFX_MERGE " in order to work");
     }
     assert(_imp->mergeNode);
     
@@ -303,7 +312,7 @@ RotoDrawableItem::createNodes(bool connectNodes)
             if (_imp->mergeNode->getLiveInstance()->isInputMask(i)) {
                 
                 //Connect this rotopaint node as a mask
-                ok = _imp->mergeNode->connectInput(node, i);
+                bool ok = _imp->mergeNode->connectInput(node, i);
                 assert(ok);
                 break;
             }
@@ -325,8 +334,8 @@ RotoDrawableItem::createNodes(bool connectNodes)
     } else {
         op = eMergeCopy;
     }
-    mergeOp->setValueFromLabel(getNatronOperationString(op), 0);
-    compOp->setValueFromLabel(getNatronOperationString(op), 0);
+    mergeOp->setValueFromLabel(Merge::getOperatorString(op), 0);
+    compOp->setValueFromLabel(Merge::getOperatorString(op), 0);
 
     if (isStroke) {
         if (type == eRotoStrokeTypeBlur) {
@@ -334,7 +343,7 @@ RotoDrawableItem::createNodes(bool connectNodes)
             boost::shared_ptr<KnobI> knob = _imp->effectNode->getKnobByName(kBlurCImgParamSize);
             KnobDouble* isDbl = dynamic_cast<KnobDouble*>(knob.get());
             if (isDbl) {
-                isDbl->setValues(strength, strength, Natron::eValueChangedReasonNatronInternalEdited);
+                isDbl->setValues(strength, strength, eValueChangedReasonNatronInternalEdited);
             }
         } else if (type == eRotoStrokeTypeSharpen) {
             //todo
@@ -509,13 +518,13 @@ RotoDrawableItem::onRotoKnobChanged(int /*dimension*/, int reason)
     
     boost::shared_ptr<KnobI> triggerKnob = handler->getKnob();
     assert(triggerKnob);
-    rotoKnobChanged(triggerKnob, (Natron::ValueChangedReasonEnum)reason);
+    rotoKnobChanged(triggerKnob, (ValueChangedReasonEnum)reason);
     
     
 }
 
 void
-RotoDrawableItem::rotoKnobChanged(const boost::shared_ptr<KnobI>& knob, Natron::ValueChangedReasonEnum reason)
+RotoDrawableItem::rotoKnobChanged(const boost::shared_ptr<KnobI>& knob, ValueChangedReasonEnum reason)
 {
     boost::shared_ptr<KnobChoice> compKnob = getOperatorKnob();
     RotoStrokeItem* isStroke = dynamic_cast<RotoStrokeItem*>(this);
@@ -526,7 +535,7 @@ RotoDrawableItem::rotoKnobChanged(const boost::shared_ptr<KnobI>& knob, Natron::
         type = eRotoStrokeTypeSolid;
     }
 
-    if (reason == Natron::eValueChangedReasonSlaveRefresh && knob != _imp->center && knob != _imp->cloneCenter) {
+    if (reason == eValueChangedReasonSlaveRefresh && knob != _imp->center && knob != _imp->cloneCenter) {
         getContext()->s_breakMultiStroke();
     }
     
@@ -538,7 +547,7 @@ RotoDrawableItem::rotoKnobChanged(const boost::shared_ptr<KnobI>& knob, Natron::
         }
         
         ///Since the compositing operator might have changed, we may have to change the rotopaint tree layout
-        if ( reason == Natron::eValueChangedReasonUserEdited) {
+        if ( reason == eValueChangedReasonUserEdited) {
             getContext()->refreshRotoPaintTree();
         }
     } else if (knob == _imp->sourceColor) {
@@ -547,14 +556,14 @@ RotoDrawableItem::rotoKnobChanged(const boost::shared_ptr<KnobI>& knob, Natron::
         
         double strength = _imp->effectStrength->getValue();
         switch (type) {
-            case Natron::eRotoStrokeTypeBlur: {
+            case eRotoStrokeTypeBlur: {
                 boost::shared_ptr<KnobI> knob = _imp->effectNode->getKnobByName(kBlurCImgParamSize);
                 KnobDouble* isDbl = dynamic_cast<KnobDouble*>(knob.get());
                 if (isDbl) {
-                    isDbl->setValues(strength, strength, Natron::eValueChangedReasonNatronInternalEdited);
+                    isDbl->setValues(strength, strength, eValueChangedReasonNatronInternalEdited);
                 }
             }   break;
-            case Natron::eRotoStrokeTypeSharpen: {
+            case eRotoStrokeTypeSharpen: {
                 //todo
                 break;
             }
@@ -656,6 +665,9 @@ RotoDrawableItem::rotoKnobChanged(const boost::shared_ptr<KnobI>& knob, Natron::
 void
 RotoDrawableItem::incrementNodesAge()
 {
+    if (getContext()->getNode()->getApp()->getProject()->isLoadingProject()) {
+        return;
+    }
     if (_imp->effectNode) {
         _imp->effectNode->incrementKnobsAge();
     }
@@ -670,27 +682,27 @@ RotoDrawableItem::incrementNodesAge()
     }
 }
 
-boost::shared_ptr<Natron::Node>
+boost::shared_ptr<Node>
 RotoDrawableItem::getEffectNode() const
 {
     return _imp->effectNode;
 }
 
 
-boost::shared_ptr<Natron::Node>
+boost::shared_ptr<Node>
 RotoDrawableItem::getMergeNode() const
 {
     return _imp->mergeNode;
 }
 
-boost::shared_ptr<Natron::Node>
+boost::shared_ptr<Node>
 RotoDrawableItem::getTimeOffsetNode() const
 {
     
     return _imp->timeOffsetNode;
 }
 
-boost::shared_ptr<Natron::Node>
+boost::shared_ptr<Node>
 RotoDrawableItem::getFrameHoldNode() const
 {
     return _imp->frameHoldNode;
@@ -725,7 +737,7 @@ RotoDrawableItem::refreshNodesConnections()
          
          */
         
-        boost::shared_ptr<Natron::Node> effectInput;
+        boost::shared_ptr<Node> effectInput;
         if (!_imp->timeOffsetNode) {
             effectInput = _imp->effectNode;
         } else {
@@ -1450,3 +1462,7 @@ RotoDrawableItem::setTransform(double time, double tx, double ty, double sx, dou
     onTransformSet(time);
 }
 
+NATRON_NAMESPACE_EXIT;
+
+NATRON_NAMESPACE_USING;
+#include "moc_RotoDrawableItem.cpp"

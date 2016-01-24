@@ -1,6 +1,6 @@
 /* ***** BEGIN LICENSE BLOCK *****
  * This file is part of Natron <http://www.natron.fr/>,
- * Copyright (C) 2015 INRIA and Alexandre Gauthier-Foichat
+ * Copyright (C) 2016 INRIA and Alexandre Gauthier-Foichat
  *
  * Natron is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -60,6 +60,8 @@ GCC_DIAG_ON(unused-parameter)
 
 #define EXPR_RECURSION_LEVEL() KnobHelper::ExprRecursionLevel_RAII __recursionLevelIncrementer__(this)
 
+NATRON_NAMESPACE_ENTER;
+
 ///template specializations
 
 template <typename T>
@@ -109,10 +111,10 @@ Knob<T>::Knob(KnobHolder*  holder,
       , _maximums(dimension)
       , _displayMins(dimension)
       , _displayMaxs(dimension)
-      , _setValueRecursionLevel(0)
-      , _setValueRecursionLevelMutex(QMutex::Recursive)
       , _setValuesQueueMutex()
       , _setValuesQueue()
+      , _setValueRecursionLevelMutex(QMutex::Recursive)
+      , _setValueRecursionLevel(0)
 {
     initMinMax();
 }
@@ -347,7 +349,7 @@ Knob<std::string>::pyObjectToType(PyObject* o) const
 {
 #ifndef IS_PYTHON_2
     if (PyUnicode_Check(o)) {
-        return Natron::PY3String_asString(o);
+        return Python::PY3String_asString(o);
     }
 #else
     if (PyString_Check(o)) {
@@ -387,7 +389,7 @@ inline unsigned int hashFunction(unsigned int a)
 template <typename T>
 T Knob<T>::evaluateExpression(double time, int dimension) const
 {
-    Natron::PythonGILLocker pgl;
+    PythonGILLocker pgl;
     PyObject *ret;
     
     ///Reset the random state to reproduce the sequence
@@ -407,7 +409,7 @@ template <typename T>
 double
 Knob<T>::evaluateExpression_pod(double time, int dimension) const
 {
-    Natron::PythonGILLocker pgl;
+    PythonGILLocker pgl;
     PyObject *ret;
     
     ///Reset the random state to reproduce the sequence
@@ -676,7 +678,9 @@ bool Knob<std::string>::getValueFromCurve(double time, int dimension, bool useGu
     }
     if (curve && curve->getKeyFramesCount() > 0) {
         assert(isStringAnimated);
-        isStringAnimated->stringFromInterpolatedValue(curve->getValueAt(time), ret);
+        if (isStringAnimated) {
+            isStringAnimated->stringFromInterpolatedValue(curve->getValueAt(time), ret);
+        }
         return true;
     }
     return false;
@@ -799,9 +803,9 @@ struct Knob<T>::QueuedSetValuePrivate
     T value;
     KeyFrame key;
     bool useKey;
-    Natron::ValueChangedReasonEnum reason;
+    ValueChangedReasonEnum reason;
     
-    QueuedSetValuePrivate(int dimension,const T& value,const KeyFrame& key_,bool useKey,Natron::ValueChangedReasonEnum reason_)
+    QueuedSetValuePrivate(int dimension,const T& value,const KeyFrame& key_,bool useKey,ValueChangedReasonEnum reason_)
     : dimension(dimension)
     , value(value)
     , key(key_)
@@ -815,7 +819,7 @@ struct Knob<T>::QueuedSetValuePrivate
 
 
 template<typename T>
-Knob<T>::QueuedSetValue::QueuedSetValue(int dimension,const T& value,const KeyFrame& key,bool useKey,Natron::ValueChangedReasonEnum reason_)
+Knob<T>::QueuedSetValue::QueuedSetValue(int dimension,const T& value,const KeyFrame& key,bool useKey,ValueChangedReasonEnum reason_)
 : _imp(new QueuedSetValuePrivate(dimension,value,key,useKey,reason_))
 {
     
@@ -831,7 +835,7 @@ template <typename T>
 KnobHelper::ValueChangedReturnCodeEnum
 Knob<T>::setValue(const T & v,
                   int dimension,
-                  Natron::ValueChangedReasonEnum reason,
+                  ValueChangedReasonEnum reason,
                   KeyFrame* newKey)
 {
     if ( (0 > dimension) || ( dimension > (int)_values.size() ) ) {
@@ -839,16 +843,17 @@ Knob<T>::setValue(const T & v,
     }
 
     KnobHelper::ValueChangedReturnCodeEnum ret = eValueChangedReturnCodeNoKeyframeAdded;
-    Natron::EffectInstance* holder = dynamic_cast<Natron::EffectInstance*>( getHolder() );
+    EffectInstance* holder = dynamic_cast<EffectInstance*>( getHolder() );
     
 #ifdef DEBUG
-    if (holder && reason == Natron::eValueChangedReasonPluginEdited) {
+    if (holder && reason == eValueChangedReasonPluginEdited) {
         holder->checkCanSetValueAndWarn();
     }
 #endif
     
-    if ( holder && (reason == Natron::eValueChangedReasonPluginEdited ||
-                    reason == Natron::eValueChangedReasonNatronInternalEdited) && getKnobGuiPointer() ) {
+    if ( holder && (reason == eValueChangedReasonPluginEdited ||
+                    reason == eValueChangedReasonNatronInternalEdited) && getKnobGuiPointer() ) {
+
         KnobHolder::MultipleParamsEditEnum paramEditLevel = holder->getMultipleParamsEditLevel();
         switch (paramEditLevel) {
         case KnobHolder::eMultipleParamsEditOff:
@@ -905,14 +910,17 @@ Knob<T>::setValue(const T & v,
                 return ret;
             }
         }
-    } // if ( holder && (reason == Natron::eValueChangedReasonPluginEdited) && getKnobGuiPointer() ) {
+    } // if ( holder && (reason == eValueChangedReasonPluginEdited) && getKnobGuiPointer() ) {
     
     
     
    
     if (holder && !holder->isSetValueCurrentlyPossible()) {
 
-        if (getEvaluateOnChange()) {
+        ///If we cannot set value, queue it
+        if (holder && getEvaluateOnChange()) {
+            //We explicitly abort rendering now and do not wait for it to be done in EffectInstance::evaluate()
+            //because the actual value change (which will call evaluate()) may arise well later
             holder->abortAnyEvaluation();
         }
         
@@ -992,14 +1000,14 @@ Knob<T>::setValue(const T & v,
     
     ///Add automatically a new keyframe
     if (isAnimationEnabled() &&
-        getAnimationLevel(dimension) != Natron::eAnimationLevelNone && //< if the knob is animated
+        getAnimationLevel(dimension) != eAnimationLevelNone && //< if the knob is animated
          holder && //< the knob is part of a KnobHolder
          holder->getApp() && //< the app pointer is not NULL
          !holder->getApp()->getProject()->isLoadingProject() && //< we're not loading the project
-         ( reason == Natron::eValueChangedReasonUserEdited ||
-           reason == Natron::eValueChangedReasonPluginEdited ||
-           reason == Natron::eValueChangedReasonNatronGuiEdited ||
-           reason == Natron::eValueChangedReasonNatronInternalEdited ) && //< the change was made by the user or plugin
+         ( reason == eValueChangedReasonUserEdited ||
+           reason == eValueChangedReasonPluginEdited ||
+           reason == eValueChangedReasonNatronGuiEdited ||
+           reason == eValueChangedReasonNatronInternalEdited ) && //< the change was made by the user or plugin
          ( newKey != NULL) ) { //< the keyframe to set is not null
         
         time = getCurrentTime();
@@ -1034,13 +1042,13 @@ Knob<T>::setValue(const T & v,
 
 template <typename T>
 void
-Knob<T>::setValues(const T& value0, const T& value1, Natron::ValueChangedReasonEnum reason)
+Knob<T>::setValues(const T& value0, const T& value1, ValueChangedReasonEnum reason)
 {
     KnobHolder* holder = getHolder();
-    Natron::EffectInstance* effect = 0;
+    EffectInstance* effect = 0;
     bool doEditEnd = false;
     if (holder) {
-        effect = dynamic_cast<Natron::EffectInstance*>(holder);
+        effect = dynamic_cast<EffectInstance*>(holder);
         if (effect) {
             if (effect->isDoingInteractAction() && !effect->getApp()->isCreatingPythonGroup()) {
                 effect->setMultipleParamsEditLevel(KnobHolder::eMultipleParamsEditOnCreateNewCommand);
@@ -1063,13 +1071,13 @@ Knob<T>::setValues(const T& value0, const T& value1, Natron::ValueChangedReasonE
 
 template <typename T>
 void
-Knob<T>::setValues(const T& value0, const T& value1, const T& value2, Natron::ValueChangedReasonEnum reason)
+Knob<T>::setValues(const T& value0, const T& value1, const T& value2, ValueChangedReasonEnum reason)
 {
     KnobHolder* holder = getHolder();
-    Natron::EffectInstance* effect = 0;
+    EffectInstance* effect = 0;
     bool doEditEnd = false;
     if (holder) {
-        effect = dynamic_cast<Natron::EffectInstance*>(holder);
+        effect = dynamic_cast<EffectInstance*>(holder);
         if (effect) {
             if (effect->isDoingInteractAction() && !effect->getApp()->isCreatingPythonGroup()) {
                 effect->setMultipleParamsEditLevel(KnobHolder::eMultipleParamsEditOnCreateNewCommand);
@@ -1094,13 +1102,13 @@ Knob<T>::setValues(const T& value0, const T& value1, const T& value2, Natron::Va
 
 template <typename T>
 void
-Knob<T>::setValues(const T& value0, const T& value1, const T& value2, const T& value3, Natron::ValueChangedReasonEnum reason)
+Knob<T>::setValues(const T& value0, const T& value1, const T& value2, const T& value3, ValueChangedReasonEnum reason)
 {
     KnobHolder* holder = getHolder();
-    Natron::EffectInstance* effect = 0;
+    EffectInstance* effect = 0;
     bool doEditEnd = false;
     if (holder) {
-        effect = dynamic_cast<Natron::EffectInstance*>(holder);
+        effect = dynamic_cast<EffectInstance*>(holder);
         if (effect) {
             if (effect->isDoingInteractAction() && !effect->getApp()->isCreatingPythonGroup()) {
                 effect->setMultipleParamsEditLevel(KnobHolder::eMultipleParamsEditOnCreateNewCommand);
@@ -1162,7 +1170,7 @@ bool
 Knob<T>::setValueAtTime(double time,
                         const T & v,
                         int dimension,
-                        Natron::ValueChangedReasonEnum reason,
+                        ValueChangedReasonEnum reason,
                         KeyFrame* newKey)
 {
     assert(dimension >= 0 && dimension < getDimension());
@@ -1171,16 +1179,17 @@ Knob<T>::setValueAtTime(double time,
         setValue(v, dimension, reason, newKey);
     }
 
-    Natron::EffectInstance* holder = dynamic_cast<Natron::EffectInstance*>( getHolder() );
+    EffectInstance* holder = dynamic_cast<EffectInstance*>( getHolder() );
     
 #ifdef DEBUG
-    if (holder && reason == Natron::eValueChangedReasonPluginEdited) {
+    if (holder && reason == eValueChangedReasonPluginEdited) {
         holder->checkCanSetValueAndWarn();
     }
 #endif
     
-    if ( holder && (reason == Natron::eValueChangedReasonPluginEdited ||
-                    reason == Natron::eValueChangedReasonNatronInternalEdited) && getKnobGuiPointer() ) {
+    if ( holder && (reason == eValueChangedReasonPluginEdited ||
+                    reason == eValueChangedReasonNatronInternalEdited) && getKnobGuiPointer() ) {
+
         KnobHolder::MultipleParamsEditEnum paramEditLevel = holder->getMultipleParamsEditLevel();
         switch (paramEditLevel) {
         case KnobHolder::eMultipleParamsEditOff:
@@ -1238,6 +1247,8 @@ Knob<T>::setValueAtTime(double time,
         
         ///If we cannot set value, queue it
         if (holder && getEvaluateOnChange()) {
+            //We explicitly abort rendering now and do not wait for it to be done in EffectInstance::evaluate()
+            //because the actual value change (which will call evaluate()) may arise well later
             holder->abortAnyEvaluation();
         }
         
@@ -1277,7 +1288,7 @@ Knob<T>::setValueAtTime(double time,
     if (holder) {
         holder->setHasAnimation(true);
     }
-    guiCurveCloneInternalCurve(Natron::eCurveChangeReasonInternal, dimension, reason);
+    guiCurveCloneInternalCurve(eCurveChangeReasonInternal, dimension, reason);
     
     if (_signalSlotHandler && ret) {
         _signalSlotHandler->s_keyFrameSet(time,dimension,(int)reason,ret);
@@ -1294,14 +1305,14 @@ Knob<T>::setValueAtTime(double time,
 
 template<typename T>
 void
-Knob<T>::setValuesAtTime(double time,const T& value0, const T& value1, Natron::ValueChangedReasonEnum reason)
+Knob<T>::setValuesAtTime(double time,const T& value0, const T& value1, ValueChangedReasonEnum reason)
 {
     
     KnobHolder* holder = getHolder();
-    Natron::EffectInstance* effect = 0;
+    EffectInstance* effect = 0;
     bool doEditEnd = false;
     if (holder) {
-        effect = dynamic_cast<Natron::EffectInstance*>(holder);
+        effect = dynamic_cast<EffectInstance*>(holder);
         if (effect) {
             if (effect->isDoingInteractAction() && !effect->getApp()->isCreatingPythonGroup()) {
                 effect->setMultipleParamsEditLevel(KnobHolder::eMultipleParamsEditOnCreateNewCommand);
@@ -1324,13 +1335,13 @@ Knob<T>::setValuesAtTime(double time,const T& value0, const T& value1, Natron::V
 
 template<typename T>
 void
-Knob<T>::setValuesAtTime(double time,const T& value0, const T& value1, const T& value2, Natron::ValueChangedReasonEnum reason)
+Knob<T>::setValuesAtTime(double time,const T& value0, const T& value1, const T& value2, ValueChangedReasonEnum reason)
 {
     KnobHolder* holder = getHolder();
-    Natron::EffectInstance* effect = 0;
+    EffectInstance* effect = 0;
     bool doEditEnd = false;
     if (holder) {
-        effect = dynamic_cast<Natron::EffectInstance*>(holder);
+        effect = dynamic_cast<EffectInstance*>(holder);
         if (effect) {
             if (effect->isDoingInteractAction() && !effect->getApp()->isCreatingPythonGroup()) {
                 effect->setMultipleParamsEditLevel(KnobHolder::eMultipleParamsEditOnCreateNewCommand);
@@ -1355,13 +1366,13 @@ Knob<T>::setValuesAtTime(double time,const T& value0, const T& value1, const T& 
 
 template<typename T>
 void
-Knob<T>::setValuesAtTime(double time,const T& value0, const T& value1, const T& value2, const T& value3, Natron::ValueChangedReasonEnum reason)
+Knob<T>::setValuesAtTime(double time,const T& value0, const T& value1, const T& value2, const T& value3, ValueChangedReasonEnum reason)
 {
     KnobHolder* holder = getHolder();
-    Natron::EffectInstance* effect = 0;
+    EffectInstance* effect = 0;
     bool doEditEnd = false;
     if (holder) {
-        effect = dynamic_cast<Natron::EffectInstance*>(holder);
+        effect = dynamic_cast<EffectInstance*>(holder);
         if (effect) {
             if (effect->isDoingInteractAction() && !effect->getApp()->isCreatingPythonGroup()) {
                 effect->setMultipleParamsEditLevel(KnobHolder::eMultipleParamsEditOnCreateNewCommand);
@@ -1387,24 +1398,24 @@ Knob<T>::setValuesAtTime(double time,const T& value0, const T& value1, const T& 
 template<typename T>
 void
 Knob<T>::unSlave(int dimension,
-                 Natron::ValueChangedReasonEnum reason,
+                 ValueChangedReasonEnum reason,
                  bool copyState)
 {
     if ( !isSlave(dimension) ) {
         return;
     }
     std::pair<int,boost::shared_ptr<KnobI> > master = getMaster(dimension);
-    boost::shared_ptr<KnobHelper> helper = boost::dynamic_pointer_cast<KnobHelper>(master.second);
+    boost::shared_ptr<KnobHelper> masterHelper = boost::dynamic_pointer_cast<KnobHelper>(master.second);
 
-    if (helper->getSignalSlotHandler() && _signalSlotHandler) {
-        QObject::disconnect( helper->getSignalSlotHandler().get(), SIGNAL( keyFrameSet(double,int,int,bool) ),
+    if (masterHelper->getSignalSlotHandler() && _signalSlotHandler) {
+        QObject::disconnect( masterHelper->getSignalSlotHandler().get(), SIGNAL( keyFrameSet(double,int,int,bool) ),
                          _signalSlotHandler.get(), SLOT( onMasterKeyFrameSet(double,int,int,bool) ) );
-        QObject::disconnect( helper->getSignalSlotHandler().get(), SIGNAL( keyFrameRemoved(double,int,int) ),
+        QObject::disconnect( masterHelper->getSignalSlotHandler().get(), SIGNAL( keyFrameRemoved(double,int,int) ),
                          _signalSlotHandler.get(), SLOT( onMasterKeyFrameRemoved(double,int,int)) );
         
-        QObject::disconnect( helper->getSignalSlotHandler().get(), SIGNAL( keyFrameMoved(int,double,double) ),
+        QObject::disconnect( masterHelper->getSignalSlotHandler().get(), SIGNAL( keyFrameMoved(int,double,double) ),
                          _signalSlotHandler.get(), SLOT( onMasterKeyFrameMoved(int,double,double) ) );
-        QObject::disconnect( helper->getSignalSlotHandler().get(), SIGNAL(animationRemoved(int) ),
+        QObject::disconnect( masterHelper->getSignalSlotHandler().get(), SIGNAL(animationRemoved(int) ),
                          _signalSlotHandler.get(), SLOT(onMasterAnimationRemoved(int)) );
     }
 
@@ -1413,19 +1424,19 @@ Knob<T>::unSlave(int dimension,
     setEnabled(dimension, true);
     if (copyState) {
         ///clone the master
-        hasChanged |= cloneAndCheckIfChanged( master.second.get() );
+        hasChanged |= cloneAndCheckIfChanged(master.second.get());
     }
 
     if (_signalSlotHandler) {
-        if (reason == Natron::eValueChangedReasonPluginEdited) {
+        if (reason == eValueChangedReasonPluginEdited) {
             _signalSlotHandler->s_knobSlaved(dimension, false);
         }
     }
     if (getHolder() && _signalSlotHandler) {
         getHolder()->onKnobSlaved( this, master.second.get(),dimension,false );
     }
-    if (helper) {
-        helper->removeListener(this);
+    if (masterHelper) {
+        masterHelper->removeListener(this, dimension);
     }
     if (hasChanged) {
         evaluateValueChange(dimension, getCurrentTime(), reason);
@@ -1440,11 +1451,11 @@ Knob<T>::setValue(const T & value,
                   bool turnOffAutoKeying)
 {
     if (turnOffAutoKeying) {
-        return setValue(value,dimension,Natron::eValueChangedReasonNatronInternalEdited,NULL);
+        return setValue(value,dimension,eValueChangedReasonNatronInternalEdited,NULL);
     } else {
         KeyFrame k;
 
-        return setValue(value,dimension,Natron::eValueChangedReasonNatronInternalEdited,&k);
+        return setValue(value,dimension,eValueChangedReasonNatronInternalEdited,&k);
     }
 }
 
@@ -1452,10 +1463,10 @@ template<typename T>
 KnobHelper::ValueChangedReturnCodeEnum
 Knob<T>::onValueChanged(const T & value,
                         int dimension,
-                        Natron::ValueChangedReasonEnum reason,
+                        ValueChangedReasonEnum reason,
                         KeyFrame* newKey)
 {
-    assert(reason == Natron::eValueChangedReasonNatronGuiEdited || reason == Natron::eValueChangedReasonUserEdited);
+    assert(reason == eValueChangedReasonNatronGuiEdited || reason == eValueChangedReasonUserEdited);
     return setValue(value, dimension,reason,newKey);
 }
 
@@ -1464,7 +1475,7 @@ KnobHelper::ValueChangedReturnCodeEnum
 Knob<T>::setValueFromPlugin(const T & value,int dimension)
 {
     KeyFrame newKey;
-    return setValue(value,dimension,Natron::eValueChangedReasonPluginEdited,&newKey);
+    return setValue(value,dimension,eValueChangedReasonPluginEdited,&newKey);
 }
 
 template<typename T>
@@ -1475,7 +1486,7 @@ Knob<T>::setValueAtTime(double time,
 {
     KeyFrame k;
 
-    ignore_result(setValueAtTime(time,v,dimension,Natron::eValueChangedReasonNatronInternalEdited,&k));
+    ignore_result(setValueAtTime(time,v,dimension,eValueChangedReasonNatronInternalEdited,&k));
 }
 
 template<typename T>
@@ -1484,7 +1495,7 @@ Knob<T>::setValueAtTimeFromPlugin(double time,const T & v,int dimension)
 {
     KeyFrame k;
     
-    ignore_result(setValueAtTime(time,v,dimension,Natron::eValueChangedReasonPluginEdited,&k));
+    ignore_result(setValueAtTime(time,v,dimension,eValueChangedReasonPluginEdited,&k));
 
 }
 
@@ -1690,9 +1701,6 @@ Knob<T>::onKeyFrameSet(double time,
     
     if (!useGuiCurve) {
         assert(holder);
-        /*if (holder && getEvaluateOnChange()) {
-            holder->abortAnyEvaluation();
-        }*/
         curve = getCurve(dimension);
     } else {
         curve = getGuiCurve(dimension);
@@ -1700,12 +1708,12 @@ Knob<T>::onKeyFrameSet(double time,
     }
     
     makeKeyFrame(curve.get(), time, getValueAtTime(time,dimension), &key);
-    return setKeyFrame(key, dimension, Natron::eValueChangedReasonUserEdited);
+    return setKeyFrame(key, dimension, eValueChangedReasonUserEdited);
 }
 
 template<typename T>
 bool
-Knob<T>::setKeyFrame(const KeyFrame& key,int dimension,Natron::ValueChangedReasonEnum reason)
+Knob<T>::setKeyFrame(const KeyFrame& key,int dimension,ValueChangedReasonEnum reason)
 {
     boost::shared_ptr<Curve> curve;
     KnobHolder* holder = getHolder();
@@ -1713,9 +1721,6 @@ Knob<T>::setKeyFrame(const KeyFrame& key,int dimension,Natron::ValueChangedReaso
     
     if (!useGuiCurve) {
         assert(holder);
-        /*if (holder && getEvaluateOnChange()) {
-            holder->abortAnyEvaluation();
-        }*/
         curve = getCurve(dimension);
     } else {
         curve = getGuiCurve(dimension);
@@ -1725,7 +1730,7 @@ Knob<T>::setKeyFrame(const KeyFrame& key,int dimension,Natron::ValueChangedReaso
     bool ret = curve->addKeyFrame(key);
     
     if (!useGuiCurve) {
-        guiCurveCloneInternalCurve(Natron::eCurveChangeReasonInternal,dimension, reason);
+        guiCurveCloneInternalCurve(eCurveChangeReasonInternal,dimension, reason);
         evaluateValueChange(dimension, key.getTime(), reason);
     }
     return ret;
@@ -1735,12 +1740,12 @@ template<typename T>
 bool
 Knob<T>::onKeyFrameSet(double /*time*/,const KeyFrame& key,int dimension)
 {
-    return setKeyFrame(key, dimension, Natron::eValueChangedReasonUserEdited);
+    return setKeyFrame(key, dimension, eValueChangedReasonUserEdited);
 }
 
 template<typename T>
 void
-Knob<T>::onTimeChanged(double /*time*/)
+Knob<T>::onTimeChanged(double time)
 {
     int dims = getDimension();
 
@@ -1749,14 +1754,17 @@ Knob<T>::onTimeChanged(double /*time*/)
     }
     bool shouldRefresh = false;
     for (int i = 0; i < dims; ++i) {
-        
         if (getKnobGuiPointer() && _signalSlotHandler && (isAnimated(i) || !getExpression(i).empty())) {
             shouldRefresh = true;
         }
         checkAnimationLevel(i);
     }
     if (shouldRefresh) {
-        _signalSlotHandler->s_valueChanged(-1, Natron::eValueChangedReasonTimeChanged);
+        _signalSlotHandler->s_valueChanged(-1, eValueChangedReasonTimeChanged);
+    }
+    if (evaluateValueChangeOnTimeChange()) {
+        //Some knobs like KnobFile do not animate but the plug-in may need to know the time has changed
+        evaluateValueChange(0, time, eValueChangedReasonTimeChanged);
     }
 }
 
@@ -1902,9 +1910,9 @@ Knob<T>::resetToDefaultValue(int dimension)
     }
     clearExpression(dimension,true);
     resetExtraToDefaultValue(dimension);
-    ignore_result(setValue(defaultV, dimension,Natron::eValueChangedReasonRestoreDefault,NULL));
+    ignore_result(setValue(defaultV, dimension,eValueChangedReasonRestoreDefault,NULL));
     if (_signalSlotHandler) {
-        _signalSlotHandler->s_valueChanged(dimension,Natron::eValueChangedReasonRestoreDefault);
+        _signalSlotHandler->s_valueChanged(dimension,eValueChangedReasonRestoreDefault);
     }
     setSecret(getDefaultIsSecret());
     setEnabled(dimension, isDefaultEnabled(dimension));
@@ -1963,9 +1971,9 @@ Knob<double>::resetToDefaultValue(int dimension)
             }
         }
     }
-    ignore_result(setValue(def, dimension, Natron::eValueChangedReasonRestoreDefault, NULL));
+    ignore_result(setValue(def, dimension, eValueChangedReasonRestoreDefault, NULL));
     if (_signalSlotHandler) {
-        _signalSlotHandler->s_valueChanged(dimension, Natron::eValueChangedReasonRestoreDefault);
+        _signalSlotHandler->s_valueChanged(dimension, eValueChangedReasonRestoreDefault);
     }
     setSecret(getDefaultIsSecret());
     setEnabled(dimension, isDefaultEnabled(dimension));
@@ -2313,7 +2321,7 @@ Knob<T>::clone(KnobI* other,
         }
     }
     if (_signalSlotHandler) {
-        _signalSlotHandler->s_valueChanged(dimension,Natron::eValueChangedReasonPluginEdited);
+        _signalSlotHandler->s_valueChanged(dimension,eValueChangedReasonNatronInternalEdited);
         refreshListenersAfterValueChange(dimension);
     }
     cloneExtraData(other,dimension);
@@ -2355,7 +2363,7 @@ Knob<T>::cloneAndCheckIfChanged(KnobI* other,int dimension)
     }
     if (hasChanged) {
         if (_signalSlotHandler) {
-            _signalSlotHandler->s_valueChanged(dimension,Natron::eValueChangedReasonPluginEdited);
+            _signalSlotHandler->s_valueChanged(dimension,eValueChangedReasonNatronInternalEdited);
             refreshListenersAfterValueChange(dimension);
         }
     }
@@ -2398,7 +2406,7 @@ Knob<T>::clone(KnobI* other,
         }
     }
     if (_signalSlotHandler) {
-        _signalSlotHandler->s_valueChanged(dimension,Natron::eValueChangedReasonPluginEdited);
+        _signalSlotHandler->s_valueChanged(dimension,eValueChangedReasonNatronInternalEdited);
         refreshListenersAfterValueChange(dimension);
     }
     cloneExtraData(other,offset,range,dimension);
@@ -2443,14 +2451,14 @@ Knob<T>::cloneAndUpdateGui(KnobI* other,int dimension)
                     keysList.push_back(it->getTime());
                 }
                 if (!keysList.empty()) {
-                    _signalSlotHandler->s_multipleKeyFramesSet(keysList, i, (int)Natron::eValueChangedReasonNatronInternalEdited);
+                    _signalSlotHandler->s_multipleKeyFramesSet(keysList, i, (int)eValueChangedReasonNatronInternalEdited);
                 }
             }
             checkAnimationLevel(i);
         }
     }
     if (_signalSlotHandler) {
-        _signalSlotHandler->s_valueChanged(dimension,Natron::eValueChangedReasonPluginEdited);
+        _signalSlotHandler->s_valueChanged(dimension,eValueChangedReasonNatronInternalEdited);
     }
     refreshListenersAfterValueChange(dimension);
     cloneExtraData(other,dimension);
@@ -2484,7 +2492,7 @@ bool
 Knob<T>::dequeueValuesSet(bool disableEvaluation)
 {
     
-    std::map<int,Natron::ValueChangedReasonEnum> dimensionChanged;
+    std::map<int,ValueChangedReasonEnum> dimensionChanged;
     bool ret = false;
     cloneGuiCurvesIfNeeded(dimensionChanged);
     {
@@ -2544,7 +2552,7 @@ Knob<T>::dequeueValuesSet(bool disableEvaluation)
     if (!disableEvaluation && !dimensionChanged.empty()) {
         beginChanges();
         double time = getCurrentTime();
-        for (std::map<int,Natron::ValueChangedReasonEnum>::iterator it = dimensionChanged.begin(); it != dimensionChanged.end(); ++it) {
+        for (std::map<int,ValueChangedReasonEnum>::iterator it = dimensionChanged.begin(); it != dimensionChanged.end(); ++it) {
             evaluateValueChange(it->first, time, it->second);
         }
         endChanges();
@@ -2597,5 +2605,7 @@ void Knob<T>::computeHasModifications()
         _signalSlotHandler->s_hasModificationsChanged();
     }
 }
+
+NATRON_NAMESPACE_EXIT;
 
 #endif // KNOBIMPL_H

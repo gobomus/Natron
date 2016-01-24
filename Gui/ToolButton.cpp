@@ -1,6 +1,6 @@
 /* ***** BEGIN LICENSE BLOCK *****
  * This file is part of Natron <http://www.natron.fr/>,
- * Copyright (C) 2015 INRIA and Alexandre Gauthier-Foichat
+ * Copyright (C) 2016 INRIA and Alexandre Gauthier-Foichat
  *
  * Natron is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -34,6 +34,8 @@ CLANG_DIAG_ON(deprecated)
 #include "Gui/GuiAppInstance.h"
 #include "Gui/Gui.h"
 #include "Engine/Project.h"
+
+NATRON_NAMESPACE_ENTER;
 
 struct ToolButtonPrivate
 {
@@ -228,3 +230,8 @@ ToolButton::sortChildren()
     _imp->_children = sortedChildren;
 
 }
+
+NATRON_NAMESPACE_EXIT;
+
+NATRON_NAMESPACE_USING;
+#include "moc_ToolButton.cpp"

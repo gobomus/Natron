@@ -1,6 +1,6 @@
 /* ***** BEGIN LICENSE BLOCK *****
  * This file is part of Natron <http://www.natron.fr/>,
- * Copyright (C) 2015 INRIA and Alexandre Gauthier-Foichat
+ * Copyright (C) 2016 INRIA and Alexandre Gauthier-Foichat
  *
  * Natron is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -41,7 +41,7 @@
 #include "Gui/NodeGuiSerialization.h"
 
 
-using namespace Natron;
+NATRON_NAMESPACE_ENTER;
 
 
 NodeGraphPrivate::NodeGraphPrivate(NodeGraph* p,
@@ -91,7 +91,7 @@ NodeGraphPrivate::NodeGraphPrivate(NodeGraph* p,
 , isDoingPreviewRender(false)
 , autoScrollTimer()
 {
-    appPTR->getIcon(Natron::NATRON_PIXMAP_LOCKED, &unlockIcon);
+    appPTR->getIcon(NATRON_PIXMAP_LOCKED, &unlockIcon);
 }
 
 QPoint
@@ -197,7 +197,7 @@ NodeGraphPrivate::copyNodesInternal(const NodeGuiList& selection,NodeClipBoard &
     NodeGuiList nodesToCopy = selection;
     for (NodeGuiList::iterator it = nodesToCopy.begin(); it != nodesToCopy.end(); ++it) {
         ///Also copy all nodes within the backdrop
-        std::list<boost::shared_ptr<NodeGui> > nodesWithinBD = _publicInterface->getNodesWithinBackDrop(*it);
+        std::list<boost::shared_ptr<NodeGui> > nodesWithinBD = _publicInterface->getNodesWithinBackdrop(*it);
         for (std::list<boost::shared_ptr<NodeGui> >::iterator it2 = nodesWithinBD.begin(); it2 != nodesWithinBD.end(); ++it2) {
             std::list<boost::shared_ptr<NodeGui> >::iterator found = std::find(nodesToCopy.begin(),nodesToCopy.end(),*it2);
             if ( found == nodesToCopy.end() ) {
@@ -216,3 +216,5 @@ NodeGraphPrivate::copyNodesInternal(const NodeGuiList& selection,NodeClipBoard &
         }
     }
 }
+
+NATRON_NAMESPACE_EXIT;

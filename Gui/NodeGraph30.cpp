@@ -1,6 +1,6 @@
 /* ***** BEGIN LICENSE BLOCK *****
  * This file is part of Natron <http://www.natron.fr/>,
- * Copyright (C) 2015 INRIA and Alexandre Gauthier-Foichat
+ * Copyright (C) 2016 INRIA and Alexandre Gauthier-Foichat
  *
  * Natron is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -57,7 +57,7 @@ CLANG_DIAG_ON(uninitialized)
 
 #include "Global/QtCompat.h"
 
-using namespace Natron;
+NATRON_NAMESPACE_ENTER;
 
 
 void
@@ -224,6 +224,9 @@ NodeGraph::keyReleaseEvent(QKeyEvent* e)
             _imp->setNodesBendPointsVisible(false);
         }
     }
+    
+    handleUnCaughtKeyUpEvent(e);
+    QGraphicsView::keyReleaseEvent(e);
 }
 
 void
@@ -235,12 +238,16 @@ NodeGraph::removeNode(const boost::shared_ptr<NodeGui> & node)
 
     
     for (U32 i = 0; i < knobs.size(); ++i) {
-        std::list<boost::shared_ptr<KnobI> > listeners;
+        KnobI::ListenerDimsMap listeners;
         knobs[i]->getListeners(listeners);
         ///For all listeners make sure they belong to a node
         bool foundEffect = false;
-        for (std::list<boost::shared_ptr<KnobI> >::iterator it2 = listeners.begin(); it2 != listeners.end(); ++it2) {
-            EffectInstance* isEffect = dynamic_cast<EffectInstance*>( (*it2)->getHolder() );
+        for (KnobI::ListenerDimsMap::iterator it2 = listeners.begin(); it2 != listeners.end(); ++it2) {
+            boost::shared_ptr<KnobI> listener = it2->first.lock();
+            if (!listener) {
+                continue;
+            }
+            EffectInstance* isEffect = dynamic_cast<EffectInstance*>(listener->getHolder());
             if (!isEffect) {
                 continue;
             }
@@ -254,7 +261,7 @@ NodeGraph::removeNode(const boost::shared_ptr<NodeGui> & node)
             }
         }
         if (foundEffect) {
-            Natron::StandardButtonEnum reply = Natron::questionDialog( tr("Delete").toStdString(), tr("This node has one or several "
+            StandardButtonEnum reply = Dialogs::questionDialog( tr("Delete").toStdString(), tr("This node has one or several "
                                                                                                   "parameters from which other parameters "
                                                                                                   "of the project rely on through expressions "
                                                                                                   "or links. Deleting this node will "
@@ -262,7 +269,7 @@ NodeGraph::removeNode(const boost::shared_ptr<NodeGui> & node)
                                                                                                   "and undoing the action will not recover "
                                                                                                   "them. Do you wish to continue ?")
                                                                    .toStdString(), false );
-            if (reply == Natron::eStandardButtonNo) {
+            if (reply == eStandardButtonNo) {
                 return;
             }
             break;
@@ -284,7 +291,7 @@ NodeGraph::deleteSelection()
         
         ///For all backdrops also move all the nodes contained within it
         for (NodeGuiList::iterator it = nodesToRemove.begin(); it != nodesToRemove.end(); ++it) {
-            NodeGuiList nodesWithinBD = getNodesWithinBackDrop(*it);
+            NodeGuiList nodesWithinBD = getNodesWithinBackdrop(*it);
             for (NodeGuiList::iterator it2 = nodesWithinBD.begin(); it2 != nodesWithinBD.end(); ++it2) {
                 NodeGuiList::iterator found = std::find(nodesToRemove.begin(),nodesToRemove.end(),*it2);
                 if ( found == nodesToRemove.end()) {
@@ -302,13 +309,17 @@ NodeGraph::deleteSelection()
             NodeGroup* isGrp = dynamic_cast<NodeGroup*>((*it)->getNode()->getLiveInstance());
             
             for (U32 i = 0; i < knobs.size(); ++i) {
-                std::list<boost::shared_ptr<KnobI> > listeners;
+                KnobI::ListenerDimsMap listeners;
                 knobs[i]->getListeners(listeners);
 
                 ///For all listeners make sure they belong to a node
                 bool foundEffect = false;
-                for (std::list<boost::shared_ptr<KnobI> >::iterator it2 = listeners.begin(); it2 != listeners.end(); ++it2) {
-                    EffectInstance* isEffect = dynamic_cast<EffectInstance*>( (*it2)->getHolder() );
+                for (KnobI::ListenerDimsMap::iterator it2 = listeners.begin(); it2 != listeners.end(); ++it2) {
+                    boost::shared_ptr<KnobI> listener = it2->first.lock();
+                    if (!listener) {
+                        continue;
+                    }
+                    EffectInstance* isEffect = dynamic_cast<EffectInstance*>(listener->getHolder() );
                     
                     if (!isEffect) {
                         continue;
@@ -323,7 +334,7 @@ NodeGraph::deleteSelection()
                     }
                 }
                 if (foundEffect) {
-                    Natron::StandardButtonEnum reply = Natron::questionDialog( tr("Delete").toStdString(),
+                    StandardButtonEnum reply = Dialogs::questionDialog( tr("Delete").toStdString(),
                                                                            tr("This node has one or several "
                                                                               "parameters from which other parameters "
                                                                               "of the project rely on through expressions "
@@ -332,7 +343,7 @@ NodeGraph::deleteSelection()
                                                                               ". Undoing the action will not recover "
                                                                               "them. \nContinue anyway ?")
                                                                            .toStdString(), false );
-                    if (reply == Natron::eStandardButtonNo) {
+                    if (reply == eStandardButtonNo) {
                         return;
                     }
                     mustBreak = true;
@@ -480,3 +491,5 @@ NodeGraph::areAllNodesVisible()
     }
     return true;
 }
+
+NATRON_NAMESPACE_EXIT;

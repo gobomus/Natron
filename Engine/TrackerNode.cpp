@@ -27,7 +27,7 @@
 #include "Engine/Node.h"
 #include "Engine/TrackerContext.h"
 
-using namespace Natron;
+NATRON_NAMESPACE_ENTER;
 
 TrackerNode::TrackerNode(boost::shared_ptr<Natron::Node> node)
 : Natron::EffectInstance(node)
@@ -168,3 +168,5 @@ TrackerNode::onInputChanged(int inputNb)
     boost::shared_ptr<TrackerContext> ctx = getNode()->getTrackerContext();
     ctx->s_onNodeInputChanged(inputNb);
 }
+
+NATRON_NAMESPACE_EXIT;

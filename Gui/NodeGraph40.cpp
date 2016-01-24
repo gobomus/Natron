@@ -1,6 +1,6 @@
 /* ***** BEGIN LICENSE BLOCK *****
  * This file is part of Natron <http://www.natron.fr/>,
- * Copyright (C) 2015 INRIA and Alexandre Gauthier-Foichat
+ * Copyright (C) 2016 INRIA and Alexandre Gauthier-Foichat
  *
  * Natron is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -25,13 +25,31 @@
 #include "NodeGraph.h"
 #include "NodeGraphPrivate.h"
 
+#include <sstream>
+#if !defined(Q_MOC_RUN) && !defined(SBK_RUN)
+GCC_DIAG_UNUSED_LOCAL_TYPEDEFS_OFF
+GCC_DIAG_OFF(unused-parameter)
+// /opt/local/include/boost/serialization/smart_cast.hpp:254:25: warning: unused parameter 'u' [-Wunused-parameter]
+#include <boost/archive/xml_iarchive.hpp>
+#include <boost/archive/xml_oarchive.hpp>
+// /usr/local/include/boost/serialization/shared_ptr.hpp:112:5: warning: unused typedef 'boost_static_assert_typedef_112' [-Wunused-local-typedef]
+#include <boost/serialization/split_member.hpp>
+#include <boost/serialization/version.hpp>
+GCC_DIAG_UNUSED_LOCAL_TYPEDEFS_ON
+GCC_DIAG_ON(unused-parameter)
+#endif
+
+#include <QApplication>
+#include <QClipboard>
+#include <QMimeData>
+
 #include "Engine/Node.h"
 #include "Engine/NodeGroup.h"
 #include "Engine/NodeSerialization.h"
 #include "Engine/RotoLayer.h"
 #include "Engine/ViewerInstance.h"
 
-#include "Gui/BackDropGui.h"
+#include "Gui/BackdropGui.h"
 #include "Gui/CurveEditor.h"
 #include "Gui/Gui.h"
 #include "Gui/GuiAppInstance.h"
@@ -42,7 +60,7 @@
 
 #include "Global/QtCompat.h"
 
-using namespace Natron;
+NATRON_NAMESPACE_ENTER;
 
 
 void
@@ -59,7 +77,7 @@ NodeGraph::togglePreviewsForSelectedNodes()
         }
     }
     if (empty) {
-        Natron::warningDialog(tr("Toggle Preview").toStdString(), tr("You must select a node first").toStdString());
+        Dialogs::warningDialog(tr("Toggle Preview").toStdString(), tr("You must select a node first").toStdString());
     }
 }
 
@@ -92,12 +110,29 @@ void
 NodeGraph::copySelectedNodes()
 {
     if ( _imp->_selection.empty()) {
-        Natron::warningDialog( tr("Copy").toStdString(), tr("You must select at least a node to copy first.").toStdString() );
+        Dialogs::warningDialog( tr("Copy").toStdString(), tr("You must select at least a node to copy first.").toStdString() );
 
         return;
     }
 
-    _imp->copyNodesInternal(_imp->_selection,appPTR->getNodeClipBoard());
+    NodeClipBoard& cb = appPTR->getNodeClipBoard();
+    _imp->copyNodesInternal(_imp->_selection,cb);
+    
+    std::ostringstream ss;
+    try {
+        boost::archive::xml_oarchive oArchive(ss);
+        oArchive << boost::serialization::make_nvp("Clipboard",cb);
+    } catch (...) {
+        qDebug() << "Failed to copy selection to system clipboard";
+    }
+    QMimeData* mimedata = new QMimeData;
+    QByteArray data(ss.str().c_str());
+    mimedata->setData("text/natron-nodes", data);
+    QClipboard* clipboard = QApplication::clipboard();
+    
+    //ownership is transferred to the clipboard
+    clipboard->setMimeData(mimedata);
+    
 }
 
 
@@ -105,7 +140,7 @@ void
 NodeGraph::cutSelectedNodes()
 {
     if ( _imp->_selection.empty() ) {
-        Natron::warningDialog( tr("Cut").toStdString(), tr("You must select at least a node to cut first.").toStdString() );
+        Dialogs::warningDialog( tr("Cut").toStdString(), tr("You must select at least a node to cut first.").toStdString() );
 
         return;
     }
@@ -123,8 +158,29 @@ NodeGraph::pasteCliboard(const NodeClipBoard& clipboard,std::list<std::pair<std:
 void
 NodeGraph::pasteNodeClipBoards(const QPointF& pos)
 {
+    QClipboard* clipboard = QApplication::clipboard();
+    const QMimeData* mimedata = clipboard->mimeData();
+    if (!mimedata->hasFormat("text/natron-nodes")) {
+        return;
+    }
+    QByteArray data = mimedata->data("text/natron-nodes");
+    
     std::list<std::pair<std::string,boost::shared_ptr<NodeGui> > > newNodes;
-    _imp->pasteNodesInternal(appPTR->getNodeClipBoard(),pos, true, &newNodes);
+    
+    
+    
+    NodeClipBoard& cb = appPTR->getNodeClipBoard();
+    
+    std::string s = QString(data).toStdString();
+    try {
+        std::stringstream ss(s);
+        boost::archive::xml_iarchive iArchive(ss);
+        iArchive >> boost::serialization::make_nvp("Clipboard",cb);
+    } catch (...) {
+        qDebug() << "Failed to load clipboard";
+        return;
+    }
+    _imp->pasteNodesInternal(cb,pos, true, &newNodes);
 }
 
 void
@@ -139,7 +195,7 @@ void
 NodeGraph::duplicateSelectedNodes(const QPointF& pos)
 {
     if ( _imp->_selection.empty() && _imp->_selection.empty() ) {
-        Natron::warningDialog( tr("Duplicate").toStdString(), tr("You must select at least a node to duplicate first.").toStdString() );
+        Dialogs::warningDialog( tr("Duplicate").toStdString(), tr("You must select at least a node to duplicate first.").toStdString() );
         
         return;
     }
@@ -164,7 +220,7 @@ void
 NodeGraph::cloneSelectedNodes(const QPointF& scenePos)
 {
     if (_imp->_selection.empty()) {
-        Natron::warningDialog( tr("Clone").toStdString(), tr("You must select at least a node to clone first.").toStdString() );
+        Dialogs::warningDialog( tr("Clone").toStdString(), tr("You must select at least a node to clone first.").toStdString() );
         return;
     }
     
@@ -175,7 +231,7 @@ NodeGraph::cloneSelectedNodes(const QPointF& scenePos)
     NodeGuiList nodesToCopy = _imp->_selection;
     for (NodeGuiList::iterator it = _imp->_selection.begin(); it != _imp->_selection.end(); ++it) {
         if ( (*it)->getNode()->getMasterNode()) {
-            Natron::errorDialog( tr("Clone").toStdString(), tr("You cannot clone a node which is already a clone.").toStdString() );
+            Dialogs::errorDialog( tr("Clone").toStdString(), tr("You cannot clone a node which is already a clone.").toStdString() );
             return;
         }
         QRectF bbox = (*it)->mapToScene((*it)->boundingRect()).boundingRect();
@@ -194,9 +250,9 @@ NodeGraph::cloneSelectedNodes(const QPointF& scenePos)
         }
         
         ///Also copy all nodes within the backdrop
-        BackDropGui* isBd = dynamic_cast<BackDropGui*>(it->get());
+        BackdropGui* isBd = dynamic_cast<BackdropGui*>(it->get());
         if (isBd) {
-            NodeGuiList nodesWithinBD = getNodesWithinBackDrop(*it);
+            NodeGuiList nodesWithinBD = getNodesWithinBackdrop(*it);
             for (NodeGuiList::iterator it2 = nodesWithinBD.begin(); it2 != nodesWithinBD.end(); ++it2) {
                 NodeGuiList::iterator found = std::find(nodesToCopy.begin(),nodesToCopy.end(),*it2);
                 if ( found == nodesToCopy.end() ) {
@@ -208,19 +264,19 @@ NodeGraph::cloneSelectedNodes(const QPointF& scenePos)
     
     for (NodeGuiList::iterator it = nodesToCopy.begin(); it != nodesToCopy.end(); ++it) {
         if ( (*it)->getNode()->getLiveInstance()->isSlave() ) {
-            Natron::errorDialog( tr("Clone").toStdString(), tr("You cannot clone a node which is already a clone.").toStdString() );
+            Dialogs::errorDialog( tr("Clone").toStdString(), tr("You cannot clone a node which is already a clone.").toStdString() );
             
             return;
         }
         ViewerInstance* isViewer = dynamic_cast<ViewerInstance*>((*it)->getNode()->getLiveInstance());
         if (isViewer) {
-            Natron::errorDialog( tr("Clone").toStdString(), tr("Cloning a viewer is not a valid operation.").toStdString() );
+            Dialogs::errorDialog( tr("Clone").toStdString(), tr("Cloning a viewer is not a valid operation.").toStdString() );
             
             return;
         }
         if ( (*it)->getNode()->isMultiInstance() ) {
             QString err = QString("%1 cannot be cloned.").arg( (*it)->getNode()->getLabel().c_str() );
-            Natron::errorDialog( tr("Clone").toStdString(),
+            Dialogs::errorDialog( tr("Clone").toStdString(),
                                 tr( err.toStdString().c_str() ).toStdString() );
             
             return;
@@ -233,29 +289,26 @@ NodeGraph::cloneSelectedNodes(const QPointF& scenePos)
     
     std::list <boost::shared_ptr<NodeGui> > newNodesList;
     
+    std::map<std::string,std::string> oldNewScriptNameMapping;
     for (NodeGuiList::iterator it = nodesToCopy.begin(); it != nodesToCopy.end(); ++it) {
         boost::shared_ptr<NodeSerialization>  internalSerialization( new NodeSerialization( (*it)->getNode() ) );
         NodeGuiSerialization guiSerialization;
         (*it)->serialize(&guiSerialization);
         boost::shared_ptr<NodeGui> clone = _imp->pasteNode( *internalSerialization, guiSerialization, offset,
-                                                           _imp->group.lock(),std::string(),true );
+                                                           _imp->group.lock(),std::string(),true, &oldNewScriptNameMapping );
         
         newNodes.push_back(std::make_pair(internalSerialization->getNodeScriptName(),clone));
         newNodesList.push_back(clone);
         serializations.push_back(internalSerialization);
         
-        ///The script-name of the copy node is different than the one of the original one, update all input connections in the serialization
-        for (std::list<boost::shared_ptr<NodeSerialization> >::iterator it2 = serializations.begin(); it2!=serializations.end(); ++it2) {
-            (*it2)->switchInput(internalSerialization->getNodeScriptName(), clone->getNode()->getScriptName());
-        }
-        
+        oldNewScriptNameMapping[internalSerialization->getNodeScriptName()] = clone->getNode()->getScriptName();
         
     }
     
     
     assert( serializations.size() == newNodes.size() );
     ///restore connections
-    _imp->restoreConnections(serializations, newNodes);
+    _imp->restoreConnections(serializations, newNodes, oldNewScriptNameMapping);
     
     
     pushUndoCommand( new AddMultipleNodesCommand(this,newNodesList) );
@@ -273,7 +326,7 @@ void
 NodeGraph::decloneSelectedNodes()
 {
     if ( _imp->_selection.empty() ) {
-        Natron::warningDialog( tr("Declone").toStdString(), tr("You must select at least a node to declone first.").toStdString() );
+        Dialogs::warningDialog( tr("Declone").toStdString(), tr("You must select at least a node to declone first.").toStdString() );
 
         return;
     }
@@ -282,10 +335,10 @@ NodeGraph::decloneSelectedNodes()
 
     for (std::list<boost::shared_ptr<NodeGui> >::iterator it = _imp->_selection.begin(); it != _imp->_selection.end(); ++it) {
         
-        BackDropGui* isBd = dynamic_cast<BackDropGui*>(it->get());
+        BackdropGui* isBd = dynamic_cast<BackdropGui*>(it->get());
         if (isBd) {
             ///Also copy all nodes within the backdrop
-            NodeGuiList nodesWithinBD = getNodesWithinBackDrop(*it);
+            NodeGuiList nodesWithinBD = getNodesWithinBackdrop(*it);
             for (NodeGuiList::iterator it2 = nodesWithinBD.begin(); it2 != nodesWithinBD.end(); ++it2) {
                 NodeGuiList::iterator found = std::find(nodesToDeclone.begin(),nodesToDeclone.end(),*it2);
                 if ( found == nodesToDeclone.end() ) {
@@ -312,10 +365,10 @@ void
 NodeGraph::deleteNodepluginsly(boost::shared_ptr<NodeGui> n)
 {
     assert(n);
-    boost::shared_ptr<Natron::Node> internalNode = n->getNode();
+    boost::shared_ptr<Node> internalNode = n->getNode();
 
     if (internalNode) {
-        internalNode->deactivate(std::list< Natron::Node* >(),false,false,true,false);
+        internalNode->deactivate(std::list< Node* >(),false,false,true,false);
     }
     std::list<boost::shared_ptr<NodeGui> >::iterator it = std::find(_imp->_nodesTrash.begin(),_imp->_nodesTrash.end(),n);
 
@@ -463,3 +516,5 @@ NodeGraph::centerOnAllNodes()
     _imp->_refreshOverlays = true;
     update();
 }
+
+NATRON_NAMESPACE_EXIT;

@@ -1,6 +1,6 @@
 /* ***** BEGIN LICENSE BLOCK *****
  * This file is part of Natron <http://www.natron.fr/>,
- * Copyright (C) 2015 INRIA and Alexandre Gauthier-Foichat
+ * Copyright (C) 2016 INRIA and Alexandre Gauthier-Foichat
  *
  * Natron is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -50,6 +50,7 @@ CLANG_DIAG_ON(uninitialized)
 
 #include "Gui/GuiFwd.h"
 
+NATRON_NAMESPACE_ENTER;
 
 /**
  * @brief An abstract class that defines a dockable properties panel that can be found in the Property bin pane.
@@ -173,6 +174,8 @@ public:
     
 public Q_SLOTS:
     
+    void onPageLabelChangedInternally();
+    
     void onPageIndexChanged(int index);
 
     /*Internal slot, not meant to be called externally.*/
@@ -293,5 +296,6 @@ private:
     boost::scoped_ptr<DockablePanelPrivate> _imp;
 };
 
+NATRON_NAMESPACE_EXIT;
 
 #endif // Gui_DockablePanel_h

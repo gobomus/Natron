@@ -1,6 +1,6 @@
 /* ***** BEGIN LICENSE BLOCK *****
  * This file is part of Natron <http://www.natron.fr/>,
- * Copyright (C) 2015 INRIA and Alexandre Gauthier-Foichat
+ * Copyright (C) 2016 INRIA and Alexandre Gauthier-Foichat
  *
  * Natron is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -21,8 +21,8 @@
 * Engine module.
 **/
 
-#ifndef PARAMETERWRAPPER_H
-#define PARAMETERWRAPPER_H
+#ifndef Engine_ParameterWrapper_h
+#define Engine_ParameterWrapper_h
 
 // ***** BEGIN PYTHON BLOCK *****
 // from <https://docs.python.org/3/c-api/intro.html#include-files>:
@@ -38,6 +38,8 @@
 #include "Engine/KnobTypes.h"
 #include "Engine/KnobFile.h"
 #include "Engine/EngineFwd.h"
+
+NATRON_NAMESPACE_ENTER;
 
 class Param
 {
@@ -1049,6 +1051,19 @@ public:
     void trigger();
 };
 
+
+class SeparatorParam : public Param
+{
+    
+protected:
+    boost::weak_ptr<KnobSeparator> _separatorKnob;
+public:
+    
+    SeparatorParam(const boost::shared_ptr<KnobSeparator>& knob);
+    
+    virtual ~SeparatorParam();
+};
+
 class GroupParam : public Param
 {
     
@@ -1110,31 +1125,33 @@ public:
     
     void getCurveColor(int dimension, ColorTuple& ret) const;
     
-    Natron::StatusEnum addControlPoint(int dimension,double key,double value);
+    NATRON_NAMESPACE::StatusEnum addControlPoint(int dimension,double key,double value);
     
     double getValue(int dimension,double parametricPosition) const;
     
     int getNControlPoints(int dimension) const ;
-    
-    Natron::StatusEnum getNthControlPoint(int dimension,
+
+    // NATRON_NAMESPACE is necessary for shiboken
+    NATRON_NAMESPACE::StatusEnum getNthControlPoint(int dimension,
                                           int nthCtl,
                                           double *key,
                                           double *value,
                                           double *leftDerivative,
                                           double *rightDerivative) const;
     
-    Natron::StatusEnum setNthControlPoint(int dimension,
+    NATRON_NAMESPACE::StatusEnum setNthControlPoint(int dimension,
                                           int nthCtl,
                                           double key,
                                           double value,
                                           double leftDerivative,
                                           double rightDerivative) ;
     
-    Natron::StatusEnum deleteControlPoint(int dimension, int nthCtl) ;
+    NATRON_NAMESPACE::StatusEnum deleteControlPoint(int dimension, int nthCtl) ;
     
-    Natron::StatusEnum deleteAllControlPoints(int dimension) ;
+    NATRON_NAMESPACE::StatusEnum deleteAllControlPoints(int dimension) ;
     
 };
 
+NATRON_NAMESPACE_EXIT;
 
-#endif // PARAMETERWRAPPER_H
+#endif // Engine_ParameterWrapper_h

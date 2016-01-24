@@ -1,6 +1,6 @@
 /* ***** BEGIN LICENSE BLOCK *****
  * This file is part of Natron <http://www.natron.fr/>,
- * Copyright (C) 2015 INRIA and Alexandre Gauthier-Foichat
+ * Copyright (C) 2016 INRIA and Alexandre Gauthier-Foichat
  *
  * Natron is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -53,8 +53,9 @@ GCC_DIAG_UNUSED_LOCAL_TYPEDEFS_ON
 #include "Engine/Format.h"
 #include "Engine/Project.h"
 #include "Engine/AppInstance.h"
+#include "Engine/TLSHolder.h"
 
-using namespace Natron;
+NATRON_NAMESPACE_ENTER;
 
 
 static std::string
@@ -197,7 +198,7 @@ deleteKey(boost::shared_ptr<KnobI> knob,
           OfxTime time)
 {
     for (int i = 0; i < knob->getDimension(); ++i) {
-        knob->deleteValueAtTime(Natron::eCurveChangeReasonInternal,time, i);
+        knob->deleteValueAtTime(eCurveChangeReasonInternal,time, i);
     }
 
     return kOfxStatOK;
@@ -224,11 +225,11 @@ copyFrom(const boost::shared_ptr<KnobI> & from,
 {
     ///copy only if type is the same
     if ( from->typeName() == to->typeName() ) {
-        to->clone(from,offset,range);
         to->beginChanges();
+        to->clone(from,offset,range);
         int dims = to->getDimension();
         for (int i = 0; i < dims; ++i) {
-            to->evaluateValueChange(i, from->getCurrentTime(), Natron::eValueChangedReasonPluginEdited);
+            to->evaluateValueChange(i, from->getCurrentTime(), eValueChangedReasonPluginEdited);
         }
         to->endChanges();
     }
@@ -371,7 +372,7 @@ OfxPushButtonInstance::OfxPushButtonInstance(OfxEffectInstance* node,
                                              OFX::Host::Param::Descriptor & descriptor)
     : OFX::Host::Param::PushbuttonInstance( descriptor, node->effectInstance() )
 {
-    boost::shared_ptr<KnobButton> k = Natron::createKnob<KnobButton>( node, getParamLabel(this) );
+    boost::shared_ptr<KnobButton> k = AppManager::createKnob<KnobButton>( node, getParamLabel(this) );
     _knob = k;
     const std::string & iconFilePath = descriptor.getProperties().getStringProperty(kOfxPropIcon,1);
     k->setIconFilePath(iconFilePath);
@@ -421,7 +422,7 @@ OfxIntegerInstance::OfxIntegerInstance(OfxEffectInstance* node,
 {
     const OFX::Host::Property::Set &properties = getProperties();
 
-    boost::shared_ptr<KnobInt> k = Natron::createKnob<KnobInt>( node, getParamLabel(this) );
+    boost::shared_ptr<KnobInt> k = AppManager::createKnob<KnobInt>( node, getParamLabel(this) );
     _knob = k;
 
     int min = properties.getIntProperty(kOfxParamPropMin);
@@ -557,11 +558,11 @@ OfxIntegerInstance::copyFrom(const OFX::Host::Param::Instance &instance,
 void
 OfxIntegerInstance::onKnobAnimationLevelChanged(int,int lvl)
 {
-    Natron::AnimationLevelEnum l = (Natron::AnimationLevelEnum)lvl;
+    AnimationLevelEnum l = (AnimationLevelEnum)lvl;
 
-    assert( l == Natron::eAnimationLevelNone || getCanAnimate() );
-    getProperties().setIntProperty(kOfxParamPropIsAnimating, l != Natron::eAnimationLevelNone);
-    getProperties().setIntProperty(kOfxParamPropIsAutoKeying, l == Natron::eAnimationLevelInterpolatedValue);
+    assert( l == eAnimationLevelNone || getCanAnimate() );
+    getProperties().setIntProperty(kOfxParamPropIsAnimating, l != eAnimationLevelNone);
+    getProperties().setIntProperty(kOfxParamPropIsAutoKeying, l == eAnimationLevelInterpolatedValue);
 }
 
 void
@@ -597,7 +598,7 @@ OfxDoubleInstance::OfxDoubleInstance(OfxEffectInstance* node,
     const OFX::Host::Property::Set &properties = getProperties();
     const std::string & coordSystem = getDefaultCoordinateSystem();
 
-    boost::shared_ptr<KnobDouble> dblKnob = Natron::createKnob<KnobDouble>( node, getParamLabel(this) );
+    boost::shared_ptr<KnobDouble> dblKnob = AppManager::createKnob<KnobDouble>( node, getParamLabel(this) );
     _knob = dblKnob;
 
     const std::string & doubleType = getDoubleType();
@@ -809,11 +810,11 @@ OfxDoubleInstance::copyFrom(const OFX::Host::Param::Instance &instance,
 void
 OfxDoubleInstance::onKnobAnimationLevelChanged(int,int lvl)
 {
-    Natron::AnimationLevelEnum l = (Natron::AnimationLevelEnum)lvl;
+    AnimationLevelEnum l = (AnimationLevelEnum)lvl;
 
-    assert( l == Natron::eAnimationLevelNone || getCanAnimate() );
-    getProperties().setIntProperty(kOfxParamPropIsAnimating, l != Natron::eAnimationLevelNone);
-    getProperties().setIntProperty(kOfxParamPropIsAutoKeying, l == Natron::eAnimationLevelInterpolatedValue);
+    assert( l == eAnimationLevelNone || getCanAnimate() );
+    getProperties().setIntProperty(kOfxParamPropIsAnimating, l != eAnimationLevelNone);
+    getProperties().setIntProperty(kOfxParamPropIsAutoKeying, l == eAnimationLevelInterpolatedValue);
 }
 
 ////////////////////////// OfxBooleanInstance /////////////////////////////////////////////////
@@ -824,7 +825,7 @@ OfxBooleanInstance::OfxBooleanInstance(OfxEffectInstance* node,
 {
     const OFX::Host::Property::Set &properties = getProperties();
 
-    boost::shared_ptr<KnobBool> b = Natron::createKnob<KnobBool>( node, getParamLabel(this) );
+    boost::shared_ptr<KnobBool> b = AppManager::createKnob<KnobBool>( node, getParamLabel(this) );
     _knob = b;
     int def = properties.getIntProperty(kOfxParamPropDefault);
     b->blockValueChanges();
@@ -950,11 +951,11 @@ OfxBooleanInstance::copyFrom(const OFX::Host::Param::Instance &instance,
 void
 OfxBooleanInstance::onKnobAnimationLevelChanged(int,int lvl)
 {
-    Natron::AnimationLevelEnum l = (Natron::AnimationLevelEnum)lvl;
+    AnimationLevelEnum l = (AnimationLevelEnum)lvl;
 
-    assert( l == Natron::eAnimationLevelNone || getCanAnimate() );
-    getProperties().setIntProperty(kOfxParamPropIsAnimating, l != Natron::eAnimationLevelNone);
-    getProperties().setIntProperty(kOfxParamPropIsAutoKeying, l == Natron::eAnimationLevelInterpolatedValue);
+    assert( l == eAnimationLevelNone || getCanAnimate() );
+    getProperties().setIntProperty(kOfxParamPropIsAnimating, l != eAnimationLevelNone);
+    getProperties().setIntProperty(kOfxParamPropIsAutoKeying, l == eAnimationLevelInterpolatedValue);
 }
 
 ////////////////////////// OfxChoiceInstance /////////////////////////////////////////////////
@@ -966,7 +967,7 @@ OfxChoiceInstance::OfxChoiceInstance(OfxEffectInstance* node,
     const OFX::Host::Property::Set &properties = getProperties();
 
 
-    boost::shared_ptr<KnobChoice> choice = Natron::createKnob<KnobChoice>( node, getParamLabel(this) );
+    boost::shared_ptr<KnobChoice> choice = AppManager::createKnob<KnobChoice>( node, getParamLabel(this) );
     _knob = choice;
 
     
@@ -1164,11 +1165,11 @@ OfxChoiceInstance::copyFrom(const OFX::Host::Param::Instance &instance,
 void
 OfxChoiceInstance::onKnobAnimationLevelChanged(int,int lvl)
 {
-    Natron::AnimationLevelEnum l = (Natron::AnimationLevelEnum)lvl;
+    AnimationLevelEnum l = (AnimationLevelEnum)lvl;
 
-    assert( l == Natron::eAnimationLevelNone || getCanAnimate() );
-    getProperties().setIntProperty(kOfxParamPropIsAnimating, l != Natron::eAnimationLevelNone);
-    getProperties().setIntProperty(kOfxParamPropIsAutoKeying, l == Natron::eAnimationLevelInterpolatedValue);
+    assert( l == eAnimationLevelNone || getCanAnimate() );
+    getProperties().setIntProperty(kOfxParamPropIsAnimating, l != eAnimationLevelNone);
+    getProperties().setIntProperty(kOfxParamPropIsAutoKeying, l == eAnimationLevelInterpolatedValue);
 }
 
 ////////////////////////// OfxRGBAInstance /////////////////////////////////////////////////
@@ -1179,7 +1180,7 @@ OfxRGBAInstance::OfxRGBAInstance(OfxEffectInstance* node,
 {
     const OFX::Host::Property::Set &properties = getProperties();
 
-    boost::shared_ptr<KnobColor> color = Natron::createKnob<KnobColor>(node, getParamLabel(this),4);
+    boost::shared_ptr<KnobColor> color = AppManager::createKnob<KnobColor>(node, getParamLabel(this),4);
     _knob = color;
 
     double defR = properties.getDoubleProperty(kOfxParamPropDefault,0);
@@ -1251,7 +1252,7 @@ OfxRGBAInstance::set(double r,
                      double b,
                      double a)
 {
-    _knob.lock()->setValues(r, g, b, a, Natron::eValueChangedReasonPluginEdited);
+    _knob.lock()->setValues(r, g, b, a, eValueChangedReasonPluginEdited);
 
     return kOfxStatOK;
 }
@@ -1263,7 +1264,7 @@ OfxRGBAInstance::set(OfxTime time,
                      double b,
                      double a)
 {
-    _knob.lock()->setValuesAtTime(std::floor(time + 0.5), r, g, b, a, Natron::eValueChangedReasonPluginEdited);
+    _knob.lock()->setValuesAtTime(std::floor(time + 0.5), r, g, b, a, eValueChangedReasonPluginEdited);
     return kOfxStatOK;
 }
 
@@ -1396,11 +1397,11 @@ OfxRGBAInstance::copyFrom(const OFX::Host::Param::Instance &instance,
 void
 OfxRGBAInstance::onKnobAnimationLevelChanged(int,int lvl)
 {
-    Natron::AnimationLevelEnum l = (Natron::AnimationLevelEnum)lvl;
+    AnimationLevelEnum l = (AnimationLevelEnum)lvl;
 
-    assert( l == Natron::eAnimationLevelNone || getCanAnimate() );
-    getProperties().setIntProperty(kOfxParamPropIsAnimating, l != Natron::eAnimationLevelNone);
-    getProperties().setIntProperty(kOfxParamPropIsAutoKeying, l == Natron::eAnimationLevelInterpolatedValue);
+    assert( l == eAnimationLevelNone || getCanAnimate() );
+    getProperties().setIntProperty(kOfxParamPropIsAnimating, l != eAnimationLevelNone);
+    getProperties().setIntProperty(kOfxParamPropIsAutoKeying, l == eAnimationLevelInterpolatedValue);
 }
 
 ////////////////////////// OfxRGBInstance /////////////////////////////////////////////////
@@ -1411,7 +1412,7 @@ OfxRGBInstance::OfxRGBInstance(OfxEffectInstance* node,
 {
     const OFX::Host::Property::Set &properties = getProperties();
 
-    boost::shared_ptr<KnobColor> color  = Natron::createKnob<KnobColor>(node, getParamLabel(this),3);
+    boost::shared_ptr<KnobColor> color  = AppManager::createKnob<KnobColor>(node, getParamLabel(this),3);
     _knob = color;
 
     double defR = properties.getDoubleProperty(kOfxParamPropDefault,0);
@@ -1476,7 +1477,7 @@ OfxRGBInstance::set(double r,
                     double g,
                     double b)
 {
-    _knob.lock()->setValues(r, g, b,  Natron::eValueChangedReasonPluginEdited);
+    _knob.lock()->setValues(r, g, b,  eValueChangedReasonPluginEdited);
     return kOfxStatOK;
 }
 
@@ -1486,7 +1487,7 @@ OfxRGBInstance::set(OfxTime time,
                     double g,
                     double b)
 {
-    _knob.lock()->setValuesAtTime(std::floor(time + 0.5), r, g, b,  Natron::eValueChangedReasonPluginEdited);
+    _knob.lock()->setValuesAtTime(std::floor(time + 0.5), r, g, b,  eValueChangedReasonPluginEdited);
     return kOfxStatOK;
 }
 
@@ -1612,11 +1613,11 @@ OfxRGBInstance::copyFrom(const OFX::Host::Param::Instance &instance,
 void
 OfxRGBInstance::onKnobAnimationLevelChanged(int,int lvl)
 {
-    Natron::AnimationLevelEnum l = (Natron::AnimationLevelEnum)lvl;
+    AnimationLevelEnum l = (AnimationLevelEnum)lvl;
 
-    assert( l == Natron::eAnimationLevelNone || getCanAnimate() );
-    getProperties().setIntProperty(kOfxParamPropIsAnimating, l != Natron::eAnimationLevelNone);
-    getProperties().setIntProperty(kOfxParamPropIsAutoKeying, l == Natron::eAnimationLevelInterpolatedValue);
+    assert( l == eAnimationLevelNone || getCanAnimate() );
+    getProperties().setIntProperty(kOfxParamPropIsAnimating, l != eAnimationLevelNone);
+    getProperties().setIntProperty(kOfxParamPropIsAutoKeying, l == eAnimationLevelInterpolatedValue);
 }
 
 ////////////////////////// OfxDouble2DInstance /////////////////////////////////////////////////
@@ -1630,7 +1631,7 @@ OfxDouble2DInstance::OfxDouble2DInstance(OfxEffectInstance* node,
     const std::string & coordSystem = getDefaultCoordinateSystem();
     const int dims = 2;
 
-    boost::shared_ptr<KnobDouble> dblKnob = Natron::createKnob<KnobDouble>(node, getParamLabel(this),dims);
+    boost::shared_ptr<KnobDouble> dblKnob = AppManager::createKnob<KnobDouble>(node, getParamLabel(this),dims);
     _knob = dblKnob;
 
     const std::string & doubleType = getDoubleType();
@@ -1638,6 +1639,11 @@ OfxDouble2DInstance::OfxDouble2DInstance(OfxEffectInstance* node,
         doubleType == kOfxParamDoubleTypeNormalisedXYAbsolute) {
         dblKnob->setValueIsNormalized(0, KnobDouble::eValueIsNormalizedX);
         dblKnob->setValueIsNormalized(1, KnobDouble::eValueIsNormalizedY);
+    }
+    // disable slider if the type is an absolute position
+    if ( (doubleType == kOfxParamDoubleTypeXYAbsolute) ||
+        ( doubleType == kOfxParamDoubleTypeNormalisedXYAbsolute) ) {
+        dblKnob->disableSlider();
     }
 
     std::vector<double> minimum(dims);
@@ -1725,7 +1731,7 @@ OfxStatus
 OfxDouble2DInstance::set(double x1,
                          double x2)
 {
-    _knob.lock()->setValues(x1, x2, Natron::eValueChangedReasonPluginEdited);
+    _knob.lock()->setValues(x1, x2, eValueChangedReasonPluginEdited);
     return kOfxStatOK;
 }
 
@@ -1735,7 +1741,7 @@ OfxDouble2DInstance::set(OfxTime time,
                          double x2)
 {
     
-    _knob.lock()->setValuesAtTime(time, x1, x2, Natron::eValueChangedReasonPluginEdited);
+    _knob.lock()->setValuesAtTime(time, x1, x2, eValueChangedReasonPluginEdited);
     return kOfxStatOK;
 }
 
@@ -1890,11 +1896,11 @@ OfxDouble2DInstance::copyFrom(const OFX::Host::Param::Instance &instance,
 void
 OfxDouble2DInstance::onKnobAnimationLevelChanged(int,int lvl)
 {
-    Natron::AnimationLevelEnum l = (Natron::AnimationLevelEnum)lvl;
+    AnimationLevelEnum l = (AnimationLevelEnum)lvl;
 
-    assert( l == Natron::eAnimationLevelNone || getCanAnimate() );
-    getProperties().setIntProperty(kOfxParamPropIsAnimating, l != Natron::eAnimationLevelNone);
-    getProperties().setIntProperty(kOfxParamPropIsAutoKeying, l == Natron::eAnimationLevelInterpolatedValue);
+    assert( l == eAnimationLevelNone || getCanAnimate() );
+    getProperties().setIntProperty(kOfxParamPropIsAnimating, l != eAnimationLevelNone);
+    getProperties().setIntProperty(kOfxParamPropIsAutoKeying, l == eAnimationLevelInterpolatedValue);
 }
 
 ////////////////////////// OfxInteger2DInstance /////////////////////////////////////////////////
@@ -1908,7 +1914,7 @@ OfxInteger2DInstance::OfxInteger2DInstance(OfxEffectInstance* node,
     const OFX::Host::Property::Set &properties = getProperties();
 
 
-    boost::shared_ptr<KnobInt> iKnob = Natron::createKnob<KnobInt>(node, getParamLabel(this), dims);
+    boost::shared_ptr<KnobInt> iKnob = AppManager::createKnob<KnobInt>(node, getParamLabel(this), dims);
     _knob = iKnob;
 
     std::vector<int> minimum(dims);
@@ -1965,7 +1971,7 @@ OfxStatus
 OfxInteger2DInstance::set(int x1,
                           int x2)
 {
-    _knob.lock()->setValues(x1, x2 , Natron::eValueChangedReasonPluginEdited);
+    _knob.lock()->setValues(x1, x2 , eValueChangedReasonPluginEdited);
     return kOfxStatOK;
 }
 
@@ -1974,7 +1980,7 @@ OfxInteger2DInstance::set(OfxTime time,
                           int x1,
                           int x2)
 {
-    _knob.lock()->setValuesAtTime(time, x1, x2 , Natron::eValueChangedReasonPluginEdited);
+    _knob.lock()->setValuesAtTime(time, x1, x2 , eValueChangedReasonPluginEdited);
     return kOfxStatOK;
 }
 
@@ -2091,11 +2097,11 @@ OfxInteger2DInstance::copyFrom(const OFX::Host::Param::Instance &instance,
 void
 OfxInteger2DInstance::onKnobAnimationLevelChanged(int,int lvl)
 {
-    Natron::AnimationLevelEnum l = (Natron::AnimationLevelEnum)lvl;
+    AnimationLevelEnum l = (AnimationLevelEnum)lvl;
 
-    assert( l == Natron::eAnimationLevelNone || getCanAnimate() );
-    getProperties().setIntProperty(kOfxParamPropIsAnimating, l != Natron::eAnimationLevelNone);
-    getProperties().setIntProperty(kOfxParamPropIsAutoKeying, l == Natron::eAnimationLevelInterpolatedValue);
+    assert( l == eAnimationLevelNone || getCanAnimate() );
+    getProperties().setIntProperty(kOfxParamPropIsAnimating, l != eAnimationLevelNone);
+    getProperties().setIntProperty(kOfxParamPropIsAutoKeying, l == eAnimationLevelInterpolatedValue);
 }
 
 ////////////////////////// OfxDouble3DInstance /////////////////////////////////////////////////
@@ -2109,7 +2115,7 @@ OfxDouble3DInstance::OfxDouble3DInstance(OfxEffectInstance* node,
     const OFX::Host::Property::Set &properties = getProperties();
 
 
-    boost::shared_ptr<KnobDouble> knob = Natron::createKnob<KnobDouble>(node, getParamLabel(this),dims);
+    boost::shared_ptr<KnobDouble> knob = AppManager::createKnob<KnobDouble>(node, getParamLabel(this),dims);
     _knob = knob;
 
     std::vector<double> minimum(dims);
@@ -2181,7 +2187,7 @@ OfxDouble3DInstance::set(double x1,
                          double x3)
 {
     
-    _knob.lock()->setValues(x1, x2 , x3, Natron::eValueChangedReasonPluginEdited);
+    _knob.lock()->setValues(x1, x2 , x3, eValueChangedReasonPluginEdited);
     return kOfxStatOK;
 }
 
@@ -2191,7 +2197,7 @@ OfxDouble3DInstance::set(OfxTime time,
                          double x2,
                          double x3)
 {
-    _knob.lock()->setValuesAtTime(time, x1, x2 , x3, Natron::eValueChangedReasonPluginEdited);
+    _knob.lock()->setValuesAtTime(time, x1, x2 , x3, eValueChangedReasonPluginEdited);
     return kOfxStatOK;
 }
 
@@ -2354,11 +2360,11 @@ OfxDouble3DInstance::copyFrom(const OFX::Host::Param::Instance &instance,
 void
 OfxDouble3DInstance::onKnobAnimationLevelChanged(int,int lvl)
 {
-    Natron::AnimationLevelEnum l = (Natron::AnimationLevelEnum)lvl;
+    AnimationLevelEnum l = (AnimationLevelEnum)lvl;
 
-    assert( l == Natron::eAnimationLevelNone || getCanAnimate() );
-    getProperties().setIntProperty(kOfxParamPropIsAnimating, l != Natron::eAnimationLevelNone);
-    getProperties().setIntProperty(kOfxParamPropIsAutoKeying, l == Natron::eAnimationLevelInterpolatedValue);
+    assert( l == eAnimationLevelNone || getCanAnimate() );
+    getProperties().setIntProperty(kOfxParamPropIsAnimating, l != eAnimationLevelNone);
+    getProperties().setIntProperty(kOfxParamPropIsAutoKeying, l == eAnimationLevelInterpolatedValue);
 }
 
 ////////////////////////// OfxInteger3DInstance /////////////////////////////////////////////////
@@ -2372,7 +2378,7 @@ OfxInteger3DInstance::OfxInteger3DInstance(OfxEffectInstance*node,
     const OFX::Host::Property::Set &properties = getProperties();
 
 
-    boost::shared_ptr<KnobInt> knob = Natron::createKnob<KnobInt>(node, getParamLabel(this), dims);
+    boost::shared_ptr<KnobInt> knob = AppManager::createKnob<KnobInt>(node, getParamLabel(this), dims);
     _knob = knob;
 
     std::vector<int> minimum(dims);
@@ -2438,7 +2444,7 @@ OfxInteger3DInstance::set(int x1,
                           int x3)
 {
    
-    _knob.lock()->setValues(x1, x2 , x3, Natron::eValueChangedReasonPluginEdited);
+    _knob.lock()->setValues(x1, x2 , x3, eValueChangedReasonPluginEdited);
     return kOfxStatOK;
 }
 
@@ -2448,7 +2454,7 @@ OfxInteger3DInstance::set(OfxTime time,
                           int x2,
                           int x3)
 {
-    _knob.lock()->setValuesAtTime(time, x1, x2 , x3, Natron::eValueChangedReasonPluginEdited);
+    _knob.lock()->setValuesAtTime(time, x1, x2 , x3, eValueChangedReasonPluginEdited);
     return kOfxStatOK;
 }
 
@@ -2569,11 +2575,11 @@ OfxInteger3DInstance::copyFrom(const OFX::Host::Param::Instance &instance,
 void
 OfxInteger3DInstance::onKnobAnimationLevelChanged(int,int lvl)
 {
-    Natron::AnimationLevelEnum l = (Natron::AnimationLevelEnum)lvl;
+    AnimationLevelEnum l = (AnimationLevelEnum)lvl;
 
-    assert( l == Natron::eAnimationLevelNone || getCanAnimate() );
-    getProperties().setIntProperty(kOfxParamPropIsAnimating, l != Natron::eAnimationLevelNone);
-    getProperties().setIntProperty(kOfxParamPropIsAutoKeying, l == Natron::eAnimationLevelInterpolatedValue);
+    assert( l == eAnimationLevelNone || getCanAnimate() );
+    getProperties().setIntProperty(kOfxParamPropIsAnimating, l != eAnimationLevelNone);
+    getProperties().setIntProperty(kOfxParamPropIsAutoKeying, l == eAnimationLevelInterpolatedValue);
 }
 
 ////////////////////////// OfxGroupInstance /////////////////////////////////////////////////
@@ -2586,7 +2592,7 @@ OfxGroupInstance::OfxGroupInstance(OfxEffectInstance* node,
     const OFX::Host::Property::Set &properties = getProperties();
     int isTab = properties.getIntProperty(kFnOfxParamPropGroupIsTab);
 
-    boost::shared_ptr<KnobGroup> group = Natron::createKnob<KnobGroup>( node, getParamLabel(this) );
+    boost::shared_ptr<KnobGroup> group = AppManager::createKnob<KnobGroup>( node, getParamLabel(this) );
     _groupKnob = group;
     int opened = properties.getIntProperty(kOfxParamPropGroupOpen);
     if (isTab) {
@@ -2639,7 +2645,7 @@ OfxPageInstance::OfxPageInstance(OfxEffectInstance* node,
     : OFX::Host::Param::PageInstance( descriptor,node->effectInstance() )
       , _pageKnob()
 {
-    _pageKnob = Natron::createKnob<KnobPage>( node, getParamLabel(this) );
+    _pageKnob = AppManager::createKnob<KnobPage>( node, getParamLabel(this) );
 }
 
 // callback which should set enabled state as appropriate
@@ -2672,15 +2678,32 @@ boost::shared_ptr<KnobI> OfxPageInstance::getKnob() const
 
 ////////////////////////// OfxStringInstance /////////////////////////////////////////////////
 
+struct OfxStringInstancePrivate
+{
+    
+    OfxEffectInstance* node;
+    boost::weak_ptr<KnobFile> fileKnob;
+    boost::weak_ptr<KnobOutputFile> outputFileKnob;
+    boost::weak_ptr<KnobString> stringKnob;
+    boost::weak_ptr<KnobPath> pathKnob;
+    boost::shared_ptr<TLSHolder<OfxParamToKnob::OfxParamTLSData> > tlsData;
+    
+    OfxStringInstancePrivate(OfxEffectInstance* node)
+    : node(node)
+    , fileKnob()
+    , outputFileKnob()
+    , stringKnob()
+    , pathKnob()
+    , tlsData(new TLSHolder<OfxParamToKnob::OfxParamTLSData>())
+    {
+        
+    }
+};
 
 OfxStringInstance::OfxStringInstance(OfxEffectInstance* node,
                                      OFX::Host::Param::Descriptor & descriptor)
     : OFX::Host::Param::StringInstance( descriptor,node->effectInstance() )
-      , _node(node)
-      , _fileKnob()
-      , _outputFileKnob()
-      , _stringKnob()
-      , _pathKnob()
+    , _imp(new OfxStringInstancePrivate(node))
 {
     const OFX::Host::Property::Set &properties = getProperties();
     std::string mode = properties.getStringProperty(kOfxParamPropStringMode);
@@ -2696,63 +2719,63 @@ OfxStringInstance::OfxStringInstance(OfxEffectInstance* node,
 
 
         if (!fileIsOutput) {
-            _fileKnob = Natron::createKnob<KnobFile>( node, getParamLabel(this) );
+            _imp->fileKnob = AppManager::createKnob<KnobFile>( node, getParamLabel(this) );
             if (fileIsImage) {
-                _fileKnob.lock()->setAsInputImage();
+                _imp->fileKnob.lock()->setAsInputImage();
             }
             if (!filePathSupportsImageSequences) {
-                _fileKnob.lock()->setAnimationEnabled(false);
+                _imp->fileKnob.lock()->setAnimationEnabled(false);
             }
         } else {
-            _outputFileKnob = Natron::createKnob<KnobOutputFile>( node, getParamLabel(this) );
+            _imp->outputFileKnob = AppManager::createKnob<KnobOutputFile>( node, getParamLabel(this) );
             if (fileIsImage) {
-                _outputFileKnob.lock()->setAsOutputImageFile();
+                _imp->outputFileKnob.lock()->setAsOutputImageFile();
             } else {
-                _outputFileKnob.lock()->turnOffSequences();
+                _imp->outputFileKnob.lock()->turnOffSequences();
             }
             if (!filePathSupportsImageSequences) {
-                _outputFileKnob.lock()->setAnimationEnabled(false);
+                _imp->outputFileKnob.lock()->setAnimationEnabled(false);
             }
         }
 
     } else if (mode == kOfxParamStringIsDirectoryPath) {
-        _pathKnob = Natron::createKnob<KnobPath>( node, getParamLabel(this) );
-        _pathKnob.lock()->setMultiPath(false);
+        _imp->pathKnob = AppManager::createKnob<KnobPath>( node, getParamLabel(this) );
+        _imp->pathKnob.lock()->setMultiPath(false);
         
     } else if ( (mode == kOfxParamStringIsSingleLine) || (mode == kOfxParamStringIsLabel) || (mode == kOfxParamStringIsMultiLine) || richText ) {
-        _stringKnob = Natron::createKnob<KnobString>( node, getParamLabel(this) );
+        _imp->stringKnob = AppManager::createKnob<KnobString>( node, getParamLabel(this) );
         if (mode == kOfxParamStringIsLabel) {
-            _stringKnob.lock()->setAllDimensionsEnabled(false);
-            _stringKnob.lock()->setAsLabel();
+            _imp->stringKnob.lock()->setAllDimensionsEnabled(false);
+            _imp->stringKnob.lock()->setAsLabel();
         }
         if ( (mode == kOfxParamStringIsMultiLine) || richText ) {
             ///only QTextArea support rich text anyway
-            _stringKnob.lock()->setUsesRichText(richText);
-            _stringKnob.lock()->setAsMultiLine();
+            _imp->stringKnob.lock()->setUsesRichText(richText);
+            _imp->stringKnob.lock()->setAsMultiLine();
         }
     }
     std::string defaultVal = properties.getStringProperty(kOfxParamPropDefault).c_str();
     if ( !defaultVal.empty() ) {
-        if (_fileKnob.lock()) {
+        if (_imp->fileKnob.lock()) {
             projectEnvVar_setProxy(defaultVal);
-            boost::shared_ptr<KnobFile> k = _fileKnob.lock();
+            boost::shared_ptr<KnobFile> k = _imp->fileKnob.lock();
             k->blockValueChanges();
             k->setDefaultValue(defaultVal,0);
             k->unblockValueChanges();
-        } else if (_outputFileKnob.lock()) {
+        } else if (_imp->outputFileKnob.lock()) {
             projectEnvVar_setProxy(defaultVal);
-            boost::shared_ptr<KnobOutputFile> k = _outputFileKnob.lock();
+            boost::shared_ptr<KnobOutputFile> k = _imp->outputFileKnob.lock();
             k->blockValueChanges();
             k->setDefaultValue(defaultVal,0);
             k->unblockValueChanges();
-        } else if (_stringKnob.lock()) {
-            boost::shared_ptr<KnobString> k = _stringKnob.lock();
+        } else if (_imp->stringKnob.lock()) {
+            boost::shared_ptr<KnobString> k = _imp->stringKnob.lock();
             k->blockValueChanges();
             k->setDefaultValue(defaultVal,0);
             k->unblockValueChanges();
-        } else if (_pathKnob.lock()) {
+        } else if (_imp->pathKnob.lock()) {
             projectEnvVar_setProxy(defaultVal);
-            boost::shared_ptr<KnobPath> k = _pathKnob.lock();
+            boost::shared_ptr<KnobPath> k = _imp->pathKnob.lock();
             k->blockValueChanges();
             k->setDefaultValue(defaultVal,0);
             k->unblockValueChanges();
@@ -2761,34 +2784,39 @@ OfxStringInstance::OfxStringInstance(OfxEffectInstance* node,
 }
 
 
+OfxStringInstance::~OfxStringInstance()
+{
+    
+}
+
 void
 OfxStringInstance::projectEnvVar_getProxy(std::string& str) const
 {
-    _node->getApp()->getProject()->canonicalizePath(str);
+    _imp->node->getApp()->getProject()->canonicalizePath(str);
 }
 
 void
 OfxStringInstance::projectEnvVar_setProxy(std::string& str) const
 {
-    _node->getApp()->getProject()->simplifyPath(str);
+    _imp->node->getApp()->getProject()->simplifyPath(str);
    
 }
 
 OfxStatus
 OfxStringInstance::get(std::string &str)
 {
-    assert( _node->effectInstance() );
-    int currentFrame = _node->getApp()->getTimeLine()->currentFrame();
-    if (_fileKnob.lock()) {
-        str = _fileKnob.lock()->getFileName(currentFrame);
+    assert( _imp->node->effectInstance() );
+    int currentFrame = _imp->node->getApp()->getTimeLine()->currentFrame();
+    if (_imp->fileKnob.lock()) {
+        str = _imp->fileKnob.lock()->getFileName(currentFrame);
         projectEnvVar_getProxy(str);
-    } else if (_outputFileKnob.lock()) {
-        str = _outputFileKnob.lock()->generateFileNameAtTime(currentFrame).toStdString();
+    } else if (_imp->outputFileKnob.lock()) {
+        str = _imp->outputFileKnob.lock()->generateFileNameAtTime(currentFrame).toStdString();
         projectEnvVar_getProxy(str);
-    } else if (_stringKnob.lock()) {
-        str = _stringKnob.lock()->getValueAtTime(currentFrame,0);
-    } else if (_pathKnob.lock()) {
-        str = _pathKnob.lock()->getValue();
+    } else if (_imp->stringKnob.lock()) {
+        str = _imp->stringKnob.lock()->getValueAtTime(currentFrame,0);
+    } else if (_imp->pathKnob.lock()) {
+        str = _imp->pathKnob.lock()->getValue();
         projectEnvVar_getProxy(str);
     }
 
@@ -2799,17 +2827,17 @@ OfxStatus
 OfxStringInstance::get(OfxTime time,
                        std::string & str)
 {
-    assert( _node->effectInstance() );
-    if (_fileKnob.lock()) {
-        str = _fileKnob.lock()->getFileName(std::floor(time + 0.5));
+    assert( _imp->node->effectInstance() );
+    if (_imp->fileKnob.lock()) {
+        str = _imp->fileKnob.lock()->getFileName(std::floor(time + 0.5));
         projectEnvVar_getProxy(str);
-    } else if (_outputFileKnob.lock()) {
-        str = _outputFileKnob.lock()->generateFileNameAtTime(time).toStdString();
+    } else if (_imp->outputFileKnob.lock()) {
+        str = _imp->outputFileKnob.lock()->generateFileNameAtTime(time).toStdString();
         projectEnvVar_getProxy(str);
-    } else if (_stringKnob.lock()) {
-        str = _stringKnob.lock()->getValueAtTime(std::floor(time + 0.5), 0);
-    } else if (_pathKnob.lock()) {
-        str = _pathKnob.lock()->getValue();
+    } else if (_imp->stringKnob.lock()) {
+        str = _imp->stringKnob.lock()->getValueAtTime(std::floor(time + 0.5), 0);
+    } else if (_imp->pathKnob.lock()) {
+        str = _imp->pathKnob.lock()->getValue();
         projectEnvVar_getProxy(str);
     }
 
@@ -2819,23 +2847,23 @@ OfxStringInstance::get(OfxTime time,
 OfxStatus
 OfxStringInstance::set(const char* str)
 {
-    if (_fileKnob.lock()) {
+    if (_imp->fileKnob.lock()) {
         std::string s(str);
         projectEnvVar_setProxy(s);
-        _fileKnob.lock()->setValueFromPlugin(s,0);
+        _imp->fileKnob.lock()->setValueFromPlugin(s,0);
     }
-    if (_outputFileKnob.lock()) {
+    if (_imp->outputFileKnob.lock()) {
         std::string s(str);
         projectEnvVar_setProxy(s);
-        _outputFileKnob.lock()->setValueFromPlugin(s,0);
+        _imp->outputFileKnob.lock()->setValueFromPlugin(s,0);
     }
-    if (_stringKnob.lock()) {
-        _stringKnob.lock()->setValueFromPlugin(str,0);
+    if (_imp->stringKnob.lock()) {
+        _imp->stringKnob.lock()->setValueFromPlugin(str,0);
     }
-    if (_pathKnob.lock()) {
+    if (_imp->pathKnob.lock()) {
         std::string s(str);
         projectEnvVar_setProxy(s);
-        _pathKnob.lock()->setValueFromPlugin(s,0);
+        _imp->pathKnob.lock()->setValueFromPlugin(s,0);
     }
 
     return kOfxStatOK;
@@ -2847,23 +2875,23 @@ OfxStringInstance::set(OfxTime time,
 {
 
     assert( KnobString::canAnimateStatic() );
-    if (_fileKnob.lock()) {
+    if (_imp->fileKnob.lock()) {
         std::string s(str);
         projectEnvVar_setProxy(s);
-        _fileKnob.lock()->setValueAtTimeFromPlugin(time,s,0);
+        _imp->fileKnob.lock()->setValueAtTimeFromPlugin(time,s,0);
     }
-    if (_outputFileKnob.lock()) {
+    if (_imp->outputFileKnob.lock()) {
         std::string s(str);
         projectEnvVar_setProxy(s);
-        _outputFileKnob.lock()->setValueAtTimeFromPlugin(time,s,0);
+        _imp->outputFileKnob.lock()->setValueAtTimeFromPlugin(time,s,0);
     }
-    if (_stringKnob.lock()) {
-        _stringKnob.lock()->setValueAtTimeFromPlugin( (int)time,str,0 );
+    if (_imp->stringKnob.lock()) {
+        _imp->stringKnob.lock()->setValueAtTimeFromPlugin( (int)time,str,0 );
     }
-    if (_pathKnob.lock()) {
+    if (_imp->pathKnob.lock()) {
         std::string s(str);
         projectEnvVar_setProxy(s);
-        _pathKnob.lock()->setValueAtTimeFromPlugin(time,s,0);
+        _imp->pathKnob.lock()->setValueAtTimeFromPlugin(time,s,0);
     }
 
     return kOfxStatOK;
@@ -2875,7 +2903,7 @@ OfxStringInstance::getV(va_list arg)
     const char **value = va_arg(arg, const char **);
     OfxStatus stat;
 
-    std::string& tls = _localString.localData();
+    std::string& tls = _imp->tlsData->getOrCreateTLSData()->str;
     stat = get(tls);
 
     *value = tls.c_str();
@@ -2889,8 +2917,7 @@ OfxStringInstance::getV(OfxTime time,
 {
     const char **value = va_arg(arg, const char **);
     OfxStatus stat;
-
-    std::string& tls = _localString.localData();
+    std::string& tls = _imp->tlsData->getOrCreateTLSData()->str;
     stat = get( time,tls);
     *value = tls.c_str();
 
@@ -2900,17 +2927,17 @@ OfxStringInstance::getV(OfxTime time,
 boost::shared_ptr<KnobI>
 OfxStringInstance::getKnob() const
 {
-    if (_fileKnob.lock()) {
-        return _fileKnob.lock();
+    if (_imp->fileKnob.lock()) {
+        return _imp->fileKnob.lock();
     }
-    if (_outputFileKnob.lock()) {
-        return _outputFileKnob.lock();
+    if (_imp->outputFileKnob.lock()) {
+        return _imp->outputFileKnob.lock();
     }
-    if (_stringKnob.lock()) {
-        return _stringKnob.lock();
+    if (_imp->stringKnob.lock()) {
+        return _imp->stringKnob.lock();
     }
-    if (_pathKnob.lock()) {
-        return _pathKnob.lock();
+    if (_imp->pathKnob.lock()) {
+        return _imp->pathKnob.lock();
     }
 
     return boost::shared_ptr<KnobI>();
@@ -2921,17 +2948,17 @@ void
 OfxStringInstance::setEnabled()
 {
     SET_DYNAMIC_PROPERTY_EDITED();
-    if (_fileKnob.lock()) {
-        _fileKnob.lock()->setAllDimensionsEnabled( getEnabled() );
+    if (_imp->fileKnob.lock()) {
+        _imp->fileKnob.lock()->setAllDimensionsEnabled( getEnabled() );
     }
-    if (_outputFileKnob.lock()) {
-        _outputFileKnob.lock()->setAllDimensionsEnabled( getEnabled() );
+    if (_imp->outputFileKnob.lock()) {
+        _imp->outputFileKnob.lock()->setAllDimensionsEnabled( getEnabled() );
     }
-    if (_stringKnob.lock()) {
-        _stringKnob.lock()->setAllDimensionsEnabled( getEnabled() );
+    if (_imp->stringKnob.lock()) {
+        _imp->stringKnob.lock()->setAllDimensionsEnabled( getEnabled() );
     }
-    if (_pathKnob.lock()) {
-        _pathKnob.lock()->setAllDimensionsEnabled( getEnabled() );
+    if (_imp->pathKnob.lock()) {
+        _imp->pathKnob.lock()->setAllDimensionsEnabled( getEnabled() );
     }
 }
 
@@ -2939,17 +2966,17 @@ void
 OfxStringInstance::setLabel()
 {
     SET_DYNAMIC_PROPERTY_EDITED();
-    if (_fileKnob.lock()) {
-        _fileKnob.lock()->setLabel(getParamLabel(this));
+    if (_imp->fileKnob.lock()) {
+        _imp->fileKnob.lock()->setLabel(getParamLabel(this));
     }
-    if (_outputFileKnob.lock()) {
-        _outputFileKnob.lock()->setLabel(getParamLabel(this));
+    if (_imp->outputFileKnob.lock()) {
+        _imp->outputFileKnob.lock()->setLabel(getParamLabel(this));
     }
-    if (_stringKnob.lock()) {
-        _stringKnob.lock()->setLabel(getParamLabel(this));
+    if (_imp->stringKnob.lock()) {
+        _imp->stringKnob.lock()->setLabel(getParamLabel(this));
     }
-    if (_pathKnob.lock()) {
-        _pathKnob.lock()->setLabel(getParamLabel(this));
+    if (_imp->pathKnob.lock()) {
+        _imp->pathKnob.lock()->setLabel(getParamLabel(this));
     }
 }
 
@@ -2958,17 +2985,17 @@ void
 OfxStringInstance::setSecret()
 {
     SET_DYNAMIC_PROPERTY_EDITED();
-    if (_fileKnob.lock()) {
-        _fileKnob.lock()->setSecret( getSecret() );
+    if (_imp->fileKnob.lock()) {
+        _imp->fileKnob.lock()->setSecret( getSecret() );
     }
-    if (_outputFileKnob.lock()) {
-        _outputFileKnob.lock()->setSecret( getSecret() );
+    if (_imp->outputFileKnob.lock()) {
+        _imp->outputFileKnob.lock()->setSecret( getSecret() );
     }
-    if (_stringKnob.lock()) {
-        _stringKnob.lock()->setSecret( getSecret() );
+    if (_imp->stringKnob.lock()) {
+        _imp->stringKnob.lock()->setSecret( getSecret() );
     }
-    if (_pathKnob.lock()) {
-        _pathKnob.lock()->setSecret( getSecret() );
+    if (_imp->pathKnob.lock()) {
+        _imp->pathKnob.lock()->setSecret( getSecret() );
     }
 }
 
@@ -2976,17 +3003,17 @@ void
 OfxStringInstance::setEvaluateOnChange()
 {
     SET_DYNAMIC_PROPERTY_EDITED();
-    if (_fileKnob.lock()) {
-        _fileKnob.lock()->setEvaluateOnChange( getEvaluateOnChange() );
+    if (_imp->fileKnob.lock()) {
+        _imp->fileKnob.lock()->setEvaluateOnChange( getEvaluateOnChange() );
     }
-    if (_outputFileKnob.lock()) {
-        _outputFileKnob.lock()->setEvaluateOnChange( getEvaluateOnChange() );
+    if (_imp->outputFileKnob.lock()) {
+        _imp->outputFileKnob.lock()->setEvaluateOnChange( getEvaluateOnChange() );
     }
-    if (_stringKnob.lock()) {
-        _stringKnob.lock()->setEvaluateOnChange( getEvaluateOnChange() );
+    if (_imp->stringKnob.lock()) {
+        _imp->stringKnob.lock()->setEvaluateOnChange( getEvaluateOnChange() );
     }
-    if (_pathKnob.lock()) {
-        _pathKnob.lock()->setEvaluateOnChange( getEvaluateOnChange() );
+    if (_imp->pathKnob.lock()) {
+        _imp->pathKnob.lock()->setEvaluateOnChange( getEvaluateOnChange() );
     }
 }
 
@@ -2995,10 +3022,10 @@ OfxStringInstance::getNumKeys(unsigned int &nKeys) const
 {
     boost::shared_ptr<KnobI> knob;
 
-    if (_stringKnob.lock()) {
-        knob = boost::dynamic_pointer_cast<KnobI>(_stringKnob.lock());
-    } else if (_fileKnob.lock()) {
-        knob = boost::dynamic_pointer_cast<KnobI>(_fileKnob.lock());
+    if (_imp->stringKnob.lock()) {
+        knob = boost::dynamic_pointer_cast<KnobI>(_imp->stringKnob.lock());
+    } else if (_imp->fileKnob.lock()) {
+        knob = boost::dynamic_pointer_cast<KnobI>(_imp->fileKnob.lock());
     } else {
         return nKeys = 0;
     }
@@ -3012,10 +3039,10 @@ OfxStringInstance::getKeyTime(int nth,
 {
     boost::shared_ptr<KnobI> knob;
 
-    if (_stringKnob.lock()) {
-        knob = boost::dynamic_pointer_cast<KnobI>(_stringKnob.lock());
-    } else if (_fileKnob.lock()) {
-        knob = boost::dynamic_pointer_cast<KnobI>(_fileKnob.lock());
+    if (_imp->stringKnob.lock()) {
+        knob = boost::dynamic_pointer_cast<KnobI>(_imp->stringKnob.lock());
+    } else if (_imp->fileKnob.lock()) {
+        knob = boost::dynamic_pointer_cast<KnobI>(_imp->fileKnob.lock());
     } else {
         return kOfxStatErrBadIndex;
     }
@@ -3030,10 +3057,10 @@ OfxStringInstance::getKeyIndex(OfxTime time,
 {
     boost::shared_ptr<KnobI> knob;
 
-    if (_stringKnob.lock()) {
-        knob = boost::dynamic_pointer_cast<KnobI>(_stringKnob.lock());
-    } else if (_fileKnob.lock()) {
-        knob = boost::dynamic_pointer_cast<KnobI>(_fileKnob.lock());
+    if (_imp->stringKnob.lock()) {
+        knob = boost::dynamic_pointer_cast<KnobI>(_imp->stringKnob.lock());
+    } else if (_imp->fileKnob.lock()) {
+        knob = boost::dynamic_pointer_cast<KnobI>(_imp->fileKnob.lock());
     } else {
         return kOfxStatFailed;
     }
@@ -3046,10 +3073,10 @@ OfxStringInstance::deleteKey(OfxTime time)
 {
     boost::shared_ptr<KnobI> knob;
 
-    if (_stringKnob.lock()) {
-        knob = boost::dynamic_pointer_cast<KnobI>(_stringKnob.lock());
-    } else if (_fileKnob.lock()) {
-        knob = boost::dynamic_pointer_cast<KnobI>(_fileKnob.lock());
+    if (_imp->stringKnob.lock()) {
+        knob = boost::dynamic_pointer_cast<KnobI>(_imp->stringKnob.lock());
+    } else if (_imp->fileKnob.lock()) {
+        knob = boost::dynamic_pointer_cast<KnobI>(_imp->fileKnob.lock());
     } else {
         return kOfxStatErrBadIndex;
     }
@@ -3062,10 +3089,10 @@ OfxStringInstance::deleteAllKeys()
 {
     boost::shared_ptr<KnobI> knob;
 
-    if (_stringKnob.lock()) {
-        knob = boost::dynamic_pointer_cast<KnobI>(_stringKnob.lock());
-    } else if (_fileKnob.lock()) {
-        knob = boost::dynamic_pointer_cast<KnobI>(_fileKnob.lock());
+    if (_imp->stringKnob.lock()) {
+        knob = boost::dynamic_pointer_cast<KnobI>(_imp->stringKnob.lock());
+    } else if (_imp->fileKnob.lock()) {
+        knob = boost::dynamic_pointer_cast<KnobI>(_imp->fileKnob.lock());
     } else {
         return kOfxStatOK;
     }
@@ -3086,13 +3113,13 @@ OfxStringInstance::copyFrom(const OFX::Host::Param::Instance &instance,
 void
 OfxStringInstance::onKnobAnimationLevelChanged(int,int lvl)
 {
-    Natron::AnimationLevelEnum l = (Natron::AnimationLevelEnum)lvl;
+    AnimationLevelEnum l = (AnimationLevelEnum)lvl;
 
     ///This assert might crash Natron when reading a project made with a version
     ///of Natron prior to 0.96 when file params still had keyframes.
-    //assert(l == Natron::eAnimationLevelNone || getCanAnimate());
-    getProperties().setIntProperty(kOfxParamPropIsAnimating, l != Natron::eAnimationLevelNone);
-    getProperties().setIntProperty(kOfxParamPropIsAutoKeying, l == Natron::eAnimationLevelInterpolatedValue);
+    //assert(l == eAnimationLevelNone || getCanAnimate());
+    getProperties().setIntProperty(kOfxParamPropIsAnimating, l != eAnimationLevelNone);
+    getProperties().setIntProperty(kOfxParamPropIsAutoKeying, l == eAnimationLevelInterpolatedValue);
 }
 
 ////////////////////////// OfxCustomInstance /////////////////////////////////////////////////
@@ -3113,36 +3140,56 @@ OfxStringInstance::onKnobAnimationLevelChanged(int,int lvl)
    Custom parameters are mandatory, as they are simply ASCII C strings. However, animation of custom parameters an support for an in editor interact is optional.
  */
 
+struct OfxCustomInstancePrivate
+{
+    
+    OfxEffectInstance* node;
+    boost::weak_ptr<KnobString> knob;
+    OfxCustomInstance::customParamInterpolationV1Entry_t customParamInterpolationV1Entry;
+    boost::shared_ptr<TLSHolder<OfxParamToKnob::OfxParamTLSData> > tlsData;
+
+    OfxCustomInstancePrivate(OfxEffectInstance* node)
+    : node(node)
+    , knob()
+    , customParamInterpolationV1Entry(0)
+    , tlsData(new TLSHolder<OfxParamToKnob::OfxParamTLSData>())
+    {
+        
+    }
+};
+
 
 OfxCustomInstance::OfxCustomInstance(OfxEffectInstance* node,
                                      OFX::Host::Param::Descriptor & descriptor)
     : OFX::Host::Param::CustomInstance( descriptor,node->effectInstance() )
-      , _node(node)
-      , _knob()
-      , _customParamInterpolationV1Entry(0)
+    , _imp(new OfxCustomInstancePrivate(node))
 {
     const OFX::Host::Property::Set &properties = getProperties();
 
 
-    boost::shared_ptr<KnobString> knob = Natron::createKnob<KnobString>( node, getParamLabel(this) );
-    _knob = knob;
+    boost::shared_ptr<KnobString> knob = AppManager::createKnob<KnobString>( node, getParamLabel(this) );
+    _imp->knob = knob;
 
     knob->setAsCustom();
     knob->blockValueChanges();
     knob->setDefaultValue(properties.getStringProperty(kOfxParamPropDefault),0);
     knob->unblockValueChanges();
-    _customParamInterpolationV1Entry = (customParamInterpolationV1Entry_t)properties.getPointerProperty(kOfxParamPropCustomInterpCallbackV1);
-    if (_customParamInterpolationV1Entry) {
-        knob->setCustomInterpolation( _customParamInterpolationV1Entry, (void*)getHandle() );
+    _imp->customParamInterpolationV1Entry = (customParamInterpolationV1Entry_t)properties.getPointerProperty(kOfxParamPropCustomInterpCallbackV1);
+    if (_imp->customParamInterpolationV1Entry) {
+        knob->setCustomInterpolation( _imp->customParamInterpolationV1Entry, (void*)getHandle() );
     }
+}
+
+OfxCustomInstance::~OfxCustomInstance()
+{
 }
 
 OfxStatus
 OfxCustomInstance::get(std::string &str)
 {
-    assert( _node->effectInstance() );
-    int currentFrame = (int)_node->effectInstance()->timeLineGetTime();
-    str = _knob.lock()->getValueAtTime(currentFrame, 0);
+    assert( _imp->node->effectInstance() );
+    int currentFrame = (int)_imp->node->effectInstance()->timeLineGetTime();
+    str = _imp->knob.lock()->getValueAtTime(currentFrame, 0);
 
     return kOfxStatOK;
 }
@@ -3153,8 +3200,8 @@ OfxCustomInstance::get(OfxTime time,
 {
     assert( KnobString::canAnimateStatic() );
     // it should call _customParamInterpolationV1Entry
-    assert( _node->effectInstance() );
-    str = _knob.lock()->getValueAtTime(time, 0);
+    assert( _imp->node->effectInstance() );
+    str = _imp->knob.lock()->getValueAtTime(time, 0);
 
     return kOfxStatOK;
 }
@@ -3162,7 +3209,7 @@ OfxCustomInstance::get(OfxTime time,
 OfxStatus
 OfxCustomInstance::set(const char* str)
 {
-    _knob.lock()->setValueFromPlugin(str,0);
+    _imp->knob.lock()->setValueFromPlugin(str,0);
 
     return kOfxStatOK;
 }
@@ -3173,7 +3220,7 @@ OfxCustomInstance::set(OfxTime time,
 {
 
     assert( KnobString::canAnimateStatic() );
-    _knob.lock()->setValueAtTimeFromPlugin(time,str,0);
+    _imp->knob.lock()->setValueAtTimeFromPlugin(time,str,0);
 
     return kOfxStatOK;
 }
@@ -3182,10 +3229,9 @@ OfxStatus
 OfxCustomInstance::getV(va_list arg)
 {
     const char **value = va_arg(arg, const char **);
-    OfxStatus stat = get( _localString.localData() );
-
-    *value = _localString.localData().c_str();
-
+    std::string& s = _imp->tlsData->getOrCreateTLSData()->str;
+    OfxStatus stat = get(s);
+    *value = s.c_str();
     return stat;
 }
 
@@ -3194,16 +3240,17 @@ OfxCustomInstance::getV(OfxTime time,
                         va_list arg)
 {
     const char **value = va_arg(arg, const char **);
-    OfxStatus stat = get( time,_localString.localData() );
-
-    *value = _localString.localData().c_str();
+    
+    std::string& s = _imp->tlsData->getOrCreateTLSData()->str;
+    OfxStatus stat = get( time, s);
+    *value = s.c_str();
 
     return stat;
 }
 
 boost::shared_ptr<KnobI> OfxCustomInstance::getKnob() const
 {
-    return _knob.lock();
+    return _imp->knob.lock();
 }
 
 // callback which should set enabled state as appropriate
@@ -3211,7 +3258,7 @@ void
 OfxCustomInstance::setEnabled()
 {
     SET_DYNAMIC_PROPERTY_EDITED();
-    _knob.lock()->setAllDimensionsEnabled( getEnabled() );
+    _imp->knob.lock()->setAllDimensionsEnabled( getEnabled() );
 }
 
 // callback which should set secret state as appropriate
@@ -3219,34 +3266,34 @@ void
 OfxCustomInstance::setSecret()
 {
     SET_DYNAMIC_PROPERTY_EDITED();
-    _knob.lock()->setSecret( getSecret() );
+    _imp->knob.lock()->setSecret( getSecret() );
 }
 
 void
 OfxCustomInstance::setLabel()
 {
     SET_DYNAMIC_PROPERTY_EDITED();
-    _knob.lock()->setLabel(getParamLabel(this));
+    _imp->knob.lock()->setLabel(getParamLabel(this));
 }
 
 void
 OfxCustomInstance::setEvaluateOnChange()
 {
     SET_DYNAMIC_PROPERTY_EDITED();
-    _knob.lock()->setEvaluateOnChange( getEvaluateOnChange() );
+    _imp->knob.lock()->setEvaluateOnChange( getEvaluateOnChange() );
 }
 
 OfxStatus
 OfxCustomInstance::getNumKeys(unsigned int &nKeys) const
 {
-    return OfxKeyFrame::getNumKeys(_knob.lock().get(), nKeys);
+    return OfxKeyFrame::getNumKeys(_imp->knob.lock().get(), nKeys);
 }
 
 OfxStatus
 OfxCustomInstance::getKeyTime(int nth,
                               OfxTime & time) const
 {
-    return OfxKeyFrame::getKeyTime(_knob.lock(), nth, time);
+    return OfxKeyFrame::getKeyTime(_imp->knob.lock(), nth, time);
 }
 
 OfxStatus
@@ -3254,19 +3301,19 @@ OfxCustomInstance::getKeyIndex(OfxTime time,
                                int direction,
                                int & index) const
 {
-    return OfxKeyFrame::getKeyIndex(_knob.lock(), time, direction, index);
+    return OfxKeyFrame::getKeyIndex(_imp->knob.lock(), time, direction, index);
 }
 
 OfxStatus
 OfxCustomInstance::deleteKey(OfxTime time)
 {
-    return OfxKeyFrame::deleteKey(_knob.lock(), time);
+    return OfxKeyFrame::deleteKey(_imp->knob.lock(), time);
 }
 
 OfxStatus
 OfxCustomInstance::deleteAllKeys()
 {
-    return OfxKeyFrame::deleteAllKeys(_knob.lock());
+    return OfxKeyFrame::deleteAllKeys(_imp->knob.lock());
 }
 
 OfxStatus
@@ -3282,11 +3329,11 @@ OfxCustomInstance::copyFrom(const OFX::Host::Param::Instance &instance,
 void
 OfxCustomInstance::onKnobAnimationLevelChanged(int,int lvl)
 {
-    Natron::AnimationLevelEnum l = (Natron::AnimationLevelEnum)lvl;
+    AnimationLevelEnum l = (AnimationLevelEnum)lvl;
 
-    assert( l == Natron::eAnimationLevelNone || getCanAnimate() );
-    getProperties().setIntProperty(kOfxParamPropIsAnimating, l != Natron::eAnimationLevelNone);
-    getProperties().setIntProperty(kOfxParamPropIsAutoKeying, l == Natron::eAnimationLevelInterpolatedValue);
+    assert( l == eAnimationLevelNone || getCanAnimate() );
+    getProperties().setIntProperty(kOfxParamPropIsAnimating, l != eAnimationLevelNone);
+    getProperties().setIntProperty(kOfxParamPropIsAutoKeying, l == eAnimationLevelInterpolatedValue);
 }
 
 ////////////////////////// OfxParametricInstance /////////////////////////////////////////////////
@@ -3302,7 +3349,7 @@ OfxParametricInstance::OfxParametricInstance(OfxEffectInstance* node,
     int parametricDimension = properties.getIntProperty(kOfxParamPropParametricDimension);
 
 
-    boost::shared_ptr<KnobParametric> knob = Natron::createKnob<KnobParametric>(node, getParamLabel(this),parametricDimension);
+    boost::shared_ptr<KnobParametric> knob = AppManager::createKnob<KnobParametric>(node, getParamLabel(this),parametricDimension);
     _knob = knob;
 
     setLabel(); //set label on all curves
@@ -3330,7 +3377,7 @@ OfxParametricInstance::initializeInteract(OverlaySupport* widget)
     OfxPluginEntryPoint* interactEntryPoint = (OfxPluginEntryPoint*)getProperties().getPointerProperty(kOfxParamPropParametricInteractBackground);
 
     if (interactEntryPoint) {
-        _overlayInteract = new Natron::OfxOverlayInteract( ( *_effect->effectInstance() ),8,true );
+        _overlayInteract = new OfxOverlayInteract( ( *_effect->effectInstance() ),8,true );
         _overlayInteract->setCallingViewport(widget);
         _overlayInteract->createInstanceAction();
         QObject::connect( _knob.lock().get(), SIGNAL( customBackgroundRequested() ), this, SLOT( onCustomBackgroundDrawingRequested() ) );
@@ -3400,9 +3447,9 @@ OfxParametricInstance::getValue(int curveIndex,
                                 double parametricPosition,
                                 double *returnValue)
 {
-    Natron::StatusEnum stat = _knob.lock()->getValue(curveIndex, parametricPosition, returnValue);
+    StatusEnum stat = _knob.lock()->getValue(curveIndex, parametricPosition, returnValue);
 
-    if (stat == Natron::eStatusOK) {
+    if (stat == eStatusOK) {
         return kOfxStatOK;
     } else {
         return kOfxStatFailed;
@@ -3414,9 +3461,9 @@ OfxParametricInstance::getNControlPoints(int curveIndex,
                                          double /*time*/,
                                          int *returnValue)
 {
-    Natron::StatusEnum stat = _knob.lock()->getNControlPoints(curveIndex, returnValue);
+    StatusEnum stat = _knob.lock()->getNControlPoints(curveIndex, returnValue);
 
-    if (stat == Natron::eStatusOK) {
+    if (stat == eStatusOK) {
         return kOfxStatOK;
     } else {
         return kOfxStatFailed;
@@ -3430,9 +3477,9 @@ OfxParametricInstance::getNthControlPoint(int curveIndex,
                                           double *key,
                                           double *value)
 {
-    Natron::StatusEnum stat = _knob.lock()->getNthControlPoint(curveIndex, nthCtl, key, value);
+    StatusEnum stat = _knob.lock()->getNthControlPoint(curveIndex, nthCtl, key, value);
 
-    if (stat == Natron::eStatusOK) {
+    if (stat == eStatusOK) {
         return kOfxStatOK;
     } else {
         return kOfxStatFailed;
@@ -3447,9 +3494,9 @@ OfxParametricInstance::setNthControlPoint(int curveIndex,
                                           double value,
                                           bool /*addAnimationKey*/)
 {
-    Natron::StatusEnum stat = _knob.lock()->setNthControlPoint(curveIndex, nthCtl, key, value);
+    StatusEnum stat = _knob.lock()->setNthControlPoint(curveIndex, nthCtl, key, value);
 
-    if (stat == Natron::eStatusOK) {
+    if (stat == eStatusOK) {
         return kOfxStatOK;
     } else {
         return kOfxStatFailed;
@@ -3472,14 +3519,14 @@ OfxParametricInstance::addControlPoint(int curveIndex,
         return kOfxStatFailed;
     }
     
-    Natron::StatusEnum stat;
+    StatusEnum stat;
     if (_effect->getPluginID() == PLUGINID_OFX_COLORCORRECT) {
         stat = _knob.lock()->addHorizontalControlPoint(curveIndex, key, value);
     } else {
         stat = _knob.lock()->addControlPoint(curveIndex, key, value);
     }
 
-    if (stat == Natron::eStatusOK) {
+    if (stat == eStatusOK) {
         return kOfxStatOK;
     } else {
         return kOfxStatFailed;
@@ -3490,9 +3537,9 @@ OfxStatus
 OfxParametricInstance::deleteControlPoint(int curveIndex,
                                           int nthCtl)
 {
-    Natron::StatusEnum stat = _knob.lock()->deleteControlPoint(curveIndex, nthCtl);
+    StatusEnum stat = _knob.lock()->deleteControlPoint(curveIndex, nthCtl);
 
-    if (stat == Natron::eStatusOK) {
+    if (stat == eStatusOK) {
         return kOfxStatOK;
     } else {
         return kOfxStatFailed;
@@ -3502,9 +3549,9 @@ OfxParametricInstance::deleteControlPoint(int curveIndex,
 OfxStatus
 OfxParametricInstance::deleteAllControlPoints(int curveIndex)
 {
-    Natron::StatusEnum stat = _knob.lock()->deleteAllControlPoints(curveIndex);
+    StatusEnum stat = _knob.lock()->deleteAllControlPoints(curveIndex);
 
-    if (stat == Natron::eStatusOK) {
+    if (stat == eStatusOK) {
         return kOfxStatOK;
     } else {
         return kOfxStatFailed;
@@ -3515,9 +3562,9 @@ void
 OfxParametricInstance::onCustomBackgroundDrawingRequested()
 {
     if (_overlayInteract) {
-        RenderScale s;
-        _overlayInteract->getPixelScale(s.x, s.y);
-        _overlayInteract->drawAction(_effect->getApp()->getTimeLine()->currentFrame(), s);
+        double sx, sy;
+        _overlayInteract->getPixelScale(sx, sy);
+        _overlayInteract->drawAction(_effect->getApp()->getTimeLine()->currentFrame(), RenderScale(sx, sy), /*view=*/0);
     }
 }
 
@@ -3531,3 +3578,7 @@ OfxParametricInstance::copyFrom(const OFX::Host::Param::Instance &instance,
     return OfxKeyFrame::copyFrom(other.getKnob(), getKnob(), offset, range);
 }
 
+NATRON_NAMESPACE_EXIT;
+
+NATRON_NAMESPACE_USING;
+#include "moc_OfxParamInstance.cpp"

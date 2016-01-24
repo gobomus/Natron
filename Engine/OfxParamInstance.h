@@ -1,6 +1,6 @@
 /* ***** BEGIN LICENSE BLOCK *****
  * This file is part of Natron <http://www.natron.fr/>,
- * Copyright (C) 2015 INRIA and Alexandre Gauthier-Foichat
+ * Copyright (C) 2016 INRIA and Alexandre Gauthier-Foichat
  *
  * Natron is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -31,14 +31,13 @@
 #include <vector>
 #if !defined(Q_MOC_RUN) && !defined(SBK_RUN)
 #include <boost/shared_ptr.hpp>
+#include <boost/scoped_ptr.hpp>
 #include <boost/weak_ptr.hpp>
 #endif
 CLANG_DIAG_OFF(deprecated)
 #include <QStringList>
 #include <QMutex>
 CLANG_DIAG_ON(deprecated)
-
-#include "Engine/ThreadStorage.h"
 
 
 #include "Global/GlobalDefines.h"
@@ -53,6 +52,7 @@ CLANG_DIAG_ON(unknown-pragmas)
 #include "ofxhParametricParam.h"
 #include "Engine/EngineFwd.h"
 
+NATRON_NAMESPACE_ENTER;
 
 /*This file contains the classes that connect the knobs to the OpenFX params.
    Note that all the get(...) and set(...) functions are called BY PLUGIN and you should
@@ -107,6 +107,13 @@ public:
     
     
     void connectDynamicProperties();
+    
+    //these are per ofxparam thread-local data
+    struct OfxParamTLSData
+    {
+        //only for string-param for now
+        std::string str;
+    };
 
 public Q_SLOTS:
     
@@ -728,6 +735,7 @@ private:
 };
 
 
+struct OfxStringInstancePrivate;
 class OfxStringInstance
     : public OfxParamToKnob, public OFX::Host::Param::StringInstance
 {
@@ -739,6 +747,8 @@ public:
     OfxStringInstance(OfxEffectInstance* node,
                       OFX::Host::Param::Descriptor & descriptor);
 
+    virtual ~OfxStringInstance();
+    
     virtual OfxStatus get(std::string &) OVERRIDE FINAL;
     virtual OfxStatus get(OfxTime time, std::string &) OVERRIDE FINAL;
     virtual OfxStatus set(const char*) OVERRIDE FINAL;
@@ -776,9 +786,6 @@ public:
     virtual boost::shared_ptr<KnobI> getKnob() const OVERRIDE FINAL;
     virtual OFX::Host::Param::Instance* getOfxParam() OVERRIDE FINAL { return this; }
     
-    virtual ~OfxStringInstance()
-    {
-    }
 
 public Q_SLOTS:
 
@@ -795,16 +802,11 @@ private:
      * @brief Find any project path contained in str and replace it by the associated name
      **/
     void projectEnvVar_setProxy(std::string& str) const;
-    
-    OfxEffectInstance* _node;
-    boost::weak_ptr<KnobFile> _fileKnob;
-    boost::weak_ptr<KnobOutputFile> _outputFileKnob;
-    boost::weak_ptr<KnobString> _stringKnob;
-    boost::weak_ptr<KnobPath> _pathKnob;
-    Natron::ThreadStorage<std::string> _localString;
+   
+    boost::scoped_ptr<OfxStringInstancePrivate> _imp;
 };
 
-
+struct OfxCustomInstancePrivate;
 class OfxCustomInstance
     : public OfxParamToKnob, public OFX::Host::Param::CustomInstance
 {
@@ -816,6 +818,9 @@ public:
     OfxCustomInstance(OfxEffectInstance* node,
                       OFX::Host::Param::Descriptor & descriptor);
 
+    virtual ~OfxCustomInstance();
+
+    
     virtual OfxStatus get(std::string &) OVERRIDE FINAL;
     virtual OfxStatus get(OfxTime time, std::string &) OVERRIDE FINAL;
     virtual OfxStatus set(const char*) OVERRIDE FINAL;
@@ -845,10 +850,6 @@ public:
     virtual boost::shared_ptr<KnobI> getKnob() const OVERRIDE FINAL;
     virtual OFX::Host::Param::Instance* getOfxParam() OVERRIDE FINAL { return this; }
     
-    virtual ~OfxCustomInstance()
-    {
-    }
-
     ///keyframes support
     virtual OfxStatus getNumKeys(unsigned int &nKeys) const OVERRIDE FINAL;
     virtual OfxStatus getKeyTime(int nth, OfxTime & time) const OVERRIDE FINAL;
@@ -857,6 +858,10 @@ public:
     virtual OfxStatus deleteAllKeys() OVERRIDE FINAL;
     virtual OfxStatus copyFrom(const OFX::Host::Param::Instance &instance, OfxTime offset, const OfxRangeD* range) OVERRIDE FINAL;
 
+    typedef OfxStatus (*customParamInterpolationV1Entry_t)(const void*            handleRaw,
+                                                           OfxPropertySetHandle inArgsRaw,
+                                                           OfxPropertySetHandle outArgsRaw);
+    
 public Q_SLOTS:
 
     void onKnobAnimationLevelChanged(int,int lvl);
@@ -865,14 +870,9 @@ private:
 
     void getCustomParamAtTime(double time,std::string &str) const;
 
-    typedef OfxStatus (*customParamInterpolationV1Entry_t)(const void*            handleRaw,
-                                                           OfxPropertySetHandle inArgsRaw,
-                                                           OfxPropertySetHandle outArgsRaw);
-
-    OfxEffectInstance* _node;
-    boost::weak_ptr<KnobString> _knob;
-    customParamInterpolationV1Entry_t _customParamInterpolationV1Entry;
-    Natron::ThreadStorage<std::string> _localString;
+ 
+    boost::scoped_ptr<OfxCustomInstancePrivate> _imp;
+    
 };
 
 
@@ -943,10 +943,12 @@ public Q_SLOTS:
 private:
 
     OFX::Host::Param::Descriptor & _descriptor;
-    Natron::OfxOverlayInteract* _overlayInteract;
+    OfxOverlayInteract* _overlayInteract;
     OfxEffectInstance* _effect;
     boost::weak_ptr<KnobParametric> _knob;
 };
+
+NATRON_NAMESPACE_EXIT;
 
 #endif // NATRON_ENGINE_OFXPARAMINSTANCE_H
 

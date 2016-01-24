@@ -149,8 +149,7 @@
 
 #define TRACE_LIB_MV 1
 
-using namespace Natron;
-
+NATRON_NAMESPACE_ENTER;
 
 namespace  {
     
@@ -423,7 +422,7 @@ TrackMarker::setScriptName(const std::string& name)
     }
     
     
-    std::string cpy = Natron::makeNameScriptFriendly(name);
+    std::string cpy = Python::makeNameScriptFriendly(name);
     
     if (cpy.empty()) {
         return false;
@@ -1547,10 +1546,10 @@ struct TrackerContextPrivate
         QObject::connect(&scheduler, SIGNAL(trackingFinished()), _publicInterface, SIGNAL(trackingFinished()));
         QObject::connect(&scheduler, SIGNAL(progressUpdate(double)), _publicInterface, SIGNAL(trackingProgress(double)));
         
-        boost::shared_ptr<KnobPage> settingsPage = Natron::createKnob<KnobPage>(effect, "Controls", 1 , false);
-        boost::shared_ptr<KnobPage> transformPage = Natron::createKnob<KnobPage>(effect, "Transform", 1 , false);
+        boost::shared_ptr<KnobPage> settingsPage = AppManager::createKnob<KnobPage>(effect, "Controls", 1 , false);
+        boost::shared_ptr<KnobPage> transformPage = AppManager::createKnob<KnobPage>(effect, "Transform", 1 , false);
         
-        boost::shared_ptr<KnobBool> enableTrackRedKnob = Natron::createKnob<KnobBool>(effect, kTrackerParamTrackRedLabel, 1, false);
+        boost::shared_ptr<KnobBool> enableTrackRedKnob = AppManager::createKnob<KnobBool>(effect, kTrackerParamTrackRedLabel, 1, false);
         enableTrackRedKnob->setName(kTrackerParamTrackRed);
         enableTrackRedKnob->setHintToolTip(kTrackerParamTrackRedHint);
         enableTrackRedKnob->setDefaultValue(true);
@@ -1561,7 +1560,7 @@ struct TrackerContextPrivate
         enableTrackRed = enableTrackRedKnob;
         knobs.push_back(enableTrackRedKnob);
         
-        boost::shared_ptr<KnobBool> enableTrackGreenKnob = Natron::createKnob<KnobBool>(effect, kTrackerParamTrackGreenLabel, 1, false);
+        boost::shared_ptr<KnobBool> enableTrackGreenKnob = AppManager::createKnob<KnobBool>(effect, kTrackerParamTrackGreenLabel, 1, false);
         enableTrackGreenKnob->setName(kTrackerParamTrackGreen);
         enableTrackGreenKnob->setHintToolTip(kTrackerParamTrackGreenHint);
         enableTrackGreenKnob->setDefaultValue(true);
@@ -1572,7 +1571,7 @@ struct TrackerContextPrivate
         enableTrackGreen = enableTrackGreenKnob;
         knobs.push_back(enableTrackGreenKnob);
         
-        boost::shared_ptr<KnobBool> enableTrackBlueKnob = Natron::createKnob<KnobBool>(effect, kTrackerParamTrackBlueLabel, 1, false);
+        boost::shared_ptr<KnobBool> enableTrackBlueKnob = AppManager::createKnob<KnobBool>(effect, kTrackerParamTrackBlueLabel, 1, false);
         enableTrackBlueKnob->setName(kTrackerParamTrackBlue);
         enableTrackBlueKnob->setHintToolTip(kTrackerParamTrackBlueHint);
         enableTrackBlueKnob->setDefaultValue(true);
@@ -1582,7 +1581,7 @@ struct TrackerContextPrivate
         enableTrackBlue = enableTrackBlueKnob;
         knobs.push_back(enableTrackBlueKnob);
         
-        boost::shared_ptr<KnobDouble> minCorelKnob = Natron::createKnob<KnobDouble>(effect, kTrackerParamMinimumCorrelationLabel, 1, false);
+        boost::shared_ptr<KnobDouble> minCorelKnob = AppManager::createKnob<KnobDouble>(effect, kTrackerParamMinimumCorrelationLabel, 1, false);
         minCorelKnob->setName(kTrackerParamMinimumCorrelation);
         minCorelKnob->setHintToolTip(kTrackerParamMinimumCorrelationHint);
         minCorelKnob->setAnimationEnabled(false);
@@ -1594,7 +1593,7 @@ struct TrackerContextPrivate
         minCorrelation = minCorelKnob;
         knobs.push_back(minCorelKnob);
         
-        boost::shared_ptr<KnobDouble> maxItKnob = Natron::createKnob<KnobDouble>(effect, kTrackerParamMaximumIterationLabel, 1, false);
+        boost::shared_ptr<KnobDouble> maxItKnob = AppManager::createKnob<KnobDouble>(effect, kTrackerParamMaximumIterationLabel, 1, false);
         maxItKnob->setName(kTrackerParamMaximumIteration);
         maxItKnob->setHintToolTip(kTrackerParamMaximumIterationHint);
         maxItKnob->setAnimationEnabled(false);
@@ -1606,7 +1605,7 @@ struct TrackerContextPrivate
         maxIterations = maxItKnob;
         knobs.push_back(maxItKnob);
         
-        boost::shared_ptr<KnobBool> usePretTrackBF = Natron::createKnob<KnobBool>(effect, kTrackerParamBruteForcePreTrackLabel, 1, false);
+        boost::shared_ptr<KnobBool> usePretTrackBF = AppManager::createKnob<KnobBool>(effect, kTrackerParamBruteForcePreTrackLabel, 1, false);
         usePretTrackBF->setName(kTrackerParamBruteForcePreTrack);
         usePretTrackBF->setHintToolTip(kTrackerParamBruteForcePreTrackHint);
         usePretTrackBF->setDefaultValue(true);
@@ -1617,7 +1616,7 @@ struct TrackerContextPrivate
         bruteForcePreTrack = usePretTrackBF;
         knobs.push_back(usePretTrackBF);
         
-        boost::shared_ptr<KnobBool> useNormalizedInt = Natron::createKnob<KnobBool>(effect, kTrackerParamNormalizeIntensitiesLabel, 1, false);
+        boost::shared_ptr<KnobBool> useNormalizedInt = AppManager::createKnob<KnobBool>(effect, kTrackerParamNormalizeIntensitiesLabel, 1, false);
         useNormalizedInt->setName(kTrackerParamNormalizeIntensities);
         useNormalizedInt->setHintToolTip(kTrackerParamNormalizeIntensitiesHint);
         useNormalizedInt->setDefaultValue(false);
@@ -1627,7 +1626,7 @@ struct TrackerContextPrivate
         useNormalizedIntensities = useNormalizedInt;
         knobs.push_back(useNormalizedInt);
 
-        boost::shared_ptr<KnobDouble> preBlurSigmaKnob = Natron::createKnob<KnobDouble>(effect, kTrackerParamPreBlurSigmaLabel, 1, false);
+        boost::shared_ptr<KnobDouble> preBlurSigmaKnob = AppManager::createKnob<KnobDouble>(effect, kTrackerParamPreBlurSigmaLabel, 1, false);
         preBlurSigmaKnob->setName(kTrackerParamPreBlurSigma);
         preBlurSigmaKnob->setHintToolTip(kTrackerParamPreBlurSigmaHint);
         preBlurSigmaKnob->setAnimationEnabled(false);
@@ -1639,7 +1638,7 @@ struct TrackerContextPrivate
         preBlurSigma = preBlurSigmaKnob;
         knobs.push_back(preBlurSigmaKnob);
         
-        boost::shared_ptr<KnobInt> referenceFrameKnob = Natron::createKnob<KnobInt>(effect, kTrackerParamReferenceFrameLabel, 1, false);
+        boost::shared_ptr<KnobInt> referenceFrameKnob = AppManager::createKnob<KnobInt>(effect, kTrackerParamReferenceFrameLabel, 1, false);
         referenceFrameKnob->setName(kTrackerParamReferenceFrame);
         referenceFrameKnob->setHintToolTip(kTrackerParamReferenceFrameHint);
         referenceFrameKnob->setAnimationEnabled(false);
@@ -3020,7 +3019,7 @@ TrackScheduler<TrackArgsType>::run()
         
         boost::shared_ptr<TimeLine> timeline = curArgs.getTimeLine();
         ViewerInstance* viewer =  curArgs.getViewer();
-        timeline->setViewersRefreshBlocked(true);
+        //timeline->setViewersRefreshBlocked(true);
         if (viewer) {
             viewer->setIsTracking(true);
         }
@@ -3130,7 +3129,7 @@ TrackScheduler<TrackArgsType>::run()
         if (reportProgress) {
             emit_trackingFinished();
         }
-        timeline->setViewersRefreshBlocked(false);
+        //timeline->setViewersRefreshBlocked(false);
         if (viewer) {
             viewer->clearPartialUpdateRects();
             viewer->setIsTracking(false);
@@ -3247,3 +3246,8 @@ TrackScheduler<TrackArgsType>::quitThread()
 ///Explicit template instantiation for TrackScheduler
 template class TrackScheduler<TrackArgsV1>;
 template class TrackScheduler<TrackArgsLibMV>;
+
+NATRON_NAMESPACE_EXIT;
+
+NATRON_NAMESPACE_USING;
+#include "moc_TrackerContext.cpp"

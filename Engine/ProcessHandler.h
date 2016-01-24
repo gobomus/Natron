@@ -1,6 +1,6 @@
 /* ***** BEGIN LICENSE BLOCK *****
  * This file is part of Natron <http://www.natron.fr/>,
- * Copyright (C) 2015 INRIA and Alexandre Gauthier-Foichat
+ * Copyright (C) 2016 INRIA and Alexandre Gauthier-Foichat
  *
  * Natron is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -31,12 +31,15 @@ CLANG_DIAG_OFF(deprecated)
 #include <QThread>
 #include <QStringList>
 #include <QString>
+#include <QtCore/QMutex>
+#include <QtCore/QWaitCondition>
 CLANG_DIAG_ON(deprecated)
 
 #include "Global/GlobalDefines.h"
 
 #include "Engine/EngineFwd.h"
 
+NATRON_NAMESPACE_ENTER;
 
 /**
  * @brief This class represents a background render process. It starts a render and reports progress via a
@@ -82,7 +85,7 @@ class ProcessHandler
 
     AppInstance* _app; //< pointer to the app executing this process
     QProcess* _process; //< the process executing the render
-    Natron::OutputEffectInstance* _writer; //< pointer to the writer that will render in the bg process
+    OutputEffectInstance* _writer; //< pointer to the writer that will render in the bg process
     QLocalServer* _ipcServer; //< the server for IPC with the background process
     QLocalSocket* _bgProcessOutputSocket; //< the socket where data is output by the process
 
@@ -102,7 +105,7 @@ public:
      **/
     ProcessHandler(AppInstance* app,
                    const QString & projectPath,
-                   Natron::OutputEffectInstance* writer);
+                   OutputEffectInstance* writer);
 
     virtual ~ProcessHandler();
 
@@ -249,9 +252,11 @@ private:
     QLocalServer* _backgroundIPCServer; //< for a background app used to manage input IPC  with the gui app
     QLocalSocket* _backgroundInputPipe; //<if the process is bg but managed by a gui process then the pipe is used
                                         //to read input messages
+    QMutex _mustQuitMutex;
+    QWaitCondition _mustQuitCond;
     bool _mustQuit;
-    QWaitCondition* _mustQuitCond;
-    QMutex* _mustQuitMutex;
 };
+
+NATRON_NAMESPACE_EXIT;
 
 #endif // PROCESSHANDLER_H

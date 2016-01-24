@@ -1,6 +1,6 @@
 /* ***** BEGIN LICENSE BLOCK *****
  * This file is part of Natron <http://www.natron.fr/>,
- * Copyright (C) 2015 INRIA and Alexandre Gauthier-Foichat
+ * Copyright (C) 2016 INRIA and Alexandre Gauthier-Foichat
  *
  * Natron is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -34,9 +34,11 @@ CLANG_DIAG_ON(deprecated)
 #include "Engine/EffectInstance.h"
 #include "Engine/CacheEntry.h"
 
+NATRON_NAMESPACE_ENTER;
+
 struct PluginMemory::Implementation
 {
-    Implementation(Natron::EffectInstance* effect_)
+    Implementation(EffectInstance* effect_)
         : data()
           , locked(0)
           , mutex()
@@ -44,13 +46,13 @@ struct PluginMemory::Implementation
     {
     }
 
-    Natron::RamBuffer<char> data;
+    RamBuffer<char> data;
     int locked;
     QMutex mutex;
-    Natron::EffectInstance* effect;
+    EffectInstance* effect;
 };
 
-PluginMemory::PluginMemory(Natron::EffectInstance* effect)
+PluginMemory::PluginMemory(EffectInstance* effect)
     : _imp( new Implementation(effect) )
 {
     if (effect) {
@@ -123,3 +125,4 @@ PluginMemory::unlock()
     }
 }
 
+NATRON_NAMESPACE_EXIT;

@@ -1,6 +1,6 @@
 /* ***** BEGIN LICENSE BLOCK *****
  * This file is part of Natron <http://www.natron.fr/>,
- * Copyright (C) 2015 INRIA and Alexandre Gauthier-Foichat
+ * Copyright (C) 2016 INRIA and Alexandre Gauthier-Foichat
  *
  * Natron is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -33,6 +33,7 @@
 
 #include "Gui/GuiFwd.h"
 
+NATRON_NAMESPACE_ENTER;
 
 /**
  * @brief This little struct contains what enables file dialogs to show previews.
@@ -42,9 +43,9 @@ class FileDialogPreviewProvider
 {
 public:
     ViewerTab* viewerUI;
-    boost::shared_ptr<Natron::Node> viewerNodeInternal;
+    boost::shared_ptr<Node> viewerNodeInternal;
     boost::shared_ptr<NodeGui> viewerNode;
-    std::map<std::string,std::pair< boost::shared_ptr<Natron::Node>, boost::shared_ptr<NodeGui> > > readerNodes;
+    std::map<std::string,std::pair< boost::shared_ptr<Node>, boost::shared_ptr<NodeGui> > > readerNodes;
     
     FileDialogPreviewProvider()
     : viewerUI(0)
@@ -70,6 +71,8 @@ public:
     virtual ~GuiAppInstance();
 
     void resetPreviewProvider();
+    
+    virtual bool isBackground() const OVERRIDE FINAL { return false; }
 private:
     
     
@@ -85,7 +88,7 @@ private:
 public:
     
     virtual void aboutToQuit() OVERRIDE FINAL;
-    virtual void load(const CLArgs& cl) OVERRIDE FINAL;
+    virtual void load(const CLArgs& cl,bool makeEmptyInstance) OVERRIDE FINAL;
     
     Gui* getGui() const WARN_UNUSED_RETURN;
 
@@ -105,17 +108,17 @@ public:
     virtual void warningDialog(const std::string & title,const std::string & message,bool* stopAsking,bool useHtml) const OVERRIDE FINAL;
     virtual void informationDialog(const std::string & title,const std::string & message,bool useHtml) const OVERRIDE FINAL;
     virtual void informationDialog(const std::string & title,const std::string & message,bool* stopAsking,bool useHtml) const OVERRIDE FINAL;
-    virtual Natron::StandardButtonEnum questionDialog(const std::string & title,
+    virtual StandardButtonEnum questionDialog(const std::string & title,
                                                       const std::string & message,
                                                       bool useHtml,
-                                                      Natron::StandardButtons buttons = Natron::StandardButtons(Natron::eStandardButtonYes | Natron::eStandardButtonNo),
-                                                      Natron::StandardButtonEnum defaultButton = Natron::eStandardButtonNoButton) const OVERRIDE FINAL WARN_UNUSED_RETURN;
+                                                      StandardButtons buttons = StandardButtons(eStandardButtonYes | eStandardButtonNo),
+                                                      StandardButtonEnum defaultButton = eStandardButtonNoButton) const OVERRIDE FINAL WARN_UNUSED_RETURN;
     
-    virtual Natron::StandardButtonEnum questionDialog(const std::string & title,
+    virtual StandardButtonEnum questionDialog(const std::string & title,
                                                       const std::string & message,
                                                       bool useHtml,
-                                                      Natron::StandardButtons buttons,
-                                                      Natron::StandardButtonEnum defaultButton,
+                                                      StandardButtons buttons,
+                                                      StandardButtonEnum defaultButton,
                                                       bool* stopAsking) OVERRIDE FINAL WARN_UNUSED_RETURN;
     
     virtual void loadProjectGui(boost::archive::xml_iarchive & archive) const OVERRIDE FINAL;
@@ -157,7 +160,7 @@ public:
     virtual void printAutoDeclaredVariable(const std::string& str) OVERRIDE FINAL;
     
     virtual void toggleAutoHideGraphInputs() OVERRIDE FINAL;
-    virtual void setLastViewerUsingTimeline(const boost::shared_ptr<Natron::Node>& node) OVERRIDE FINAL;
+    virtual void setLastViewerUsingTimeline(const boost::shared_ptr<Node>& node) OVERRIDE FINAL;
     
     virtual ViewerInstance* getLastViewerUsingTimeline() const OVERRIDE FINAL;
     
@@ -182,7 +185,7 @@ public:
     
     void clearOverlayRedrawRequests();
     
-    public Q_SLOTS:
+public Q_SLOTS:
     
 
     void reloadStylesheet();
@@ -214,6 +217,14 @@ public:
     
     void handleFileOpenEvent(const std::string& filename);
     
+    virtual void goToPreviousKeyframe() OVERRIDE FINAL;
+    
+    virtual void goToNextKeyframe() OVERRIDE FINAL;
+    
+Q_SIGNALS:
+    
+    void keyframeIndicatorsChanged();
+    
 public:
 
     virtual void* getOfxHostOSHandle() const OVERRIDE FINAL;
@@ -221,34 +232,63 @@ public:
     
     ///Rotopaint related
     virtual void updateLastPaintStrokeData(int newAge,
-                                           const std::list<std::pair<Natron::Point,double> >& points,
+                                           const std::list<std::pair<Point,double> >& points,
                                            const RectD& lastPointsBbox,
                                            int strokeIndex) OVERRIDE FINAL;
     
-    virtual void getLastPaintStrokePoints(std::list<std::list<std::pair<Natron::Point,double> > >* strokes, int* strokeIndex) const OVERRIDE FINAL;
+    virtual void getLastPaintStrokePoints(std::list<std::list<std::pair<Point,double> > >* strokes, int* strokeIndex) const OVERRIDE FINAL;
     
-    virtual void getRenderStrokeData(RectD* lastStrokeMovementBbox, std::list<std::pair<Natron::Point,double> >* lastStrokeMovementPoints,
-                                     double *distNextIn, boost::shared_ptr<Natron::Image>* strokeImage) const OVERRIDE FINAL;
+    virtual void getRenderStrokeData(RectD* lastStrokeMovementBbox, std::list<std::pair<Point,double> >* lastStrokeMovementPoints,
+                                     double *distNextIn, boost::shared_ptr<Image>* strokeImage) const OVERRIDE FINAL;
     
     virtual int getStrokeLastIndex() const OVERRIDE FINAL;
     
-    virtual void updateStrokeImage(const boost::shared_ptr<Natron::Image>& image, double distNextOut, bool setDistNextOut) OVERRIDE FINAL;
+    virtual void getStrokeAndMultiStrokeIndex(boost::shared_ptr<RotoStrokeItem>* stroke, int* strokeIndex) const OVERRIDE FINAL;
+    
+    virtual void updateStrokeImage(const boost::shared_ptr<Image>& image, double distNextOut, bool setDistNextOut) OVERRIDE FINAL;
 
     virtual RectD getLastPaintStrokeBbox() const OVERRIDE FINAL;
     
-    virtual void setUserIsPainting(const boost::shared_ptr<Natron::Node>& rotopaintNode,
+    virtual RectD getPaintStrokeWholeBbox() const OVERRIDE FINAL;
+    
+    virtual void setUserIsPainting(const boost::shared_ptr<Node>& rotopaintNode,
                                    const boost::shared_ptr<RotoStrokeItem>& stroke,
                                    bool isPainting) OVERRIDE FINAL;
-    virtual void getActiveRotoDrawingStroke(boost::shared_ptr<Natron::Node>* node,
+    virtual void getActiveRotoDrawingStroke(boost::shared_ptr<Node>* node,
                                             boost::shared_ptr<RotoStrokeItem>* stroke,
                                             bool* isPainting) const OVERRIDE FINAL;
     
+    
+    ///////////////// OVERRIDEN FROM TIMELINEKEYFRAMES
+    virtual void removeAllKeyframesIndicators() OVERRIDE FINAL;
+    
+    virtual void addKeyframeIndicator(SequenceTime time) OVERRIDE FINAL;
+    
+    virtual void addMultipleKeyframeIndicatorsAdded(const std::list<SequenceTime> & keys,bool emitSignal) OVERRIDE FINAL;
+    
+    virtual void removeKeyFrameIndicator(SequenceTime time) OVERRIDE FINAL;
+    
+    virtual void removeMultipleKeyframeIndicator(const std::list<SequenceTime> & keys,bool emitSignal) OVERRIDE FINAL;
+    
+    virtual void addNodesKeyframesToTimeline(const std::list<Node*> & nodes) OVERRIDE FINAL;
+    
+    virtual void addNodeKeyframesToTimeline(Node* node) OVERRIDE FINAL;
+    
+    virtual void removeNodesKeyframesFromTimeline(const std::list<Node*> & nodes) OVERRIDE FINAL;
+    
+    virtual void removeNodeKeyframesFromTimeline(Node* node) OVERRIDE FINAL;
+
+    virtual void getKeyframes(std::list<SequenceTime>* keys) const OVERRIDE FINAL;
+    
+   
+    ///////////////// END OVERRIDEN FROM TIMELINEKEYFRAMES
+    
 private:
     
-    virtual void onGroupCreationFinished(const boost::shared_ptr<Natron::Node>& node,bool requestedByLoad,bool userEdited) OVERRIDE FINAL;
+    virtual void onGroupCreationFinished(const boost::shared_ptr<Node>& node,bool requestedByLoad,bool userEdited) OVERRIDE FINAL;
     
-    virtual void createNodeGui(const boost::shared_ptr<Natron::Node> &node,
-                               const boost::shared_ptr<Natron::Node>&  parentMultiInstance,
+    virtual void createNodeGui(const boost::shared_ptr<Node> &node,
+                               const boost::shared_ptr<Node>&  parentMultiInstance,
                                bool loadRequest,
                                bool autoConnect,
                                bool userEdited,
@@ -258,5 +298,7 @@ private:
 
     boost::scoped_ptr<GuiAppInstancePrivate> _imp;
 };
+
+NATRON_NAMESPACE_EXIT;
 
 #endif // GUIAPPINSTANCE_H

@@ -30,6 +30,8 @@
 #include "Gui/TrackerPanel.h"
 
 
+NATRON_NAMESPACE_ENTER;
+
 AddTrackCommand::AddTrackCommand(const boost::shared_ptr<TrackMarker> &marker, const boost::shared_ptr<TrackerContext>& context)
 : QUndoCommand()
 , _markers()
@@ -133,3 +135,5 @@ RemoveTracksCommand::redo()
     context->endEditSelection(TrackerContext::eTrackSelectionInternal);
     context->getNode()->getApp()->triggerAutoSave();
 }
+
+NATRON_NAMESPACE_EXIT;

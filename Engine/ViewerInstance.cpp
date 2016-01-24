@@ -1,6 +1,6 @@
 /* ***** BEGIN LICENSE BLOCK *****
  * This file is part of Natron <http://www.natron.fr/>,
- * Copyright (C) 2015 INRIA and Alexandre Gauthier-Foichat
+ * Copyright (C) 2016 INRIA and Alexandre Gauthier-Foichat
  *
  * Natron is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -74,7 +74,8 @@ CLANG_DIAG_ON(deprecated)
 
 #define NATRON_TIME_ELASPED_BEFORE_PROGRESS_REPORT 0.4
 
-using namespace Natron;
+NATRON_NAMESPACE_ENTER;
+
 using std::make_pair;
 using boost::shared_ptr;
 
@@ -87,8 +88,8 @@ static void scaleToTexture32bits(const RectI& roi,
                                  const RenderViewerArgs & args,
                                  float *output);
 static std::pair<double, double>
-findAutoContrastVminVmax(boost::shared_ptr<const Natron::Image> inputImage,
-                         Natron::DisplayChannelsEnum channels,
+findAutoContrastVminVmax(boost::shared_ptr<const Image> inputImage,
+                         DisplayChannelsEnum channels,
                          const RectI & rect);
 static void renderFunctor(const RectI& roi,
                           const RenderViewerArgs & args,
@@ -109,19 +110,19 @@ toBGRA(unsigned char r,
     return (a << 24) | (r << 16) | (g << 8) | b;
 }
 
-const Natron::Color::Lut*
-ViewerInstance::lutFromColorspace(Natron::ViewerColorSpaceEnum cs)
+const Color::Lut*
+ViewerInstance::lutFromColorspace(ViewerColorSpaceEnum cs)
 {
-    const Natron::Color::Lut* lut;
+    const Color::Lut* lut;
 
     switch (cs) {
-    case Natron::eViewerColorSpaceSRGB:
-        lut = Natron::Color::LutManager::sRGBLut();
+    case eViewerColorSpaceSRGB:
+        lut = Color::LutManager::sRGBLut();
         break;
-    case Natron::eViewerColorSpaceRec709:
-        lut = Natron::Color::LutManager::Rec709Lut();
+    case eViewerColorSpaceRec709:
+        lut = Color::LutManager::Rec709Lut();
         break;
-    case Natron::eViewerColorSpaceLinear:
+    case eViewerColorSpaceLinear:
     default:
         lut = 0;
         break;
@@ -159,8 +160,8 @@ public:
 };
 
 
-Natron::EffectInstance*
-ViewerInstance::BuildEffect(boost::shared_ptr<Natron::Node> n)
+EffectInstance*
+ViewerInstance::BuildEffect(boost::shared_ptr<Node> n)
 {
     // always running in the main thread
     assert( qApp && qApp->thread() == QThread::currentThread() );
@@ -169,7 +170,7 @@ ViewerInstance::BuildEffect(boost::shared_ptr<Natron::Node> n)
 }
 
 ViewerInstance::ViewerInstance(boost::shared_ptr<Node> node)
-    : Natron::OutputEffectInstance(node)
+    : OutputEffectInstance(node)
       , _imp( new ViewerInstancePrivate(this) )
 {
     // always running in the main thread
@@ -319,7 +320,7 @@ ViewerInstance::executeDisconnectTextureRequestOnMainThread(int index)
 }
 
 
-static bool isRotoPaintNodeInputRecursive(Natron::Node* node,const NodePtr& rotoPaintNode) {
+static bool isRotoPaintNodeInputRecursive(Node* node,const NodePtr& rotoPaintNode) {
     
     if (node == rotoPaintNode.get()) {
         return true;
@@ -341,7 +342,7 @@ static bool isRotoPaintNodeInputRecursive(Natron::Node* node,const NodePtr& roto
     return false;
 }
 
-static void updateLastStrokeDataRecursively(Natron::Node* node,const NodePtr& rotoPaintNode, const RectD& lastStrokeBbox,
+static void updateLastStrokeDataRecursively(Node* node,const NodePtr& rotoPaintNode, const RectD& lastStrokeBbox,
                                             bool invalidate)
 {
     if (isRotoPaintNodeInputRecursive(node, rotoPaintNode)) {
@@ -378,7 +379,7 @@ public:
                                    bool isSequential,
                                    bool canAbort,
                                    U64 renderAge,
-                                   const boost::shared_ptr<Natron::Node>& treeRoot,
+                                   const boost::shared_ptr<Node>& treeRoot,
                                    const FrameRequestMap* request,
                                    int textureIndex,
                                    const TimeLine* timeline,
@@ -433,12 +434,12 @@ public:
 
 
 
-Natron::StatusEnum
+ViewerInstance::ViewerRenderRetCode
 ViewerInstance::getViewerArgsAndRenderViewer(SequenceTime time,
                                              bool canAbort,
                                              int view,
                                              U64 viewerHash,
-                                             const boost::shared_ptr<Natron::Node>& rotoPaintNode,
+                                             const boost::shared_ptr<Node>& rotoPaintNode,
                                              const boost::shared_ptr<RotoStrokeItem>& activeStroke,
                                              const boost::shared_ptr<RenderStats>& stats,
                                              boost::shared_ptr<ViewerArgs>* argsA,
@@ -448,12 +449,12 @@ ViewerInstance::getViewerArgsAndRenderViewer(SequenceTime time,
     ///getRoD or this will not work
     assert(rotoPaintNode);
     if (!rotoPaintNode->getLiveInstance()) {
-        return eStatusFailed;
+        return eViewerRenderRetCodeFail;
     }
     rotoPaintNode->getLiveInstance()->clearActionsCache();
     
-    Natron::StatusEnum status[2] = {
-        eStatusFailed, eStatusFailed
+    ViewerRenderRetCode status[2] = {
+        eViewerRenderRetCodeFail, eViewerRenderRetCodeFail
     };
 
     NodePtr thisNode = getNode();
@@ -462,11 +463,11 @@ ViewerInstance::getViewerArgsAndRenderViewer(SequenceTime time,
     boost::shared_ptr<ViewerArgs> args[2];
     for (int i = 0; i < 2; ++i) {
         args[i].reset(new ViewerArgs);
-        if ( (i == 1) && (_imp->uiContext->getCompositingOperator() == Natron::eViewerCompositingOperatorNone) ) {
+        if ( (i == 1) && (_imp->uiContext->getCompositingOperator() == eViewerCompositingOperatorNone) ) {
             break;
         }
         
-        U64 renderAge = _imp->getRenderAge(i);
+        U64 renderAge = _imp->getRenderAgeAndIncrement(i);
 
         
         /*FrameRequestMap request;
@@ -478,7 +479,7 @@ ViewerInstance::getViewerArgsAndRenderViewer(SequenceTime time,
             roi.y2 = args[i]->params->textureRect.y2;
         }
         status[i] = EffectInstance::computeRequestPass(time, view, args[i]->params->mipMapLevel, roi, thisNode, request);
-        if (status[i] == Natron::eStatusFailed) {
+        if (status[i] == eStatusFailed) {
             continue;
         }*/
         
@@ -504,7 +505,7 @@ ViewerInstance::getViewerArgsAndRenderViewer(SequenceTime time,
         NodeList rotoPaintNodes;
         if (rotoPaintNode) {
             if (activeStroke) {
-                Natron::EffectInstance* rotoLive = rotoPaintNode->getLiveInstance();
+                EffectInstance* rotoLive = rotoPaintNode->getLiveInstance();
                 assert(rotoLive);
                 bool ok = rotoLive->getThreadLocalRotoPaintTreeNodes(&rotoPaintNodes);
                 assert(ok);
@@ -512,14 +513,41 @@ ViewerInstance::getViewerArgsAndRenderViewer(SequenceTime time,
                     throw std::logic_error("ViewerParallelRenderArgsSetter(): getThreadLocalRotoPaintTreeNodes() failed");
                 }
                 
-                std::list<std::pair<Natron::Point,double> > lastStrokePoints;
+                /*
+                 Take from the stroke all the points that were input by the user so far on the main thread and set them globally to the
+                 application. These data are the ones that are going to be used by any Roto related tool. We ensure that they all access
+                 the same data so we only access the real Roto datas now.
+                 */
+                
+                //The last points input by the user
+                std::list<std::pair<Point,double> > lastStrokePoints;
+                
+                //The stroke RoD so far
                 RectD wholeStrokeRod;
+                
+                //The bbox of the lastStrokePoints
                 RectD lastStrokeBbox;
+                
+                //The index in the stroke of the last point we have rendered and up to the new point we have rendered
                 int lastAge,newAge;
-                NodePtr mergeNode = activeStroke->getMergeNode();
+                
+                //get on the app object the last point index we have rendered on this stroke
                 lastAge = getApp()->getStrokeLastIndex();
+                
+                //Get the active paint stroke so far and its multi-stroke index
+                boost::shared_ptr<RotoStrokeItem> currentlyPaintedStroke;
+                int currentlyPaintedStrokeMultiIndex;
+                getApp()->getStrokeAndMultiStrokeIndex(&currentlyPaintedStroke, &currentlyPaintedStrokeMultiIndex);
+
+                
+                //If this crashes here that means the user could start a new stroke while this one is not done rendering.
+                assert(currentlyPaintedStroke == activeStroke);
+                
+                //the multi-stroke index in case of a stroke containing multiple strokes from the user
                 int strokeIndex;
-                if (activeStroke->getMostRecentStrokeChangesSinceAge(time, lastAge, &lastStrokePoints, &lastStrokeBbox, &wholeStrokeRod ,&newAge,&strokeIndex)) {
+                if (activeStroke->getMostRecentStrokeChangesSinceAge(time, lastAge, currentlyPaintedStrokeMultiIndex, &lastStrokePoints, &lastStrokeBbox, &wholeStrokeRod ,&newAge,&strokeIndex)) {
+                
+
                     
                     getApp()->updateLastPaintStrokeData(newAge, lastStrokePoints, lastStrokeBbox, strokeIndex);
                     for (NodeList::iterator it = rotoPaintNodes.begin(); it!=rotoPaintNodes.end(); ++it) {
@@ -530,77 +558,172 @@ ViewerInstance::getViewerArgsAndRenderViewer(SequenceTime time,
                 } else {
                     ///The drawing is already up to date: all changes have been taken into account for this event
                     args[i].reset();
-                    return eStatusReplyDefault;
+                    return eViewerRenderRetCodeRedraw;
                 }
             }
         }
+       
+        
+        if (args[i]) {
+            status[i] = getRenderViewerArgsAndCheckCache(time, false, canAbort, view, i, viewerHash, rotoPaintNode, false, renderAge,stats,  args[i].get());
+        }
+        
+    
+        if (status[i] != eViewerRenderRetCodeRender) {
+            /*
+             Either failure, black or nothing, the texture is junk, remove it from the cache
+             */
+            if (args[i] && args[i]->params && args[i]->params->cachedFrame) {
+                args[i]->params->cachedFrame->setAborted(true);
+                appPTR->removeFromViewerCache(args[i]->params->cachedFrame);
+                args[i]->params->cachedFrame.reset();
+            }
+            
+        }
 
-        status[i] = getRenderViewerArgsAndCheckCache(time, false, canAbort, view, i, viewerHash, rotoPaintNode, false, renderAge,stats,  args[i].get());
         
-        
-        if (status[i] != eStatusFailed && args[i] && args[i]->params) {
+        if (status[i] == eViewerRenderRetCodeFail || status[i] == eViewerRenderRetCodeBlack) {
+            disconnectTextureRequest(i);
+        } else {
+            assert(args[i] && args[i]->params);
             assert(args[i]->params->textureIndex == i);
-            status[i] = renderViewer_internal(view, QThread::currentThread() == qApp->thread(), false, viewerHash, canAbort,rotoPaintNode, false,boost::shared_ptr<RequestedFrame>(), stats, *args[i]);
-            if (status[i] == eStatusReplyDefault) {
+            
+            
+            if (!_imp->addOngoingRender(args[i]->params->textureIndex, args[i]->params->renderAge)) {
+                /*
+                 This may fail if another thread already pushed a more recent render in the render ages queue
+                 */
+                status[i] = eViewerRenderRetCodeRedraw;
                 args[i].reset();
             }
+            
+            if (args[i]) {
+                status[i] = renderViewer_internal(view,
+                                                  QThread::currentThread() == qApp->thread(), // singleThreaded
+                                                  false, // isSequentialRender
+                                                  viewerHash,
+                                                  canAbort,
+                                                  rotoPaintNode,
+                                                  false, //useTLS
+                                                  boost::shared_ptr<RequestedFrame>(),
+                                                  stats,
+                                                  *args[i]);
+            }
+            
+            if (args[i] && args[i]->params) {
+                if (status[i] == eViewerRenderRetCodeFail || status[i] == eViewerRenderRetCodeBlack) {
+                    _imp->checkAndUpdateDisplayAge(args[i]->params->textureIndex,args[i]->params->renderAge);
+                }
+                _imp->removeOngoingRender(args[i]->params->textureIndex, args[i]->params->renderAge);
+            }
+            
+            
+            if (status[i] == eViewerRenderRetCodeRedraw) {
+                args[i].reset();
+            }
+            
         }
+
+        
+     
 
         
     }
     
-    if (status[0] == eStatusFailed && status[1] == eStatusFailed) {
-        disconnectViewer();
-        return eStatusFailed;
+    if (status[0] == eViewerRenderRetCodeFail && status[1] == eViewerRenderRetCodeFail) {
+        return eViewerRenderRetCodeFail;
     }
 
     *argsA = args[0];
     *argsB = args[1];
-    return eStatusOK;
+    return eViewerRenderRetCodeRender;
     
 }
 
-Natron::StatusEnum
+ViewerInstance::ViewerRenderRetCode
 ViewerInstance::renderViewer(int view,
                              bool singleThreaded,
                              bool isSequentialRender,
                              U64 viewerHash,
                              bool canAbort,
-                             const boost::shared_ptr<Natron::Node>& rotoPaintNode,
+                             const boost::shared_ptr<Node>& rotoPaintNode,
                              bool useTLS,
                              boost::shared_ptr<ViewerArgs> args[2],
                              const boost::shared_ptr<RequestedFrame>& request,
                              const boost::shared_ptr<RenderStats>& stats)
 {
     if (!_imp->uiContext) {
-        return eStatusFailed;
+        return eViewerRenderRetCodeFail;
     }
-    Natron::StatusEnum ret[2] = {
-        eStatusReplyDefault, eStatusReplyDefault
+
+    /**
+     * When entering this code, we already know that the textures are not cached for the A and B inputs
+     * If the an input is not connected, it's args[i] will be NULL.
+     * If either one of the renders fails, that means we should block playback and clear to black the viewer
+     **/
+    
+    ViewerInstance::ViewerRenderRetCode ret[2] = {
+        eViewerRenderRetCodeRedraw, eViewerRenderRetCodeRedraw
     };
     for (int i = 0; i < 2; ++i) {
-        if ( (i == 1) && (_imp->uiContext->getCompositingOperator() == Natron::eViewerCompositingOperatorNone) ) {
+        if ( (i == 1) && (_imp->uiContext->getCompositingOperator() == eViewerCompositingOperatorNone) ) {
             break;
         }
         if (args[i] && args[i]->params) {
             assert(args[i]->params->textureIndex == i);
             
             ///We enable render stats just for the A input (i == 0) otherwise we would get crappy results
-            ret[i] = renderViewer_internal(view, singleThreaded, isSequentialRender, viewerHash, canAbort,rotoPaintNode, useTLS, request,
-                                           i == 0 ? stats : boost::shared_ptr<RenderStats>(),
-                                           *args[i]);
-            if (ret[i] == eStatusReplyDefault) {
+            
+            if (!isSequentialRender) {
+                if (!_imp->addOngoingRender(args[i]->params->textureIndex, args[i]->params->renderAge)) {
+                    /*
+                     This may fail if another thread already pushed a more recent render in the render ages queue
+                     */
+                    ret[i] = eViewerRenderRetCodeRedraw;
+                    args[i].reset();
+                }
+            }
+            if (args[i]) {
+                ret[i] = renderViewer_internal(view, singleThreaded, isSequentialRender, viewerHash, canAbort,rotoPaintNode, useTLS, request,
+                                               i == 0 ? stats : boost::shared_ptr<RenderStats>(),
+                                               *args[i]);
+            }
+            
+            if (ret[i] != eViewerRenderRetCodeRender) {
+                /*
+                 Either failure, black or nothing, the texture is junk, remove it from the cache
+                 */
+                if (args[i] && args[i]->params && args[i]->params->cachedFrame) {
+                    args[i]->params->cachedFrame->setAborted(true);
+                    appPTR->removeFromViewerCache(args[i]->params->cachedFrame);
+                    args[i]->params->cachedFrame.reset();
+                }
+
+            }
+            
+            if (!isSequentialRender && args[i] && args[i]->params) {
+                if (ret[i] == eViewerRenderRetCodeFail || ret[i] == eViewerRenderRetCodeBlack) {
+                    _imp->checkAndUpdateDisplayAge(args[i]->params->textureIndex,args[i]->params->renderAge);
+                }
+                _imp->removeOngoingRender(args[i]->params->textureIndex, args[i]->params->renderAge);
+            }
+            
+            if (ret[i] == eViewerRenderRetCodeBlack) {
+                disconnectTexture(args[i]->params->textureIndex);
+            }
+            
+            if (ret[i] == eViewerRenderRetCodeFail || ret[i] == eViewerRenderRetCodeRedraw) {
                 args[i].reset();
             }
         }
     }
     
 
-    if ( (ret[0] == eStatusFailed) || (ret[1] == eStatusFailed) ) {
-        return eStatusFailed;
+    if ( (ret[0] == eViewerRenderRetCodeFail) || (ret[1] == eViewerRenderRetCodeFail) ) {
+        return eViewerRenderRetCodeFail;
     }
 
-    return eStatusOK;
+    return eViewerRenderRetCodeRender;
 }
 
 static bool checkTreeCanRender_internal(Node* node, std::list<Node*>& marked)
@@ -658,7 +781,7 @@ static unsigned char* getTexPixel(int x,int y,const TextureRect& bounds, std::si
 static bool copyAndSwap(const TextureRect& srcRect,
                         const TextureRect& dstRect,
                         std::size_t dstBytesCount,
-                        Natron::ImageBitDepthEnum bitdepth,
+                        ImageBitDepthEnum bitdepth,
                         unsigned char* srcBuf,
                         unsigned char** dstBuf)
 {
@@ -697,30 +820,39 @@ static bool copyAndSwap(const TextureRect& srcRect,
     return true;
 }
 
-Natron::StatusEnum
+ViewerInstance::ViewerRenderRetCode
 ViewerInstance::getRenderViewerArgsAndCheckCache_public(SequenceTime time,
                                                            bool isSequential,
                                                            bool canAbort,
                                                            int view,
                                                            int textureIndex,
                                                            U64 viewerHash,
-                                                           const boost::shared_ptr<Natron::Node>& rotoPaintNode,
+                                                           const boost::shared_ptr<Node>& rotoPaintNode,
                                                            bool useTLS,
                                                            const boost::shared_ptr<RenderStats>& stats,
                                                            ViewerArgs* outArgs)
 {
-    U64 renderAge = _imp->getRenderAge(textureIndex);
-    return getRenderViewerArgsAndCheckCache(time, isSequential, canAbort, view, textureIndex, viewerHash, rotoPaintNode, useTLS, renderAge, stats, outArgs);
+    U64 renderAge = _imp->getRenderAgeAndIncrement(textureIndex);
+    
+   
+    
+    ViewerRenderRetCode stat = getRenderViewerArgsAndCheckCache(time, isSequential, canAbort, view, textureIndex, viewerHash, rotoPaintNode, useTLS, renderAge, stats, outArgs);
+    
+    if (stat == eViewerRenderRetCodeFail || stat == eViewerRenderRetCodeBlack) {
+        _imp->checkAndUpdateDisplayAge(textureIndex,renderAge);
+    }
+    
+    return stat;
 }
 
-Natron::StatusEnum
+ViewerInstance::ViewerRenderRetCode
 ViewerInstance::getRenderViewerArgsAndCheckCache(SequenceTime time,
                                                  bool isSequential,
                                                  bool canAbort,
                                                  int view,
                                                  int textureIndex,
                                                  U64 viewerHash,
-                                                 const boost::shared_ptr<Natron::Node>& rotoPaintNode,
+                                                 const boost::shared_ptr<Node>& rotoPaintNode,
                                                  bool useTLS,
                                                  U64 renderAge,
                                                  const boost::shared_ptr<RenderStats>& stats,
@@ -744,11 +876,7 @@ ViewerInstance::getRenderViewerArgsAndCheckCache(SequenceTime time,
     }
     
     if (!upstreamInput || !outArgs->activeInputToRender || !checkTreeCanRender(outArgs->activeInputToRender->getNode().get())) {
-        Q_EMIT disconnectTextureRequest(textureIndex);
-        //if (!isSequential) {
-            _imp->checkAndUpdateDisplayAge(textureIndex,renderAge);
-        //}
-        return eStatusFailed;
+        return eViewerRenderRetCodeFail;
     }
     
     {
@@ -763,11 +891,11 @@ ViewerInstance::getRenderViewerArgsAndCheckCache(SequenceTime time,
     ///
     ///Note that we can't yet use the texture cache because we would need the TextureRect identifyin
     ///the texture in order to retrieve from the cache, but to make the TextureRect we need the RoD!
-    RenderScale scale;
+    RenderScale scale(1.);
     int mipMapLevel;
     {
         QMutexLocker l(&_imp->viewerParamsMutex);
-        scale.x = Natron::Image::getScaleFromMipMapLevel(_imp->viewerMipMapLevel);
+        scale.x = Image::getScaleFromMipMapLevel(_imp->viewerMipMapLevel);
         scale.y = scale.x;
         mipMapLevel = _imp->viewerMipMapLevel;
     }
@@ -805,10 +933,9 @@ ViewerInstance::getRenderViewerArgsAndCheckCache(SequenceTime time,
     
     // If it's eSupportsMaybe and mipMapLevel!=0, don't forget to update
     // this after the first call to getRegionOfDefinition().
-    RenderScale scaleOne;
-    scaleOne.x = scaleOne.y = 1.;
+    RenderScale scaleOne(1.);
     EffectInstance::SupportsEnum supportsRS = outArgs->activeInputToRender->supportsRenderScaleMaybe();
-    scale.x = scale.y = Natron::Image::getScaleFromMipMapLevel(originalMipMapLevel);
+    scale.x = scale.y = Image::getScaleFromMipMapLevel(originalMipMapLevel);
     
     
     
@@ -859,12 +986,7 @@ ViewerInstance::getRenderViewerArgsAndCheckCache(SequenceTime time,
                                                                                  supportsRS ==  eSupportsNo ? scaleOne : scale,
                                                                                  view, &rod, &isRodProjectFormat);
     if (stat == eStatusFailed) {
-        Q_EMIT disconnectTextureRequest(textureIndex);
-        //if (!isSequential) {
-            _imp->checkAndUpdateDisplayAge(textureIndex,renderAge);
-        //}
-
-        return stat;
+        return eViewerRenderRetCodeFail;
     }
     // update scale after the first call to getRegionOfDefinition
     if ( (supportsRS == eSupportsMaybe) && (mipMapLevel != 0) ) {
@@ -896,13 +1018,8 @@ ViewerInstance::getRenderViewerArgsAndCheckCache(SequenceTime time,
         roi = _imp->uiContext->getImageRectangleDisplayedRoundedToTileSize(rod, par, originalMipMapLevel);
     }
     
-    if ( (roi.width() == 0) || (roi.height() == 0) ) {
-        Q_EMIT disconnectTextureRequest(textureIndex);
-        outArgs->params.reset();
-        //if (!isSequential) {
-            _imp->checkAndUpdateDisplayAge(textureIndex,renderAge);
-        //}
-        return eStatusReplyDefault;
+    if (roi.isNull()) {
+        return eViewerRenderRetCodeBlack;
     }
     
     
@@ -929,7 +1046,7 @@ ViewerInstance::getRenderViewerArgsAndCheckCache(SequenceTime time,
     
     assert(_imp->uiContext);
     outArgs->params->depth = _imp->uiContext->getBitDepth();
-    if (outArgs->params->depth == Natron::eImageBitDepthFloat) {
+    if (outArgs->params->depth == eImageBitDepthFloat) {
         outArgs->params->bytesCount *= sizeof(float);
     }
     
@@ -948,7 +1065,7 @@ ViewerInstance::getRenderViewerArgsAndCheckCache(SequenceTime time,
         outArgs->params->alphaChannelName = _imp->viewerParamsAlphaChannelName;
     }
     {
-        QMutexLocker k(&_imp->gammaLookupMutex);
+        QWriteLocker k(&_imp->gammaLookupMutex);
         if (_imp->gammaLookup.empty()) {
             _imp->fillGammaLut(1. / outArgs->params->gamma);
         }
@@ -982,13 +1099,15 @@ ViewerInstance::getRenderViewerArgsAndCheckCache(SequenceTime time,
         ///we never use the texture cache when the user RoI is enabled, otherwise we would have
         ///zillions of textures in the cache, each a few pixels different.
         assert(_imp->uiContext);
-        boost::shared_ptr<Natron::FrameParams> cachedFrameParams;
+        boost::shared_ptr<FrameParams> cachedFrameParams;
         
         if (!outArgs->userRoIEnabled &&
             !outArgs->autoContrast &&
             !rotoPaintNode.get() &&
             !isTracking()) {
-            isCached = Natron::getTextureFromCache(*(outArgs->key), &outArgs->params->cachedFrame);
+            
+            isCached = AppManager::getTextureFromCache(*(outArgs->key), &outArgs->params->cachedFrame);
+
             
             if (!isCached && lookups == 2 && lookup == 0) {
                 //Lookup didn't work in non draft mode, try with draft mode now, update the texture rectangle
@@ -1004,8 +1123,8 @@ ViewerInstance::getRenderViewerArgsAndCheckCache(SequenceTime time,
                 outArgs->params->textureRect.closestPo2 = 1 << mipMapLevel;
                 outArgs->params->mipMapLevel = mipMapLevel;
                 outArgs->params->bytesCount = outArgs->params->textureRect.w * outArgs->params->textureRect.h * 4;
-                scale.x = scale.y = Natron::Image::getScaleFromMipMapLevel(mipMapLevel);
-                if (outArgs->params->depth == Natron::eImageBitDepthFloat) {
+                scale.x = scale.y = Image::getScaleFromMipMapLevel(mipMapLevel);
+                if (outArgs->params->depth == eImageBitDepthFloat) {
                     outArgs->params->bytesCount *= sizeof(float);
                 }
                 continue;
@@ -1035,18 +1154,15 @@ ViewerInstance::getRenderViewerArgsAndCheckCache(SequenceTime time,
             ///but not yet allocated.
             FrameEntryLocker entryLocker(_imp.get());
             if (!entryLocker.tryLock(outArgs->params->cachedFrame)) {
-                outArgs->params->cachedFrame.reset();
                 ///Another thread is rendering it, just return it is not useful to keep this thread waiting.
-                //return eStatusReplyDefault;
-                return eStatusOK;
+                return eViewerRenderRetCodeRedraw;
             }
             
             if (outArgs->params->cachedFrame->getAborted()) {
                 ///The thread rendering the frame entry might have been aborted and the entry removed from the cache
                 ///but another thread might successfully have found it in the cache. This flag is to notify it the frame
                 ///is invalid.
-                outArgs->params->cachedFrame.reset();
-                return eStatusOK;
+                return eViewerRenderRetCodeRedraw;
             }
             
             // how do you make sure cachedFrame->data() is not freed after this line?
@@ -1066,28 +1182,17 @@ ViewerInstance::getRenderViewerArgsAndCheckCache(SequenceTime time,
         }
         break;
     } // for (int lookup = 0; lookup < lookups; ++lookup) {
-    return eStatusOK;
+    return eViewerRenderRetCodeRender;
 }
 
-//if render was aborted, remove the frame from the cache as it contains only garbage
-#define abortCheck(input) if ( input->aborted() ) { \
-                                if (inArgs.params->cachedFrame) { \
-                                    inArgs.params->cachedFrame->setAborted(true); \
-                                    appPTR->removeFromViewerCache(inArgs.params->cachedFrame); \
-                                } \
-                                if (!isSequentialRender) { \
-                                    _imp->removeOngoingRender(inArgs.params->textureIndex, inArgs.params->renderAge); \
-                                } \
-                                return eStatusReplyDefault; \
-                            }
 
-Natron::StatusEnum
+ViewerInstance::ViewerRenderRetCode
 ViewerInstance::renderViewer_internal(int view,
                                       bool singleThreaded,
                                       bool isSequentialRender,
                                       U64 /*viewerHash*/,
                                       bool canAbort,
-                                      boost::shared_ptr<Natron::Node> rotoPaintNode,
+                                      boost::shared_ptr<Node> rotoPaintNode,
                                       bool useTLS,
                                       const boost::shared_ptr<RequestedFrame>& request,
                                       const boost::shared_ptr<RenderStats>& stats,
@@ -1107,15 +1212,9 @@ ViewerInstance::renderViewer_internal(int view,
      * latency so it looks like it is actually seeking, otherwise it would just refresh the image upon the mouseRelease event because all
      * other renders would be aborted. To enable this behaviour, we ensure that at least 1 render is always running, even if it does not
      * correspond to the GUI state anymore.
-     * 3) Single frame non-abortable render: the canAbort flag is set to false and the isSequentialRender flag is set to false. Basically
-     * only the viewer uses this when issuing renders due to a zoom or pan of the user. This is used to enable a trimap-caching technique
-     * to optimize threads repartitions across tiles processing of the image.
+     * 3) Single frame non-abortable render: the canAbort flag is set to false and the isSequentialRender flag is set to false. 
      */
-    if (!isSequentialRender) {
-        if (!_imp->addOngoingRender(inArgs.params->textureIndex, inArgs.params->renderAge)) {
-             return eStatusReplyDefault;
-        }
-    }
+  
     
     RectI roi;
     roi.x1 = inArgs.params->textureRect.x1;
@@ -1127,8 +1226,7 @@ ViewerInstance::renderViewer_internal(int view,
     ///Check that we were not aborted already
     if ( !isSequentialRender && (inArgs.activeInputToRender->getHash() != inArgs.activeInputHash ||
                                  inArgs.params->time != getTimeline()->currentFrame()) ) {
-        _imp->removeOngoingRender(inArgs.params->textureIndex, inArgs.params->renderAge);
-        return eStatusReplyDefault;
+        return eViewerRenderRetCodeRedraw;
     }
     
     ///Notify the gui we're rendering.
@@ -1148,12 +1246,9 @@ ViewerInstance::renderViewer_internal(int view,
         roi.toCanonical(inArgs.params->mipMapLevel, inArgs.activeInputToRender->getPreferredAspectRatio(), inArgs.params->rod, &canonicalRoi);
         
         FrameRequestMap request;
-        Natron::StatusEnum stat = EffectInstance::computeRequestPass(inArgs.params->time, view, inArgs.params->mipMapLevel, canonicalRoi, getNode(), request);
+        StatusEnum stat = EffectInstance::computeRequestPass(inArgs.params->time, view, inArgs.params->mipMapLevel, canonicalRoi, getNode(), request);
         if (stat == eStatusFailed) {
-            if (!isSequentialRender) {
-                _imp->removeOngoingRender(inArgs.params->textureIndex, inArgs.params->renderAge);
-            }
-            return stat;
+            return eViewerRenderRetCodeFail;
         }
         
         frameArgs.reset(new ViewerParallelRenderArgsSetter(inArgs.params->time,
@@ -1222,7 +1317,7 @@ ViewerInstance::renderViewer_internal(int view,
                 
                 _imp->lastRenderParams[inArgs.params->textureIndex].reset();
                 if (!inArgs.params->ramBuffer) {
-                    return eStatusFailed;
+                    return eViewerRenderRetCodeFail;
                 }
             } else {
                 inArgs.params->mustFreeRamBuffer = true;
@@ -1243,20 +1338,17 @@ ViewerInstance::renderViewer_internal(int view,
         inArgs.params->rod.toPixelEnclosing(inArgs.params->mipMapLevel, inArgs.params->textureRect.par, &bounds);
         
         
-        boost::shared_ptr<Natron::FrameParams> cachedFrameParams =
+        boost::shared_ptr<FrameParams> cachedFrameParams =
         FrameEntry::makeParams(bounds,inArgs.key->getBitDepth(), inArgs.params->textureRect.w, inArgs.params->textureRect.h, ImagePtr());
-        bool cached = Natron::getTextureFromCacheOrCreate(*(inArgs.key), cachedFrameParams,
+        bool cached = AppManager::getTextureFromCacheOrCreate(*(inArgs.key), cachedFrameParams,
                                                                    &inArgs.params->cachedFrame);
         if (!inArgs.params->cachedFrame) {
             std::stringstream ss;
             ss << "Failed to allocate a texture of ";
             ss << printAsRAM( cachedFrameParams->getElementsCount() * sizeof(FrameEntry::data_t) ).toStdString();
-            Natron::errorDialog( QObject::tr("Out of memory").toStdString(),ss.str() );
-            if (!isSequentialRender) {
-                _imp->checkAndUpdateDisplayAge(inArgs.params->textureIndex,inArgs.params->renderAge);
-                _imp->removeOngoingRender(inArgs.params->textureIndex, inArgs.params->renderAge);
-            }
-            return eStatusFailed;
+            Dialogs::errorDialog( QObject::tr("Out of memory").toStdString(),ss.str() );
+
+            return eViewerRenderRetCodeFail;
         }
         
         entryLocker.lock(inArgs.params->cachedFrame);
@@ -1279,6 +1371,10 @@ ViewerInstance::renderViewer_internal(int view,
     }
     assert(inArgs.params->ramBuffer);
     
+    //We are going to render a non cached frame and not in playback, clear persistent messages
+    if (!inArgs.params->isSequential) {
+        clearPersistentMessage(true);
+    }
     
     std::list<ImageComponents> components;
     ImageBitDepthEnum imageDepth;
@@ -1289,8 +1385,8 @@ ViewerInstance::renderViewer_internal(int view,
     std::list<ImageComponents> requestedComponents;
     
     int alphaChannelIndex = -1;
-    if (inArgs.channels != Natron::eDisplayChannelsA &&
-        inArgs.channels != Natron::eDisplayChannelsMatte) {
+    if (inArgs.channels != eDisplayChannelsA &&
+        inArgs.channels != eDisplayChannelsMatte) {
         ///We fetch the Layer specified in the gui
         if (inArgs.params->layer.getNumComponents() > 0) {
             requestedComponents.push_back(inArgs.params->layer);
@@ -1308,7 +1404,7 @@ ViewerInstance::renderViewer_internal(int view,
             }
             assert(alphaChannelIndex != -1);
         }
-        if (inArgs.channels == Natron::eDisplayChannelsMatte) {
+        if (inArgs.channels == eDisplayChannelsMatte) {
             //For the matte overlay also display the alpha mask on top of the red channel of the image
             if (inArgs.params->layer.getNumComponents() > 0 && inArgs.params->layer != inArgs.params->alphaLayer) {
                 requestedComponents.push_back(inArgs.params->layer);
@@ -1317,20 +1413,7 @@ ViewerInstance::renderViewer_internal(int view,
     }
     
     if (requestedComponents.empty()) {
-        if (inArgs.params->cachedFrame) {
-            inArgs.params->cachedFrame->setAborted(true);
-            appPTR->removeFromViewerCache(inArgs.params->cachedFrame);
-            if (!isSequentialRender) {
-                _imp->checkAndUpdateDisplayAge(inArgs.params->textureIndex,inArgs.params->renderAge);
-            }
-        }
-        if (!isSequentialRender) {
-            _imp->removeOngoingRender(inArgs.params->textureIndex, inArgs.params->renderAge);
-        }
-        Q_EMIT disconnectTextureRequest(inArgs.params->textureIndex);
-        inArgs.params.reset();
-
-        return eStatusReplyDefault;
+        return eViewerRenderRetCodeBlack;
     }
 
     EffectInstance::NotifyInputNRenderingStarted_RAII inputNIsRendering_RAII(getNode().get(),inArgs.activeInputIndex);
@@ -1361,27 +1444,27 @@ ViewerInstance::renderViewer_internal(int view,
     }
     
     if (stats && stats->isInDepthProfilingEnabled()) {
-        bool channelsRendered[4];
+        std::bitset<4> channelsRendered;
         switch (inArgs.channels) {
-            case Natron::eDisplayChannelsMatte:
-            case Natron::eDisplayChannelsRGB:
-            case Natron::eDisplayChannelsY:
+            case eDisplayChannelsMatte:
+            case eDisplayChannelsRGB:
+            case eDisplayChannelsY:
                 channelsRendered[0] = channelsRendered[1] = channelsRendered[2] = true;
                 channelsRendered[3] = false;
                 break;
-            case Natron::eDisplayChannelsR:
+            case eDisplayChannelsR:
                 channelsRendered[3] = channelsRendered[1] = channelsRendered[2] = false;
                 channelsRendered[0] = true;
                 break;
-            case Natron::eDisplayChannelsG:
+            case eDisplayChannelsG:
                 channelsRendered[0] = channelsRendered[2] = channelsRendered[3] = false;
                 channelsRendered[1] = true;
                 break;
-            case Natron::eDisplayChannelsB:
+            case eDisplayChannelsB:
                 channelsRendered[0] = channelsRendered[1] = channelsRendered[3] = false;
                 channelsRendered[2] = true;
                 break;
-            case Natron::eDisplayChannelsA:
+            case eDisplayChannelsA:
                 channelsRendered[0] = channelsRendered[1] = channelsRendered[2] = false;
                 channelsRendered[3] = true;
                 break;
@@ -1453,22 +1536,18 @@ ViewerInstance::renderViewer_internal(int view,
                 inArgs.params->tiles.push_back(colorImage);
             }
             if (!colorImage) {
-                if (inArgs.params->cachedFrame) {
-                    inArgs.params->cachedFrame->setAborted(true);
-                    appPTR->removeFromViewerCache(inArgs.params->cachedFrame);
-                }
-                if (!isSequentialRender) {
-                    _imp->removeOngoingRender(inArgs.params->textureIndex, inArgs.params->renderAge);
-                }
-                if (retCode != EffectInstance::eRenderRoIRetCodeAborted) {
-                    Q_EMIT disconnectTextureRequest(inArgs.params->textureIndex);
-                }
-                
                 if (retCode == EffectInstance::eRenderRoIRetCodeFailed) {
-                    inArgs.params.reset();
-                    return eStatusFailed;
+                    return eViewerRenderRetCodeFail;
+                } else if (retCode == EffectInstance::eRenderRoIRetCodeOk) {
+                    return eViewerRenderRetCodeBlack;
+                } else {
+                    /*
+                     The render was not aborted but did not return an image, this may be the case
+                     for example when an effect returns a NULL RoD at some point. Don't fail but
+                     display a black image
+                     */
+                    return eViewerRenderRetCodeRedraw;
                 }
-                return eStatusReplyDefault;
             }
             
             if (!reportProgress && splitRoi.size() > 1 && partialRectsToRender.empty()) {
@@ -1481,7 +1560,9 @@ ViewerInstance::renderViewer_internal(int view,
         } catch (...) {
             ///If the plug-in was aborted, this is probably not a failure due to render but because of abortion.
             ///Don't forward the exception in that case.
-            abortCheck(inArgs.activeInputToRender);
+            if (inArgs.activeInputToRender->aborted()) {
+                return eViewerRenderRetCodeRedraw;
+            }
             throw;
         }
         
@@ -1489,24 +1570,17 @@ ViewerInstance::renderViewer_internal(int view,
         ///We check that the render age is still OK and that no other renders were triggered, in which case we should not need to
         ///refresh the viewer.
         if (!_imp->checkAgeNoUpdate(inArgs.params->textureIndex,inArgs.params->renderAge)) {
-            if (inArgs.params->cachedFrame) {
-                inArgs.params->cachedFrame->setAborted(true);
-                appPTR->removeFromViewerCache(inArgs.params->cachedFrame);
-                inArgs.params->cachedFrame.reset();
-            }
-            if (!isSequentialRender) {
-                _imp->removeOngoingRender(inArgs.params->textureIndex, inArgs.params->renderAge);
-            }
-            return eStatusReplyDefault;
+            return eViewerRenderRetCodeRedraw;
         }
         
-        abortCheck(inArgs.activeInputToRender);
- 
+        if (inArgs.activeInputToRender->aborted()) {
+            return eViewerRenderRetCodeRedraw;
+        }
         
         ViewerColorSpaceEnum srcColorSpace = getApp()->getDefaultColorSpaceForBitDepth( colorImage->getBitDepth() );
         
-        assert((inArgs.channels != Natron::eDisplayChannelsMatte && alphaChannelIndex < (int)colorImage->getComponentsCount()) ||
-               (inArgs.channels == Natron::eDisplayChannelsMatte && (alphaImage && alphaChannelIndex < (int)alphaImage->getComponentsCount() || !alphaImage)));
+        assert((inArgs.channels != eDisplayChannelsMatte && alphaChannelIndex < (int)colorImage->getComponentsCount()) ||
+               (inArgs.channels == eDisplayChannelsMatte && ((alphaImage && alphaChannelIndex < (int)alphaImage->getComponentsCount()) || !alphaImage)));
         
         //Make sure the viewer does not render something outside the bounds
         RectI viewerRenderRoI;
@@ -1551,7 +1625,7 @@ ViewerInstance::renderViewer_internal(int view,
                                         lutFromColorspace(inArgs.params->lut),
                                         alphaChannelIndex);
             
-            QMutexLocker k(&_imp->gammaLookupMutex);
+            QReadLocker k(&_imp->gammaLookupMutex);
             renderFunctor(viewerRenderRoI,
                           args,
                           this,
@@ -1623,11 +1697,11 @@ ViewerInstance::renderViewer_internal(int view,
                                         lutFromColorspace(inArgs.params->lut),
                                         alphaChannelIndex);
             if (runInCurrentThread) {
-                QMutexLocker k(&_imp->gammaLookupMutex);
+                QReadLocker k(&_imp->gammaLookupMutex);
                 renderFunctor(viewerRenderRoI,
                               args, this, inArgs.params->ramBuffer);
             } else {
-                QMutexLocker k(&_imp->gammaLookupMutex);
+                QReadLocker k(&_imp->gammaLookupMutex);
                 QtConcurrent::map( splitRects,
                                   boost::bind(&renderFunctor,
                                               _1,
@@ -1662,30 +1736,14 @@ ViewerInstance::renderViewer_internal(int view,
         _imp->reportProgress(inArgs.params, unreportedTiles, stats, request);
         
         //If we reply OK, it will append another updateViewer for nothing
-        return eStatusReplyDefault;
+        return eViewerRenderRetCodeRedraw;
     }
-    
-    if (!isSequentialRender) {
-        
-        bool couldRemove = _imp->removeOngoingRender(inArgs.params->textureIndex, inArgs.params->renderAge);
-
-        if (!couldRemove) {
-            if (inArgs.params->cachedFrame) {
-                inArgs.params->cachedFrame->setAborted(true);
-                appPTR->removeFromViewerCache(inArgs.params->cachedFrame);
-                inArgs.params->cachedFrame.reset();
-            }
-            return eStatusReplyDefault;
-        }
-    }
-    
-   
-    
     {
         QMutexLocker k(&_imp->lastRenderParamsMutex);
         _imp->lastRenderParams[inArgs.params->textureIndex] = inArgs.params;
     }
-    return eStatusOK;
+    return eViewerRenderRetCodeRender;
+
 } // renderViewer_internal
 
 void
@@ -1701,7 +1759,7 @@ ViewerInstance::ViewerInstancePrivate::reportProgress(const boost::shared_ptr<Up
         params->roi = *it;
         params->updateOnlyRoi = true;
         std::size_t pixelSize = 4;
-        if (params->depth == Natron::eImageBitDepthFloat) {
+        if (params->depth == eImageBitDepthFloat) {
             pixelSize *= sizeof(float);
         }
         std::size_t dstRowSize = params->roi.width() * pixelSize;
@@ -1752,7 +1810,7 @@ renderFunctor(const RectI& roi,
 {
     assert(args.texRect.y1 <= roi.y1 && roi.y1 <= roi.y2 && roi.y2 <= args.texRect.y2);
 
-    if ( (args.bitDepth == Natron::eImageBitDepthFloat) ) {
+    if ( (args.bitDepth == eImageBitDepthFloat) ) {
         // image is stored as linear, the OpenGL shader with do gamma/sRGB/Rec709 decompression, as well as gain and offset
         scaleToTexture32bits(roi, args, (float*)buffer);
     } else {
@@ -1763,15 +1821,15 @@ renderFunctor(const RectI& roi,
 
 inline
 std::pair<double, double>
-findAutoContrastVminVmax_generic(boost::shared_ptr<const Natron::Image> inputImage,
+findAutoContrastVminVmax_generic(boost::shared_ptr<const Image> inputImage,
                                  int nComps,
-                                 Natron::DisplayChannelsEnum channels,
+                                 DisplayChannelsEnum channels,
                                  const RectI & rect)
 {
     double localVmin = std::numeric_limits<double>::infinity();
     double localVmax = -std::numeric_limits<double>::infinity();
     
-    Natron::Image::ReadAccess acc = inputImage->getReadRights();
+    Image::ReadAccess acc = inputImage->getReadRights();
     
     for (int y = rect.bottom(); y < rect.top(); ++y) {
         const float* src_pixels = (const float*)acc.pixelAt(rect.left(),y);
@@ -1811,27 +1869,27 @@ findAutoContrastVminVmax_generic(boost::shared_ptr<const Natron::Image> inputIma
             
             double mini, maxi;
             switch (channels) {
-                case Natron::eDisplayChannelsRGB:
+                case eDisplayChannelsRGB:
                     mini = std::min(std::min(r,g),b);
                     maxi = std::max(std::max(r,g),b);
                     break;
-                case Natron::eDisplayChannelsY:
+                case eDisplayChannelsY:
                     mini = r = 0.299 * r + 0.587 * g + 0.114 * b;
                     maxi = mini;
                     break;
-                case Natron::eDisplayChannelsR:
+                case eDisplayChannelsR:
                     mini = r;
                     maxi = mini;
                     break;
-                case Natron::eDisplayChannelsG:
+                case eDisplayChannelsG:
                     mini = g;
                     maxi = mini;
                     break;
-                case Natron::eDisplayChannelsB:
+                case eDisplayChannelsB:
                     mini = b;
                     maxi = mini;
                     break;
-                case Natron::eDisplayChannelsA:
+                case eDisplayChannelsA:
                     mini = a;
                     maxi = mini;
                     break;
@@ -1856,16 +1914,16 @@ findAutoContrastVminVmax_generic(boost::shared_ptr<const Natron::Image> inputIma
 
 template <int nComps>
 std::pair<double, double>
-findAutoContrastVminVmax_internal(boost::shared_ptr<const Natron::Image> inputImage,
-                                  Natron::DisplayChannelsEnum channels,
+findAutoContrastVminVmax_internal(boost::shared_ptr<const Image> inputImage,
+                                  DisplayChannelsEnum channels,
                                   const RectI & rect)
 {
     return findAutoContrastVminVmax_generic(inputImage, nComps, channels, rect);
 }
 
 std::pair<double, double>
-findAutoContrastVminVmax(boost::shared_ptr<const Natron::Image> inputImage,
-                         Natron::DisplayChannelsEnum channels,
+findAutoContrastVminVmax(boost::shared_ptr<const Image> inputImage,
+                         DisplayChannelsEnum channels,
                          const RectI & rect)
 {
     int nComps = inputImage->getComponents().getNumComponents();
@@ -1891,9 +1949,9 @@ scaleToTexture8bits_generic(const RectI& roi,
 {
     size_t pixelSize = sizeof(PIX);
     
-    const bool luminance = (args.channels == Natron::eDisplayChannelsY);
+    const bool luminance = (args.channels == eDisplayChannelsY);
     
-    Natron::Image::ReadAccess acc = Natron::Image::ReadAccess(args.inputImage.get());
+    Image::ReadAccess acc = Image::ReadAccess(args.inputImage.get());
     const RectI srcImgBounds = args.inputImage->getBounds();
     
     ///offset the output buffer at the starting point
@@ -1905,9 +1963,9 @@ scaleToTexture8bits_generic(const RectI& roi,
     const PIX* src_pixels = (const PIX*)acc.pixelAt(roi.x1, roi.y1);
     const int srcRowElements = (int)args.inputImage->getRowElements();
     
-    boost::shared_ptr<Natron::Image::ReadAccess> matteAcc;
+    boost::shared_ptr<Image::ReadAccess> matteAcc;
     if (applyMatte) {
-        matteAcc.reset(new Natron::Image::ReadAccess(args.matteImage.get()));
+        matteAcc.reset(new Image::ReadAccess(args.matteImage.get()));
     }
     
     for (int y = roi.y1; y < roi.y2;
@@ -1981,9 +2039,9 @@ scaleToTexture8bits_generic(const RectI& roi,
                             g = args.srcColorSpace->fromColorSpaceUint8ToLinearFloatFast( (unsigned char)g );
                             b = args.srcColorSpace->fromColorSpaceUint8ToLinearFloatFast( (unsigned char)b );
                         } else {
-                            r = (double)convertPixelDepth<unsigned char, float>( (unsigned char)r );
-                            g = (double)convertPixelDepth<unsigned char, float>( (unsigned char)g );
-                            b = (double)convertPixelDepth<unsigned char, float>( (unsigned char)b );
+                            r = (double)Image::convertPixelDepth<unsigned char, float>( (unsigned char)r );
+                            g = (double)Image::convertPixelDepth<unsigned char, float>( (unsigned char)g );
+                            b = (double)Image::convertPixelDepth<unsigned char, float>( (unsigned char)b );
                         }
                         break;
                     case sizeof(unsigned short): //short
@@ -1992,9 +2050,9 @@ scaleToTexture8bits_generic(const RectI& roi,
                             g = args.srcColorSpace->fromColorSpaceUint16ToLinearFloatFast( (unsigned short)g );
                             b = args.srcColorSpace->fromColorSpaceUint16ToLinearFloatFast( (unsigned short)b );
                         } else {
-                            r = (double)convertPixelDepth<unsigned short, float>( (unsigned char)r );
-                            g = (double)convertPixelDepth<unsigned short, float>( (unsigned char)g );
-                            b = (double)convertPixelDepth<unsigned short, float>( (unsigned char)b );
+                            r = (double)Image::convertPixelDepth<unsigned short, float>( (unsigned char)r );
+                            g = (double)Image::convertPixelDepth<unsigned short, float>( (unsigned char)g );
+                            b = (double)Image::convertPixelDepth<unsigned short, float>( (unsigned char)b );
                         }
                         break;
                     case sizeof(float): //float
@@ -2072,10 +2130,10 @@ scaleToTexture8bits_generic(const RectI& roi,
                             alphaMatteValue = (double)src_pixels[args.alphaChannelIndex];
                             switch ( pixelSize ) {
                                 case sizeof(unsigned char): //byte
-                                    alphaMatteValue = (double)convertPixelDepth<unsigned char, float>( (unsigned char)r );
+                                    alphaMatteValue = (double)Image::convertPixelDepth<unsigned char, float>( (unsigned char)r );
                                     break;
                                 case sizeof(unsigned short): //short
-                                    alphaMatteValue = (double)convertPixelDepth<unsigned short, float>( (unsigned short)r );
+                                    alphaMatteValue = (double)Image::convertPixelDepth<unsigned short, float>( (unsigned short)r );
                                     break;
                                 default:
                                     break;
@@ -2088,7 +2146,7 @@ scaleToTexture8bits_generic(const RectI& roi,
                     } else {
                         matteA = Color::floatToInt<256>(alphaMatteValue) / 2;
                     }
-                    uR = clampIfInt<U8>((double)uR + matteA);
+                    uR = Image::clampIfInt<U8>((double)uR + matteA);
                     
                 }
                 
@@ -2179,19 +2237,19 @@ scaleToTexture8bitsForPremult(const RectI& roi,
 {
     
     switch (args.channels) {
-        case Natron::eDisplayChannelsRGB:
-        case Natron::eDisplayChannelsY:
-        case Natron::eDisplayChannelsMatte:
+        case eDisplayChannelsRGB:
+        case eDisplayChannelsY:
+        case eDisplayChannelsMatte:
             
             scaleToTexture8bitsForDepthForComponents<PIX, maxValue, opaque, 0, 1, 2>(roi, args,viewer, output);
             break;
-        case Natron::eDisplayChannelsG:
+        case eDisplayChannelsG:
             scaleToTexture8bitsForDepthForComponents<PIX, maxValue, opaque, 1, 1, 1>(roi, args,viewer, output);
             break;
-        case Natron::eDisplayChannelsB:
+        case eDisplayChannelsB:
             scaleToTexture8bitsForDepthForComponents<PIX, maxValue, opaque, 2, 2, 2>(roi, args,viewer, output);
             break;
-        case Natron::eDisplayChannelsA:
+        case eDisplayChannelsA:
             switch (args.alphaChannelIndex) {
                 case -1:
                     scaleToTexture8bitsForDepthForComponents<PIX, maxValue, opaque, 3, 3, 3>(roi, args,viewer, output);
@@ -2213,7 +2271,7 @@ scaleToTexture8bitsForPremult(const RectI& roi,
             }
             
             break;
-        case Natron::eDisplayChannelsR:
+        case eDisplayChannelsR:
         default:
             scaleToTexture8bitsForDepthForComponents<PIX, maxValue, opaque, 0, 0, 0>(roi, args,viewer, output);
             
@@ -2232,11 +2290,11 @@ scaleToTexture8bitsForDepth(const RectI& roi,
                             U32* output)
 {
     switch (args.srcPremult) {
-        case Natron::eImagePremultiplicationOpaque:
+        case eImagePremultiplicationOpaque:
             scaleToTexture8bitsForPremult<PIX, maxValue, true>(roi, args,viewer, output);
             break;
-        case Natron::eImagePremultiplicationPremultiplied:
-        case Natron::eImagePremultiplicationUnPremultiplied:
+        case eImagePremultiplicationPremultiplied:
+        case eImagePremultiplicationUnPremultiplied:
         default:
             scaleToTexture8bitsForPremult<PIX, maxValue, false>(roi, args,viewer, output);
             break;
@@ -2252,19 +2310,19 @@ scaleToTexture8bits(const RectI& roi,
 {
     assert(output);
     switch ( args.inputImage->getBitDepth() ) {
-        case Natron::eImageBitDepthFloat:
+        case eImageBitDepthFloat:
             scaleToTexture8bitsForDepth<float, 1>(roi, args,viewer, output);
             break;
-        case Natron::eImageBitDepthByte:
+        case eImageBitDepthByte:
             scaleToTexture8bitsForDepth<unsigned char, 255>(roi, args,viewer, output);
             break;
-        case Natron::eImageBitDepthShort:
+        case eImageBitDepthShort:
             scaleToTexture8bitsForDepth<unsigned short, 65535>(roi, args,viewer,output);
             break;
-        case Natron::eImageBitDepthHalf:
+        case eImageBitDepthHalf:
             assert(false);
             break;
-        case Natron::eImageBitDepthNone:
+        case eImageBitDepthNone:
             break;
     }
 } // scaleToTexture8bits
@@ -2276,14 +2334,9 @@ ViewerInstance::interpolateGammaLut(float value)
 }
 
 void
-ViewerInstance::markAllOnRendersAsAborted()
+ViewerInstance::markAllOnGoingRendersAsAborted()
 {
-    QMutexLocker k(&_imp->renderAgeMutex);
-    for (int i = 0; i < 2; ++i) {
-        for (OnGoingRenders::iterator it = _imp->currentRenderAges[i].begin(); it != _imp->currentRenderAges[i].end(); ++it) {
-            it->second.aborted = true;
-        }
-    }
+    _imp->markAllRendersAsAborted();
 }
 
 template <typename PIX,int maxValue,bool opaque, bool applyMatte, int rOffset,int gOffset,int bOffset>
@@ -2294,16 +2347,16 @@ scaleToTexture32bitsGeneric(const RectI& roi,
                             float *output)
 {
     size_t pixelSize = sizeof(PIX);
-    const bool luminance = (args.channels == Natron::eDisplayChannelsY);
+    const bool luminance = (args.channels == eDisplayChannelsY);
 
     ///the width of the output buffer multiplied by the channels count
     const int dstRowElements = args.texRect.w * 4;
 
     
-    Natron::Image::ReadAccess acc = Natron::Image::ReadAccess(args.inputImage.get());
-    boost::shared_ptr<Natron::Image::ReadAccess> matteAcc;
+    Image::ReadAccess acc = Image::ReadAccess(args.inputImage.get());
+    boost::shared_ptr<Image::ReadAccess> matteAcc;
     if (applyMatte) {
-        matteAcc.reset(new Natron::Image::ReadAccess(args.matteImage.get()));
+        matteAcc.reset(new Image::ReadAccess(args.matteImage.get()));
     }
     
     float* dst_pixels =  output + (roi.y1 - args.texRect.y1) * dstRowElements + (roi.x1 - args.texRect.x1) * 4;
@@ -2366,9 +2419,9 @@ scaleToTexture32bitsGeneric(const RectI& roi,
                     g = args.srcColorSpace->fromColorSpaceUint8ToLinearFloatFast( (unsigned char)g );
                     b = args.srcColorSpace->fromColorSpaceUint8ToLinearFloatFast( (unsigned char)b );
                 } else {
-                    r = (double)convertPixelDepth<unsigned char, float>( (unsigned char)r );
-                    g = (double)convertPixelDepth<unsigned char, float>( (unsigned char)g );
-                    b = (double)convertPixelDepth<unsigned char, float>( (unsigned char)b );
+                    r = (double)Image::convertPixelDepth<unsigned char, float>( (unsigned char)r );
+                    g = (double)Image::convertPixelDepth<unsigned char, float>( (unsigned char)g );
+                    b = (double)Image::convertPixelDepth<unsigned char, float>( (unsigned char)b );
                 }
                 break;
             case sizeof(unsigned short):
@@ -2377,9 +2430,9 @@ scaleToTexture32bitsGeneric(const RectI& roi,
                     g = args.srcColorSpace->fromColorSpaceUint16ToLinearFloatFast( (unsigned short)g );
                     b = args.srcColorSpace->fromColorSpaceUint16ToLinearFloatFast( (unsigned short)b );
                 } else {
-                    r = (double)convertPixelDepth<unsigned short, float>( (unsigned char)r );
-                    g = (double)convertPixelDepth<unsigned short, float>( (unsigned char)g );
-                    b = (double)convertPixelDepth<unsigned short, float>( (unsigned char)b );
+                    r = (double)Image::convertPixelDepth<unsigned short, float>( (unsigned char)r );
+                    g = (double)Image::convertPixelDepth<unsigned short, float>( (unsigned char)g );
+                    b = (double)Image::convertPixelDepth<unsigned short, float>( (unsigned char)b );
                 }
                 break;
             case sizeof(float):
@@ -2425,10 +2478,10 @@ scaleToTexture32bitsGeneric(const RectI& roi,
                         alphaMatteValue = (double)src_pixels[args.alphaChannelIndex];
                         switch ( pixelSize ) {
                             case sizeof(unsigned char): //byte
-                                alphaMatteValue = (double)convertPixelDepth<unsigned char, float>( (unsigned char)r );
+                                alphaMatteValue = (double)Image::convertPixelDepth<unsigned char, float>( (unsigned char)r );
                                 break;
                             case sizeof(unsigned short): //short
-                                alphaMatteValue = (double)convertPixelDepth<unsigned short, float>( (unsigned short)r );
+                                alphaMatteValue = (double)Image::convertPixelDepth<unsigned short, float>( (unsigned short)r );
                                 break;
                             default:
                                 break;
@@ -2439,10 +2492,10 @@ scaleToTexture32bitsGeneric(const RectI& roi,
             }
 
             
-            dst_pixels[x * 4] = Natron::clamp(r, 0., 1.);
-            dst_pixels[x * 4 + 1] = Natron::clamp(g, 0., 1.);
-            dst_pixels[x * 4 + 2] = Natron::clamp(b, 0., 1.);
-            dst_pixels[x * 4 + 3] = Natron::clamp(a, 0., 1.);
+            dst_pixels[x * 4] = Image::clamp(r, 0., 1.);
+            dst_pixels[x * 4 + 1] = Image::clamp(g, 0., 1.);
+            dst_pixels[x * 4 + 2] = Image::clamp(b, 0., 1.);
+            dst_pixels[x * 4 + 3] = Image::clamp(a, 0., 1.);
 
         }
         if (src_pixels) {
@@ -2514,18 +2567,18 @@ scaleToTexture32bitsForPremultForComponents(const RectI& roi,
  
     
     switch (args.channels) {
-        case Natron::eDisplayChannelsRGB:
-        case Natron::eDisplayChannelsY:
-        case Natron::eDisplayChannelsMatte:
+        case eDisplayChannelsRGB:
+        case eDisplayChannelsY:
+        case eDisplayChannelsMatte:
             scaleToTexture32bitsForDepthForComponents<PIX, maxValue, opaque, 0, 1, 2>(roi, args, output);
             break;
-        case Natron::eDisplayChannelsG:
+        case eDisplayChannelsG:
             scaleToTexture32bitsForDepthForComponents<PIX, maxValue, opaque, 1, 1, 1>(roi, args, output);
             break;
-        case Natron::eDisplayChannelsB:
+        case eDisplayChannelsB:
             scaleToTexture32bitsForDepthForComponents<PIX, maxValue, opaque, 2, 2, 2>(roi, args, output);
             break;
-        case Natron::eDisplayChannelsA:
+        case eDisplayChannelsA:
             switch (args.alphaChannelIndex) {
                 case -1:
                     scaleToTexture32bitsForDepthForComponents<PIX, maxValue, opaque, 3, 3, 3>(roi, args, output);
@@ -2548,7 +2601,7 @@ scaleToTexture32bitsForPremultForComponents(const RectI& roi,
             }
             
             break;
-        case Natron::eDisplayChannelsR:
+        case eDisplayChannelsR:
         default:
             scaleToTexture32bitsForDepthForComponents<PIX, maxValue, opaque, 0, 0, 0>(roi, args, output);
             break;
@@ -2563,11 +2616,11 @@ scaleToTexture32bitsForPremult(const RectI& roi,
                              float *output)
 {
     switch (args.srcPremult) {
-        case Natron::eImagePremultiplicationOpaque:
+        case eImagePremultiplicationOpaque:
             scaleToTexture32bitsForPremultForComponents<PIX, maxValue, true>(roi, args, output);
             break;
-        case Natron::eImagePremultiplicationPremultiplied:
-        case Natron::eImagePremultiplicationUnPremultiplied:
+        case eImagePremultiplicationPremultiplied:
+        case eImagePremultiplicationUnPremultiplied:
         default:
             scaleToTexture32bitsForPremultForComponents<PIX, maxValue, false>(roi, args, output);
             break;
@@ -2585,19 +2638,19 @@ scaleToTexture32bits(const RectI& roi,
     assert(output);
 
     switch ( args.inputImage->getBitDepth() ) {
-        case Natron::eImageBitDepthFloat:
+        case eImageBitDepthFloat:
             scaleToTexture32bitsForPremult<float, 1>(roi, args, output);
             break;
-        case Natron::eImageBitDepthByte:
+        case eImageBitDepthByte:
             scaleToTexture32bitsForPremult<unsigned char, 255>(roi, args, output);
             break;
-        case Natron::eImageBitDepthShort:
+        case eImageBitDepthShort:
             scaleToTexture32bitsForPremult<unsigned short, 65535>(roi, args, output);
             break;
-        case Natron::eImageBitDepthHalf:
+        case eImageBitDepthHalf:
             assert(false);
             break;
-        case Natron::eImageBitDepthNone:
+        case eImageBitDepthNone:
             break;
     }
 } // scaleToTexture32bits
@@ -2640,11 +2693,11 @@ ViewerInstance::ViewerInstancePrivate::updateViewer(boost::shared_ptr<UpdateView
             tiles = params->tiles;
         }
 
-        Natron::ImageBitDepthEnum depth;
+        ImageBitDepthEnum depth;
         if (!tiles.empty()) {
             depth = tiles.front()->getBitDepth();
         } else {
-            depth = (Natron::ImageBitDepthEnum)params->cachedFrame->getKey().getBitDepth();
+            depth = (ImageBitDepthEnum)params->cachedFrame->getKey().getBitDepth();
         }
         
         uiContext->transferBufferFromRAMtoGPU(params->ramBuffer,
@@ -2668,7 +2721,7 @@ ViewerInstance::ViewerInstancePrivate::updateViewer(boost::shared_ptr<UpdateView
                                               params->viewportCenter);
         updateViewerPboIndex = (updateViewerPboIndex + 1) % 2;
         
-        boost::shared_ptr<Natron::Node> rotoPaintNode;
+        boost::shared_ptr<Node> rotoPaintNode;
         boost::shared_ptr<RotoStrokeItem> curStroke;
         bool isDrawing;
         instance->getApp()->getActiveRotoDrawingStroke(&rotoPaintNode, &curStroke,&isDrawing);
@@ -2707,15 +2760,19 @@ ViewerInstance::onGammaChanged(double value)
     bool changed = false;
     {
         QMutexLocker l(&_imp->viewerParamsMutex);
+        
         if (_imp->viewerParamsGamma != value) {
             _imp->viewerParamsGamma = value;
-            _imp->fillGammaLut(1. / value);
             changed = true;
         }
     }
+    if (changed) {
+        QWriteLocker k(&_imp->gammaLookupMutex);
+        _imp->fillGammaLut(1. / value);
+    }
     assert(_imp->uiContext);
     if (changed) {
-        if ( ( (_imp->uiContext->getBitDepth() == Natron::eImageBitDepthByte) || !_imp->uiContext->supportsGLSL() )
+        if ( ( (_imp->uiContext->getBitDepth() == eImageBitDepthByte) || !_imp->uiContext->supportsGLSL() )
             && !getApp()->getProject()->isLoadingProject() ) {
             renderCurrentFrame(true);
         } else {
@@ -2747,7 +2804,7 @@ ViewerInstance::onGainChanged(double exp)
     }
     if (changed) {
         assert(_imp->uiContext);
-        if ( ( (_imp->uiContext->getBitDepth() == Natron::eImageBitDepthByte) || !_imp->uiContext->supportsGLSL() )
+        if ( ( (_imp->uiContext->getBitDepth() == eImageBitDepthByte) || !_imp->uiContext->supportsGLSL() )
             && !getApp()->getProject()->isLoadingProject() ) {
             renderCurrentFrame(true);
         } else {
@@ -2802,7 +2859,7 @@ ViewerInstance::isAutoContrastEnabled() const
 }
 
 void
-ViewerInstance::onColorSpaceChanged(Natron::ViewerColorSpaceEnum colorspace)
+ViewerInstance::onColorSpaceChanged(ViewerColorSpaceEnum colorspace)
 {
     // always running in the main thread
     assert( qApp && qApp->thread() == QThread::currentThread() );
@@ -2815,7 +2872,7 @@ ViewerInstance::onColorSpaceChanged(Natron::ViewerColorSpaceEnum colorspace)
         _imp->viewerParamsLut = colorspace;
     }
     assert(_imp->uiContext);
-    if ( ( (_imp->uiContext->getBitDepth() == Natron::eImageBitDepthByte) || !_imp->uiContext->supportsGLSL() )
+    if ( ( (_imp->uiContext->getBitDepth() == eImageBitDepthByte) || !_imp->uiContext->supportsGLSL() )
         && !getApp()->getProject()->isLoadingProject() ) {
         renderCurrentFrame(true);
     } else {
@@ -2854,7 +2911,7 @@ ViewerInstance::setDisplayChannels(DisplayChannelsEnum channels, bool bothInputs
 }
 
 void
-ViewerInstance::setActiveLayer(const Natron::ImageComponents& layer, bool doRender)
+ViewerInstance::setActiveLayer(const ImageComponents& layer, bool doRender)
 {
     // always running in the main thread
     assert( qApp && qApp->thread() == QThread::currentThread() );
@@ -2872,7 +2929,7 @@ ViewerInstance::setActiveLayer(const Natron::ImageComponents& layer, bool doRend
 }
 
 void
-ViewerInstance::setAlphaChannel(const Natron::ImageComponents& layer, const std::string& channelName, bool doRender)
+ViewerInstance::setAlphaChannel(const ImageComponents& layer, const std::string& channelName, bool doRender)
 {
     // always running in the main thread
     assert( qApp && qApp->thread() == QThread::currentThread() );
@@ -2897,10 +2954,16 @@ void
 ViewerInstance::disconnectViewer()
 {
     // always running in the render thread
-
-    //_lastRenderedImage.reset(); // if you uncomment this, _lastRenderedImage is not set back when you reconnect the viewer immediately after disconnecting
     if (_imp->uiContext) {
         Q_EMIT viewerDisconnected();
+    }
+}
+
+void
+ViewerInstance::disconnectTexture(int index)
+{
+    if (_imp->uiContext) {
+        Q_EMIT disconnectTextureRequest(index);
     }
 }
 
@@ -2966,7 +3029,7 @@ ViewerInstance::getMipMapLevel() const
 }
 
 
-Natron::DisplayChannelsEnum
+DisplayChannelsEnum
 ViewerInstance::getChannels(int texIndex) const
 {
     // MT-SAFE: called from main thread and Serialization (pooled) thread
@@ -2978,7 +3041,7 @@ ViewerInstance::getChannels(int texIndex) const
 
 void
 ViewerInstance::addAcceptedComponents(int /*inputNb*/,
-                                      std::list<Natron::ImageComponents>* comps)
+                                      std::list<ImageComponents>* comps)
 {
     ///Viewer only supports RGBA for now.
     comps->push_back(ImageComponents::getRGBAComponents());
@@ -3022,9 +3085,9 @@ ViewerInstance::refreshActiveInputs(int inputNbChanged)
             }
         } else {
             if (_imp->activeInputs[0] != -1 && _imp->activateInputChangedFromViewer) {
-                Natron::ViewerCompositingOperatorEnum op = _imp->uiContext->getCompositingOperator();
-                if (op == Natron::eViewerCompositingOperatorNone) {
-                    _imp->uiContext->setCompositingOperator(Natron::eViewerCompositingOperatorWipe);
+                ViewerCompositingOperatorEnum op = _imp->uiContext->getCompositingOperator();
+                if (op == eViewerCompositingOperatorNone) {
+                    _imp->uiContext->setCompositingOperator(eViewerCompositingOperatorWipe);
                 }
                 _imp->activeInputs[1] = inputNbChanged;
                 
@@ -3045,10 +3108,10 @@ ViewerInstance::onInputChanged(int /*inputNb*/)
 }
 
 bool
-ViewerInstance::checkOFXClipPreferences(double /*time*/,
-                             const RenderScale & /*scale*/,
-                             const std::string & /*reason*/,
-                             bool /*forceGetClipPrefAction*/)
+ViewerInstance::refreshClipPreferences(double /*time*/,
+                                       const RenderScale & /*scale*/,
+                                       ValueChangedReasonEnum /*reason*/,
+                                       bool /*forceGetClipPrefAction*/)
 {
     Q_EMIT clipPreferencesChanged();
     return false;
@@ -3061,7 +3124,7 @@ ViewerInstance::onChannelsSelectorRefreshed()
 }
 
 void
-ViewerInstance::addSupportedBitDepth(std::list<Natron::ImageBitDepthEnum>* depths) const
+ViewerInstance::addSupportedBitDepth(std::list<ImageBitDepthEnum>* depths) const
 {
     depths->push_back(eImageBitDepthFloat);
     depths->push_back(eImageBitDepthShort);
@@ -3192,3 +3255,9 @@ ViewerInstance::reportStats(int time, int view, double wallTime, const RenderSta
 {
     Q_EMIT renderStatsAvailable(time, view, wallTime, stats);
 }
+
+NATRON_NAMESPACE_EXIT;
+
+NATRON_NAMESPACE_USING;
+#include "moc_ViewerInstance.cpp"
+#include "moc_ViewerInstancePrivate.cpp"

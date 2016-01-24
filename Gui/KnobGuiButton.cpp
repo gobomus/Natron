@@ -1,6 +1,6 @@
 /* ***** BEGIN LICENSE BLOCK *****
  * This file is part of Natron <http://www.natron.fr/>,
- * Copyright (C) 2015 INRIA and Alexandre Gauthier-Foichat
+ * Copyright (C) 2016 INRIA and Alexandre Gauthier-Foichat
  *
  * Natron is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -78,7 +78,7 @@ CLANG_DIAG_ON(uninitialized)
 
 #include "ofxNatron.h"
 
-using namespace Natron;
+NATRON_NAMESPACE_ENTER;
 using std::make_pair;
 
 //=============================BUTTON_KNOB_GUI===================================
@@ -161,7 +161,7 @@ void
 KnobGuiButton::setEnabled()
 {
     boost::shared_ptr<KnobButton> knob = _knob.lock();
-    bool b = knob->isEnabled(0) && knob->getExpression(0).empty();
+    bool b = knob->isEnabled(0);
 
     _button->setEnabled(b);
 }
@@ -178,3 +178,7 @@ boost::shared_ptr<KnobI> KnobGuiButton::getKnob() const
     return _knob.lock();
 }
 
+NATRON_NAMESPACE_EXIT;
+
+NATRON_NAMESPACE_USING;
+#include "moc_KnobGuiButton.cpp"

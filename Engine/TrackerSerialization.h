@@ -42,6 +42,8 @@
 #define TRACK_SERIALIZATION_VERSION 1
 #define TRACKER_CONTEXT_SERIALIZATION_VERSION 1
 
+NATRON_NAMESPACE_ENTER;
+
 class TrackSerialization
 {
     friend class boost::serialization::access;
@@ -103,7 +105,6 @@ private:
     std::list<boost::shared_ptr<KnobSerialization> > _knobs;
 };
 
-BOOST_CLASS_VERSION(TrackSerialization,TRACK_SERIALIZATION_VERSION)
 
 class TrackerContextSerialization
 {
@@ -151,9 +152,10 @@ private:
     
     std::list<TrackSerialization> _tracks;
 };
+NATRON_NAMESPACE_EXIT;
 
-
-BOOST_CLASS_VERSION(TrackerContextSerialization,TRACKER_CONTEXT_SERIALIZATION_VERSION)
+BOOST_CLASS_VERSION(NATRON_NAMESPACE::TrackSerialization,TRACK_SERIALIZATION_VERSION)
+BOOST_CLASS_VERSION(NATRON_NAMESPACE::TrackerContextSerialization,TRACKER_CONTEXT_SERIALIZATION_VERSION)
 
 
 #endif // TRACKERSERIALIZATION_H

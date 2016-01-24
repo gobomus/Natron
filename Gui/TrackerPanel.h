@@ -45,15 +45,9 @@ CLANG_DIAG_ON(deprecated)
 CLANG_DIAG_ON(uninitialized)
 
 #include "Global/GlobalDefines.h"
+#include "Gui/GuiFwd.h"
 
-class NodeGui;
-class TrackerContext;
-class TrackMarker;
-class TableItem;
-class KnobI;
-
-class QUndoCommand;
-class QItemSelection;
+NATRON_NAMESPACE_ENTER;
 
 /**
 * @brief This is the new tracker panel, the previous version TrackerPanelV1 (used for TrackerPM) can be found in MultiInstancePanel.h
@@ -172,5 +166,7 @@ private:
     
     boost::scoped_ptr<TrackerPanelPrivate> _imp;
 };
+
+NATRON_NAMESPACE_EXIT;
 
 #endif // TRACKERPANEL_H

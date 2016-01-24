@@ -27,6 +27,8 @@
 
 #include "Engine/EffectInstance.h"
 
+NATRON_NAMESPACE_ENTER;
+
 class TrackerNode : Natron::EffectInstance
 {
 public:
@@ -133,5 +135,7 @@ private:
                             double* inputTime,
                             int* inputNb) OVERRIDE FINAL WARN_UNUSED_RETURN;
 };
+
+NATRON_NAMESPACE_EXIT;
 
 #endif // TRACKERNODE_H

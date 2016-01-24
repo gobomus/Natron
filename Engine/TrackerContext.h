@@ -40,24 +40,10 @@
 #include <QThread>
 #include <QMutex>
 
+#include "Engine/EngineFwd.h"
 #include "Engine/RectI.h"
-#include "Engine/RectD.h"
 
-namespace Natron {
-    class Node;
-    class Image;
-}
-class RectI;
-class KnobDouble;
-class KnobBool;
-class KnobButton;
-class KnobChoice;
-class KnobI;
-class ViewerInstance;
-class TimeLine;
-class TrackerContext;
-class TrackSerialization;
-class TrackerContextSerialization;
+NATRON_NAMESPACE_ENTER;
 
 struct TrackMarkerPrivate;
 class TrackMarker : QObject, public boost::enable_shared_from_this<TrackMarker>
@@ -544,5 +530,7 @@ private:
     TrackArgsType curArgs,requestedArgs;
     TrackStepFunctor _functor;
 };
+
+NATRON_NAMESPACE_EXIT;
 
 #endif // TRACKERCONTEXT_H

@@ -1,6 +1,6 @@
 /* ***** BEGIN LICENSE BLOCK *****
  * This file is part of Natron <http://www.natron.fr/>,
- * Copyright (C) 2015 INRIA and Alexandre Gauthier-Foichat
+ * Copyright (C) 2016 INRIA and Alexandre Gauthier-Foichat
  *
  * Natron is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -25,6 +25,8 @@
 #include "ParameterWrapper.h"
 #include "Engine/EffectInstance.h"
 #include "Engine/Node.h"
+
+NATRON_NAMESPACE_ENTER;
 
 Param::Param(const boost::shared_ptr<KnobI>& knob)
 : _knob(knob)
@@ -322,7 +324,7 @@ AnimatedParam::getKeyTime(int index,int dimension,double* time) const
 void
 AnimatedParam::deleteValueAtTime(double time,int dimension)
 {
-    getInternalKnob()->deleteValueAtTime(Natron::eCurveChangeReasonInternal,time, dimension);
+    getInternalKnob()->deleteValueAtTime(eCurveChangeReasonInternal,time, dimension);
 }
 
 void
@@ -352,12 +354,23 @@ AnimatedParam::getCurrentTime() const
 void
 Param::_addAsDependencyOf(int fromExprDimension,Param* param,int thisDimension)
 {
-    boost::shared_ptr<KnobI> otherKnob = param->_knob.lock();
-    boost::shared_ptr<KnobI> thisKnob = _knob.lock();
-    if (otherKnob == thisKnob) {
+    
+    //from expr is in the dimension of expressionKnob
+    //thisDimension is in the dimesnion of getValueCallerKnob
+    
+    boost::shared_ptr<KnobI> expressionKnob = param->_knob.lock();
+    boost::shared_ptr<KnobI> getValueCallerKnob = _knob.lock();
+    if (fromExprDimension < 0 || fromExprDimension >= expressionKnob->getDimension()) {
         return;
     }
-    thisKnob->addListener(true,fromExprDimension, thisDimension, otherKnob);
+    if (thisDimension != -1 && thisDimension != 0 && thisDimension >= getValueCallerKnob->getDimension()) {
+        return;
+    }
+    if (getValueCallerKnob == expressionKnob) {
+        return;
+    }
+    
+    getValueCallerKnob->addListener(true,fromExprDimension, thisDimension, expressionKnob);
 }
 
 bool
@@ -1515,6 +1528,20 @@ ButtonParam::trigger()
     _buttonKnob.lock()->trigger();
 }
 
+////////////////////SeparatorParam
+
+SeparatorParam::SeparatorParam(const boost::shared_ptr<KnobSeparator>& knob)
+: Param(knob)
+, _separatorKnob(boost::dynamic_pointer_cast<KnobSeparator>(knob))
+{
+    
+}
+
+SeparatorParam::~SeparatorParam()
+{
+    
+}
+
 ///////////////////GroupParam
 
 GroupParam::GroupParam(const boost::shared_ptr<KnobGroup>& knob)
@@ -1612,7 +1639,7 @@ ParametricParam::getCurveColor(int dimension, ColorTuple& ret) const
     ret.a = 1.;
 }
 
-Natron::StatusEnum
+StatusEnum
 ParametricParam::addControlPoint(int dimension,double key,double value)
 {
     return _parametricKnob.lock()->addControlPoint(dimension, key, value);
@@ -1622,8 +1649,8 @@ double
 ParametricParam::getValue(int dimension,double parametricPosition) const
 {
     double ret;
-    Natron::StatusEnum stat =  _parametricKnob.lock()->getValue(dimension, parametricPosition, &ret);
-    if (stat == Natron::eStatusFailed) {
+    StatusEnum stat =  _parametricKnob.lock()->getValue(dimension, parametricPosition, &ret);
+    if (stat == eStatusFailed) {
         ret =  0.;
     }
     return ret;
@@ -1633,14 +1660,14 @@ int
 ParametricParam::getNControlPoints(int dimension) const
 {
     int ret;
-    Natron::StatusEnum stat =  _parametricKnob.lock()->getNControlPoints(dimension, &ret);
-    if (stat == Natron::eStatusFailed) {
+    StatusEnum stat =  _parametricKnob.lock()->getNControlPoints(dimension, &ret);
+    if (stat == eStatusFailed) {
         ret = 0;
     }
     return ret;
 }
 
-Natron::StatusEnum
+StatusEnum
 ParametricParam::getNthControlPoint(int dimension,
                                     int nthCtl,
                                     double *key,
@@ -1651,7 +1678,7 @@ ParametricParam::getNthControlPoint(int dimension,
     return _parametricKnob.lock()->getNthControlPoint(dimension, nthCtl, key, value,leftDerivative, rightDerivative);
 }
 
-Natron::StatusEnum
+StatusEnum
 ParametricParam::setNthControlPoint(int dimension,
                                     int nthCtl,
                                     double key,
@@ -1662,15 +1689,17 @@ ParametricParam::setNthControlPoint(int dimension,
     return _parametricKnob.lock()->setNthControlPoint(dimension, nthCtl, key, value,leftDerivative,rightDerivative);
 }
 
-Natron::StatusEnum
+StatusEnum
 ParametricParam::deleteControlPoint(int dimension, int nthCtl)
 {
     return _parametricKnob.lock()->deleteControlPoint(dimension, nthCtl);
 }
 
-Natron::StatusEnum
+StatusEnum
 ParametricParam::deleteAllControlPoints(int dimension)
 {
     return _parametricKnob.lock()->deleteAllControlPoints(dimension);
 }
+
+NATRON_NAMESPACE_EXIT;
 

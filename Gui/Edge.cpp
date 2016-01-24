@@ -1,6 +1,6 @@
 /* ***** BEGIN LICENSE BLOCK *****
  * This file is part of Natron <http://www.natron.fr/>,
- * Copyright (C) 2015 INRIA and Alexandre Gauthier-Foichat
+ * Copyright (C) 2016 INRIA and Alexandre Gauthier-Foichat
  *
  * Natron is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -34,7 +34,7 @@
 #include "Gui/NodeGui.h"
 #include "Gui/NodeGraph.h"
 #include "Gui/NodeGraphTextItem.h"
-
+#include "Gui/GuiApplicationManager.h"
 #include "Engine/Node.h"
 #include "Engine/Image.h"
 #include "Engine/Settings.h"
@@ -58,6 +58,8 @@
 
 // number of offset pixels from the arrow that determine if a click is contained in the arrow or not
 #define kGraphicalContainerOffset 10
+
+NATRON_NAMESPACE_ENTER;
 
 struct EdgePrivate
 {
@@ -139,7 +141,7 @@ EdgePrivate::initLabel()
         QColor txt;
         double r,g,b;
         appPTR->getCurrentSettings()->getTextColor(&r, &g, &b);
-        txt.setRgbF(Natron::clamp(r,0.,1.),Natron::clamp(g,0.,1.), Natron::clamp(b,0.,1.));
+        txt.setRgbF(Image::clamp(r,0.,1.),Image::clamp(g,0.,1.), Image::clamp(b,0.,1.));
         label->setBrush(txt);
         QFont f = qApp->font();
         bool antialias = appPTR->getCurrentSettings()->isNodeGraphAntiAliasingEnabled();
@@ -289,7 +291,7 @@ Edge::refreshState(bool hovered)
 {
     boost::shared_ptr<NodeGui> dst = _imp->dest.lock();
     
-    Natron::EffectInstance* effect = dst ? dst->getNode()->getLiveInstance() : 0;
+    EffectInstance* effect = dst ? dst->getNode()->getLiveInstance() : 0;
     
     if (effect) {
         
@@ -513,14 +515,14 @@ Edge::initLine()
         if (foundIntersection) {
             double distToCenter = std::sqrt( ( intersection.x() - dst.x() ) * ( intersection.x() - dst.x() ) +
                                             ( intersection.y() - dst.y() ) * ( intersection.y() - dst.y() ) );
-            distToCenter += appPTR->getCurrentSettings()->getDisconnectedArrowLength();
+            distToCenter += TO_DPIY(appPTR->getCurrentSettings()->getDisconnectedArrowLength());
 
             srcpt = QPointF( dst.x() + (std::cos(_imp->angle) * distToCenter * sc),
                             dst.y() - (std::sin(_imp->angle) * distToCenter * sc) );
             setLine( dst.x(),dst.y(),srcpt.x(),srcpt.y() );
 
             if (_imp->label) {
-                QFontMetrics fm(_imp->label->font());
+                QFontMetrics fm(_imp->label->font(), 0);
                 double cosinus = std::cos(_imp->angle);
                 int yOffset = 0;
                 if (cosinus < 0) {
@@ -561,9 +563,9 @@ Edge::initLine()
 
     qreal arrowSize;
     if (source && dest) {
-        arrowSize = ARROW_SIZE_CONNECTED * sc;
+        arrowSize = TO_DPIX(ARROW_SIZE_CONNECTED) * sc;
     } else {
-        arrowSize = ARROW_SIZE_DISCONNECTED * sc;
+        arrowSize = TO_DPIX(ARROW_SIZE_DISCONNECTED) * sc;
     }
     QPointF arrowP1 = arrowIntersect + QPointF(std::cos(a + ARROW_HEAD_ANGLE/2) * arrowSize,
                                                std::sin(a + ARROW_HEAD_ANGLE/2) * arrowSize);
@@ -643,7 +645,7 @@ Edge::dragSource(const QPointF & src)
         a = 2 * M_PI - a;
     }
 
-    double arrowSize = ARROW_SIZE_DISCONNECTED;
+    double arrowSize = TO_DPIX(ARROW_SIZE_DISCONNECTED);
     QPointF arrowP1 = line().p1() + QPointF(std::cos(a + ARROW_HEAD_ANGLE/2) * arrowSize,
                                             std::sin(a + ARROW_HEAD_ANGLE/2) * arrowSize);
     QPointF arrowP2 = line().p1() + QPointF(std::cos(a - ARROW_HEAD_ANGLE/2) * arrowSize,
@@ -667,7 +669,7 @@ Edge::dragDest(const QPointF & dst)
         a = 2 * M_PI - a;
     }
 
-    double arrowSize = ARROW_SIZE_DISCONNECTED;
+    double arrowSize = TO_DPIX(ARROW_SIZE_DISCONNECTED);
     QPointF arrowP1 = line().p1() + QPointF(std::cos(a + ARROW_HEAD_ANGLE/2) * arrowSize,
                                             std::sin(a + ARROW_HEAD_ANGLE/2) * arrowSize);
     QPointF arrowP2 = line().p1() + QPointF(std::cos(a - ARROW_HEAD_ANGLE/2) * arrowSize,
@@ -904,3 +906,7 @@ LinkArrow::paint(QPainter *painter,
     painter->fillPath(headPath, _headColor);
 }
 
+NATRON_NAMESPACE_EXIT;
+
+NATRON_NAMESPACE_USING;
+#include "moc_Edge.cpp"

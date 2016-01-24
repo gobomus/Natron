@@ -1,6 +1,6 @@
 /* ***** BEGIN LICENSE BLOCK *****
  * This file is part of Natron <http://www.natron.fr/>,
- * Copyright (C) 2015 INRIA and Alexandre Gauthier-Foichat
+ * Copyright (C) 2016 INRIA and Alexandre Gauthier-Foichat
  *
  * Natron is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -52,6 +52,7 @@ CLANG_DIAG_ON(uninitialized)
 
 #include "Gui/GuiFwd.h"
 
+NATRON_NAMESPACE_ENTER;
 
 
 struct NodeGuiIndicatorPrivate;
@@ -136,7 +137,7 @@ public:
     NodeGui(QGraphicsItem *parent = 0);
 
     void initialize(NodeGraph* dag,
-                    const boost::shared_ptr<Natron::Node> & internalNode);
+                    const boost::shared_ptr<Node> & internalNode);
 
     //Creates panel if needed, might be expensive
     void ensurePanelCreated();
@@ -159,7 +160,7 @@ public:
     void copyFrom(const NodeGuiSerialization & obj);
 
 
-    boost::shared_ptr<Natron::Node> getNode() const
+    boost::shared_ptr<Node> getNode() const
     {
         return _internalNode.lock();
     }
@@ -369,23 +370,23 @@ public:
     
     boost::shared_ptr<HostOverlay> getHostOverlay() const WARN_UNUSED_RETURN;
     
-    virtual void drawHostOverlay(double time,double scaleX, double scaleY)  OVERRIDE FINAL;
+    virtual void drawHostOverlay(double time, const RenderScale & renderScale)  OVERRIDE FINAL;
     
-    virtual bool onOverlayPenDownDefault(double scaleX, double scaleY, const QPointF & viewportPos, const QPointF & pos, double pressure)  OVERRIDE FINAL WARN_UNUSED_RETURN;
+    virtual bool onOverlayPenDownDefault(const RenderScale & renderScale, const QPointF & viewportPos, const QPointF & pos, double pressure)  OVERRIDE FINAL WARN_UNUSED_RETURN;
     
-    virtual bool onOverlayPenMotionDefault(double scaleX, double scaleY, const QPointF & viewportPos, const QPointF & pos, double pressure)  OVERRIDE FINAL WARN_UNUSED_RETURN;
+    virtual bool onOverlayPenMotionDefault(const RenderScale & renderScale, const QPointF & viewportPos, const QPointF & pos, double pressure)  OVERRIDE FINAL WARN_UNUSED_RETURN;
     
-    virtual bool onOverlayPenUpDefault(double scaleX, double scaleY, const QPointF & viewportPos, const QPointF & pos, double pressure)  OVERRIDE FINAL WARN_UNUSED_RETURN;
+    virtual bool onOverlayPenUpDefault(const RenderScale & renderScale, const QPointF & viewportPos, const QPointF & pos, double pressure)  OVERRIDE FINAL WARN_UNUSED_RETURN;
     
-    virtual bool onOverlayKeyDownDefault(double scaleX, double scaleY, Natron::Key key, Natron::KeyboardModifiers modifiers) OVERRIDE FINAL WARN_UNUSED_RETURN;
+    virtual bool onOverlayKeyDownDefault(const RenderScale & renderScale, Key key, KeyboardModifiers modifiers) OVERRIDE FINAL WARN_UNUSED_RETURN;
     
-    virtual bool onOverlayKeyUpDefault(double scaleX, double scaleY, Natron::Key key, Natron::KeyboardModifiers modifiers)  OVERRIDE FINAL WARN_UNUSED_RETURN;
+    virtual bool onOverlayKeyUpDefault(const RenderScale & renderScale, Key key, KeyboardModifiers modifiers)  OVERRIDE FINAL WARN_UNUSED_RETURN;
     
-    virtual bool onOverlayKeyRepeatDefault(double scaleX, double scaleY, Natron::Key key, Natron::KeyboardModifiers modifiers) OVERRIDE FINAL WARN_UNUSED_RETURN;
+    virtual bool onOverlayKeyRepeatDefault(const RenderScale & renderScale, Key key, KeyboardModifiers modifiers) OVERRIDE FINAL WARN_UNUSED_RETURN;
     
-    virtual bool onOverlayFocusGainedDefault(double scaleX, double scaleY) OVERRIDE FINAL WARN_UNUSED_RETURN;
+    virtual bool onOverlayFocusGainedDefault(const RenderScale & renderScale) OVERRIDE FINAL WARN_UNUSED_RETURN;
     
-    virtual bool onOverlayFocusLostDefault(double scaleX, double scaleY) OVERRIDE FINAL WARN_UNUSED_RETURN;
+    virtual bool onOverlayFocusLostDefault(const RenderScale & renderScale) OVERRIDE FINAL WARN_UNUSED_RETURN;
 
     virtual bool hasHostOverlay() const OVERRIDE FINAL WARN_UNUSED_RETURN;
     
@@ -401,6 +402,10 @@ public:
     
     virtual void setPluginIDAndVersion(const std::string& pluginLabel,const std::string& pluginID,unsigned int version) OVERRIDE FINAL;
     
+    virtual void onIdentityStateChanged(int inputNb) OVERRIDE FINAL;
+
+    void copyPreviewImageBuffer(const std::vector<unsigned int>& data, int width, int height);
+
 protected:
     
     virtual int getBaseDepth() const { return 20; }
@@ -418,15 +423,11 @@ protected:
     virtual void adjustSizeToContent(int *w,int *h,bool adjustToTextSize);
     
     virtual void resizeExtraContent(int /*w*/,int /*h*/,bool /*forceResize*/) {}
-    
-    
 
     
 public Q_SLOTS:
     
     void onHideInputsKnobValueChanged(bool hidden);
-    
-    void onIdentityStateChanged(int inputNb);
     
     void onAvailableViewsChanged();
 
@@ -447,7 +448,7 @@ public Q_SLOTS:
      * the new width and height.
      **/
     void resize(int width,int height, bool forceSize = false, bool adjustToTextSize = false);
-    
+
     void refreshSize();
 
     /*Updates the preview image, only if the project is in auto-preview mode*/
@@ -520,11 +521,15 @@ public Q_SLOTS:
     void refreshEdgesVisility(bool hovered);
     void refreshEdgesVisility();
     
+    void onPreviewImageComputed();
+    
 Q_SIGNALS:
 
     void positionChanged(int x,int y);
 
     void settingsPanelClosed(bool b);
+    
+    void previewImageComputed();
 
 protected:
 
@@ -539,6 +544,10 @@ protected:
 
 private:
     
+    int getPluginIconWidth() const;
+    
+    double refreshPreviewAndLabelPosition(const QRectF& bbox);
+    
     void refreshEdgesVisibilityInternal(bool hovered);
     
     void refreshPositionEnd(double x,double y);
@@ -551,8 +560,6 @@ private:
     
     void setAboveItem(QGraphicsItem* item);
 
-    void computePreviewImage(double time);
-
     void populateMenu();
 
     void refreshCurrentBrush();
@@ -564,7 +571,7 @@ private:
     NodeGraph* _graph;
 
     /*pointer to the internal node*/
-    boost::weak_ptr<Natron::Node> _internalNode;
+    boost::weak_ptr<Node> _internalNode;
 
     /*true if the node is selected by the user*/
     bool _selected;
@@ -593,6 +600,9 @@ private:
 
     /*A pointer to the preview pixmap displayed for readers/*/
     QGraphicsPixmapItem* _previewPixmap;
+    mutable QMutex _previewDataMutex;
+    std::vector<unsigned int> _previewData;
+    int _previewW,_previewH;
     QGraphicsSimpleTextItem* _persistentMessage;
     QGraphicsRectItem* _stateIndicator;    
     
@@ -631,7 +641,7 @@ private:
         LinkArrow* arrow;
     };
 
-    typedef std::map<boost::shared_ptr<Natron::Node>,LinkedDim> KnobGuiLinks;
+    typedef std::map<boost::shared_ptr<Node>,LinkedDim> KnobGuiLinks;
     KnobGuiLinks _knobsLinks;
     boost::shared_ptr<NodeGuiIndicator> _expressionIndicator;
     QPoint _magnecEnabled; //<enabled in X or/and Y
@@ -657,8 +667,10 @@ private:
     
     boost::shared_ptr<NodeGuiIndicator> _availableViewsIndicator;
     boost::shared_ptr<NodeGuiIndicator> _passThroughIndicator;
-    boost::weak_ptr<Natron::Node> _identityInput;
+    boost::weak_ptr<Node> _identityInput;
+    
 };
 
+NATRON_NAMESPACE_EXIT;
 
 #endif // Natron_Gui_NodeGui_h

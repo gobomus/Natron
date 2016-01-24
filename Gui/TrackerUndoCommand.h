@@ -37,10 +37,10 @@
 #include <QUndoCommand>
 
 #include "Global/Macros.h"
+#include "Gui/GuiFwd.h"
 
-class TrackMarker;
-class TrackerPanel;
-class TrackerContext;
+
+NATRON_NAMESPACE_ENTER;
 
 class AddTrackCommand
 : public QUndoCommand
@@ -89,6 +89,8 @@ private:
     boost::weak_ptr<TrackerContext> _context;
     
 };
+
+NATRON_NAMESPACE_EXIT;
 
 
 #endif // TRACKERUNDOCOMMAND_H

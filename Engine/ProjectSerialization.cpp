@@ -1,6 +1,6 @@
 /* ***** BEGIN LICENSE BLOCK *****
  * This file is part of Natron <http://www.natron.fr/>,
- * Copyright (C) 2015 INRIA and Alexandre Gauthier-Foichat
+ * Copyright (C) 2016 INRIA and Alexandre Gauthier-Foichat
  *
  * Natron is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -29,9 +29,10 @@
 #include "Engine/RotoLayer.h"
 #include "Engine/TimeLine.h"
 
+NATRON_NAMESPACE_ENTER;
 
 void
-ProjectSerialization::initialize(const Natron::Project* project)
+ProjectSerialization::initialize(const Project* project)
 {
     ///All the code in this function is MT-safe
 
@@ -57,3 +58,4 @@ ProjectSerialization::initialize(const Natron::Project* project)
     _creationDate = project->getProjectCreationTime();
 }
 
+NATRON_NAMESPACE_EXIT;

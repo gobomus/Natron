@@ -77,8 +77,7 @@
 #define kCornerPinInvertParamName "invert"
 
 
-using namespace Natron;
-
+NATRON_NAMESPACE_ENTER;
 
 class TrackerTableItemDelegate
 : public QStyledItemDelegate
@@ -396,7 +395,7 @@ TrackerPanel::TrackerPanel(const boost::shared_ptr<NodeGui>& n,
     _imp->currentKeyframe = new SpinBox(trackContainer,SpinBox::eSpinBoxTypeDouble);
     _imp->currentKeyframe->setEnabled(false);
     _imp->currentKeyframe->setReadOnly(true);
-    _imp->currentKeyframe->setToolTip(Natron::convertFromPlainText(tr("The current keyframe for the selected track(s)."), Qt::WhiteSpaceNormal));
+    _imp->currentKeyframe->setToolTip(GuiUtils::convertFromPlainText(tr("The current keyframe for the selected track(s)."), Qt::WhiteSpaceNormal));
     trackLayout->addWidget(_imp->currentKeyframe);
     
     _imp->ofLabel = new ClickableLabel(tr("of"),trackContainer);
@@ -405,7 +404,7 @@ TrackerPanel::TrackerPanel(const boost::shared_ptr<NodeGui>& n,
     _imp->totalKeyframes = new SpinBox(trackContainer,SpinBox::eSpinBoxTypeInt);
     _imp->totalKeyframes->setEnabled(false);
     _imp->totalKeyframes->setReadOnly(true);
-    _imp->totalKeyframes->setToolTip(Natron::convertFromPlainText(tr("The keyframe count for all the selected tracks."), Qt::WhiteSpaceNormal));
+    _imp->totalKeyframes->setToolTip(GuiUtils::convertFromPlainText(tr("The keyframe count for all the selected tracks."), Qt::WhiteSpaceNormal));
     trackLayout->addWidget(_imp->totalKeyframes);
     
     QPixmap prevPix,nextPix,addPix,removePix,clearAnimPix;
@@ -418,7 +417,7 @@ TrackerPanel::TrackerPanel(const boost::shared_ptr<NodeGui>& n,
     _imp->prevKeyframe = new Button(QIcon(prevPix),"",trackContainer);
     _imp->prevKeyframe->setFixedSize(NATRON_MEDIUM_BUTTON_SIZE,NATRON_MEDIUM_BUTTON_SIZE);
     _imp->prevKeyframe->setIconSize(QSize(NATRON_MEDIUM_BUTTON_SIZE,NATRON_MEDIUM_BUTTON_SIZE));
-    _imp->prevKeyframe->setToolTip(Natron::convertFromPlainText(tr("Go to the previous keyframe."), Qt::WhiteSpaceNormal));
+    _imp->prevKeyframe->setToolTip(GuiUtils::convertFromPlainText(tr("Go to the previous keyframe."), Qt::WhiteSpaceNormal));
     _imp->prevKeyframe->setEnabled(false);
     QObject::connect( _imp->prevKeyframe, SIGNAL( clicked(bool) ), this, SLOT( onGoToPrevKeyframeButtonClicked() ) );
     trackLayout->addWidget(_imp->prevKeyframe);
@@ -426,7 +425,7 @@ TrackerPanel::TrackerPanel(const boost::shared_ptr<NodeGui>& n,
     _imp->nextKeyframe = new Button(QIcon(nextPix),"",trackContainer);
     _imp->nextKeyframe->setFixedSize(NATRON_MEDIUM_BUTTON_SIZE,NATRON_MEDIUM_BUTTON_SIZE);
     _imp->nextKeyframe->setIconSize(QSize(NATRON_MEDIUM_BUTTON_SIZE,NATRON_MEDIUM_BUTTON_SIZE));
-    _imp->nextKeyframe->setToolTip(Natron::convertFromPlainText(tr("Go to the next keyframe."), Qt::WhiteSpaceNormal));
+    _imp->nextKeyframe->setToolTip(GuiUtils::convertFromPlainText(tr("Go to the next keyframe."), Qt::WhiteSpaceNormal));
     _imp->nextKeyframe->setEnabled(false);
     QObject::connect( _imp->nextKeyframe, SIGNAL( clicked(bool) ), this, SLOT( onGoToNextKeyframeButtonClicked() ) );
     trackLayout->addWidget(_imp->nextKeyframe);
@@ -434,7 +433,7 @@ TrackerPanel::TrackerPanel(const boost::shared_ptr<NodeGui>& n,
     _imp->addKeyframe = new Button(QIcon(addPix),"",trackContainer);
     _imp->addKeyframe->setFixedSize(NATRON_MEDIUM_BUTTON_SIZE,NATRON_MEDIUM_BUTTON_SIZE);
     _imp->addKeyframe->setIconSize(QSize(NATRON_MEDIUM_BUTTON_SIZE,NATRON_MEDIUM_BUTTON_SIZE));
-    _imp->addKeyframe->setToolTip(Natron::convertFromPlainText(tr("Add keyframe at the current timeline's time."), Qt::WhiteSpaceNormal));
+    _imp->addKeyframe->setToolTip(GuiUtils::convertFromPlainText(tr("Add keyframe at the current timeline's time."), Qt::WhiteSpaceNormal));
     _imp->addKeyframe->setEnabled(false);
     QObject::connect( _imp->addKeyframe, SIGNAL( clicked(bool) ), this, SLOT( onAddKeyframeButtonClicked() ) );
     trackLayout->addWidget(_imp->addKeyframe);
@@ -442,7 +441,7 @@ TrackerPanel::TrackerPanel(const boost::shared_ptr<NodeGui>& n,
     _imp->removeKeyframe = new Button(QIcon(removePix),"",trackContainer);
     _imp->removeKeyframe->setFixedSize(NATRON_MEDIUM_BUTTON_SIZE,NATRON_MEDIUM_BUTTON_SIZE);
     _imp->removeKeyframe->setIconSize(QSize(NATRON_MEDIUM_BUTTON_SIZE,NATRON_MEDIUM_BUTTON_SIZE));
-    _imp->removeKeyframe->setToolTip(Natron::convertFromPlainText(tr("Remove keyframe at the current timeline's time."), Qt::WhiteSpaceNormal));
+    _imp->removeKeyframe->setToolTip(GuiUtils::convertFromPlainText(tr("Remove keyframe at the current timeline's time."), Qt::WhiteSpaceNormal));
     _imp->removeKeyframe->setEnabled(false);
     QObject::connect( _imp->removeKeyframe, SIGNAL( clicked(bool) ), this, SLOT( onRemoveKeyframeButtonClicked() ) );
     trackLayout->addWidget(_imp->removeKeyframe);
@@ -450,7 +449,7 @@ TrackerPanel::TrackerPanel(const boost::shared_ptr<NodeGui>& n,
     _imp->clearAnimation = new Button(QIcon(clearAnimPix),"",trackContainer);
     _imp->clearAnimation->setFixedSize(NATRON_MEDIUM_BUTTON_SIZE,NATRON_MEDIUM_BUTTON_SIZE);
     _imp->clearAnimation->setIconSize(QSize(NATRON_MEDIUM_BUTTON_SIZE,NATRON_MEDIUM_BUTTON_SIZE));
-    _imp->clearAnimation->setToolTip(Natron::convertFromPlainText(tr("Remove all animation for the selected track(s)."), Qt::WhiteSpaceNormal));
+    _imp->clearAnimation->setToolTip(GuiUtils::convertFromPlainText(tr("Remove all animation for the selected track(s)."), Qt::WhiteSpaceNormal));
     _imp->clearAnimation->setEnabled(false);
     QObject::connect( _imp->clearAnimation, SIGNAL( clicked(bool) ), this, SLOT( onRemoveAnimationButtonClicked() ) );
     trackLayout->addWidget(_imp->clearAnimation);
@@ -572,12 +571,12 @@ TrackerPanel::TrackerPanel(const boost::shared_ptr<NodeGui>& n,
     _imp->buttonsLayout->setContentsMargins(0, 0, 0, 0);
     _imp->addButton = new Button(QIcon(),"+",_imp->buttonsContainer);
     _imp->addButton->setFixedSize(NATRON_SMALL_BUTTON_SIZE,NATRON_SMALL_BUTTON_SIZE);
-    _imp->addButton->setToolTip(Natron::convertFromPlainText(tr("Add new track"), Qt::WhiteSpaceNormal));
+    _imp->addButton->setToolTip(GuiUtils::convertFromPlainText(tr("Add new track"), Qt::WhiteSpaceNormal));
     _imp->buttonsLayout->addWidget(_imp->addButton);
     QObject::connect( _imp->addButton, SIGNAL( clicked(bool) ), this, SLOT( onAddButtonClicked() ) );
     
     _imp->removeButton = new Button(QIcon(),"-",_imp->buttonsContainer);
-    _imp->removeButton->setToolTip(Natron::convertFromPlainText(tr("Remove selected tracks"), Qt::WhiteSpaceNormal));
+    _imp->removeButton->setToolTip(GuiUtils::convertFromPlainText(tr("Remove selected tracks"), Qt::WhiteSpaceNormal));
     _imp->removeButton->setFixedSize(NATRON_SMALL_BUTTON_SIZE,NATRON_SMALL_BUTTON_SIZE);
     _imp->buttonsLayout->addWidget(_imp->removeButton);
     QObject::connect( _imp->removeButton, SIGNAL( clicked(bool) ), this, SLOT( onRemoveButtonClicked() ) );
@@ -587,14 +586,14 @@ TrackerPanel::TrackerPanel(const boost::shared_ptr<NodeGui>& n,
     _imp->selectAllButton = new Button(QIcon(selectAll),"",_imp->buttonsContainer);
     _imp->selectAllButton->setFixedSize(NATRON_SMALL_BUTTON_SIZE,NATRON_SMALL_BUTTON_SIZE);
     _imp->selectAllButton->setIconSize(QSize(NATRON_SMALL_BUTTON_SIZE,NATRON_SMALL_BUTTON_SIZE));
-    _imp->selectAllButton->setToolTip(Natron::convertFromPlainText(tr("Select all tracks"), Qt::WhiteSpaceNormal));
+    _imp->selectAllButton->setToolTip(GuiUtils::convertFromPlainText(tr("Select all tracks"), Qt::WhiteSpaceNormal));
     _imp->buttonsLayout->addWidget(_imp->selectAllButton);
     QObject::connect( _imp->selectAllButton, SIGNAL( clicked(bool) ), this, SLOT( onSelectAllButtonClicked() ) );
     
     _imp->resetTracksButton = new Button("Reset",_imp->buttonsContainer);
     QObject::connect( _imp->resetTracksButton, SIGNAL( clicked(bool) ), this, SLOT( onResetButtonClicked() ) );
     _imp->buttonsLayout->addWidget(_imp->resetTracksButton);
-    _imp->resetTracksButton->setToolTip(Natron::convertFromPlainText(tr("Reset selected items."), Qt::WhiteSpaceNormal));
+    _imp->resetTracksButton->setToolTip(GuiUtils::convertFromPlainText(tr("Reset selected items."), Qt::WhiteSpaceNormal));
     
     _imp->buttonsLayout->addStretch();
     
@@ -1018,7 +1017,7 @@ TrackerPanel::onAverageButtonClicked()
     std::list<boost::shared_ptr<TrackMarker> > markers;
     context->getSelectedMarkers(&markers);
     if ( markers.empty() ) {
-        Natron::warningDialog( tr("Average").toStdString(), tr("No tracks selected").toStdString() );
+        Dialogs::warningDialog( tr("Average").toStdString(), tr("No tracks selected").toStdString() );
         return;
     }
     
@@ -1162,7 +1161,7 @@ void
 TrackerPanelPrivate::createCornerPinFromSelection(const std::list<boost::shared_ptr<TrackMarker> > & selection,bool linked,bool useTransformRefFrame,bool invert)
 {
     if ( (selection.size() > 4) || selection.empty() ) {
-        Natron::errorDialog( QObject::tr("Export").toStdString(),
+        Dialogs::errorDialog( QObject::tr("Export").toStdString(),
                             QObject::tr("Export to corner pin needs between 1 and 4 selected tracks.").toStdString() );
         
         return;
@@ -1426,7 +1425,7 @@ TrackerPanel::onSelectionAboutToChangeInternal(const std::list<boost::shared_ptr
         }
     }
     if (!toRemove.empty()) {
-        _imp->node.lock()->getNode()->getApp()->getTimeLine()->removeMultipleKeyframeIndicator(toRemove, false);
+        _imp->node.lock()->getNode()->getApp()->removeMultipleKeyframeIndicator(toRemove, false);
     }
 
 }
@@ -1500,7 +1499,7 @@ TrackerPanel::selectInternal(const std::list<boost::shared_ptr<TrackMarker> >& m
             }
             _imp->keys[*it] = k;
         }
-        _imp->node.lock()->getNode()->getApp()->getTimeLine()->addMultipleKeyframeIndicatorsAdded(keysToAdd, true);
+        _imp->node.lock()->getNode()->getApp()->addMultipleKeyframeIndicatorsAdded(keysToAdd, true);
         
         boost::shared_ptr<TrackerContext> context = getContext();
         assert(context);
@@ -1613,7 +1612,7 @@ TrackerPanel::onTrackKeyframeSet(const boost::shared_ptr<TrackMarker>& marker, i
         _imp->updateTrackKeysInfoBar(key);
         std::pair<std::set<int>::iterator,bool> ret = found->second.userKeys.insert(key);
         if (ret.second && found->second.visible) {
-            _imp->node.lock()->getNode()->getApp()->getTimeLine()->addKeyframeIndicator(key);
+            _imp->node.lock()->getNode()->getApp()->addKeyframeIndicator(key);
         }
 
     }
@@ -1630,9 +1629,9 @@ TrackerPanel::onTrackKeyframeRemoved(const boost::shared_ptr<TrackMarker>& marke
     if ( it2 != found->second.userKeys.end() ) {
         found->second.userKeys.erase(it2);
         if (found->second.visible) {
-            boost::shared_ptr<TimeLine> timeline = _imp->node.lock()->getNode()->getApp()->getTimeLine();
-            _imp->updateTrackKeysInfoBar(timeline->currentFrame());
-            timeline->removeKeyFrameIndicator(key);
+            AppInstance* app = _imp->node.lock()->getNode()->getApp();
+            _imp->updateTrackKeysInfoBar(app->getTimeLine()->currentFrame());
+            app->removeKeyFrameIndicator(key);
         }
     }
 }
@@ -1653,9 +1652,9 @@ TrackerPanel::onTrackAllKeyframesRemoved(const boost::shared_ptr<TrackMarker>& m
 
     
     if (it->second.visible) {
-        boost::shared_ptr<TimeLine> timeline = _imp->node.lock()->getNode()->getApp()->getTimeLine();
-        _imp->updateTrackKeysInfoBar(timeline->currentFrame());
-        timeline->removeMultipleKeyframeIndicator(toRemove, true);
+        AppInstance* app = _imp->node.lock()->getNode()->getApp();
+        _imp->updateTrackKeysInfoBar(app->getTimeLine()->currentFrame());
+        app->removeMultipleKeyframeIndicator(toRemove, true);
     }
 
 }
@@ -1672,9 +1671,9 @@ TrackerPanel::onKeyframeSetOnTrackCenter(const boost::shared_ptr<TrackMarker> &m
         
         std::pair<std::set<double>::iterator,bool> ret = found->second.centerKeys.insert(key);
         if (ret.second && found->second.visible) {
-            boost::shared_ptr<TimeLine> timeline = _imp->node.lock()->getNode()->getApp()->getTimeLine();
-            _imp->updateTrackKeysInfoBar(timeline->currentFrame());
-            timeline->addKeyframeIndicator(key);
+            AppInstance* app = _imp->node.lock()->getNode()->getApp();
+            _imp->updateTrackKeysInfoBar(app->getTimeLine()->currentFrame());
+            app->addKeyframeIndicator(key);
         }
         
     }
@@ -1691,7 +1690,7 @@ TrackerPanel::onKeyframeRemovedOnTrackCenter(const boost::shared_ptr<TrackMarker
     if ( it2 != found->second.centerKeys.end() ) {
         found->second.centerKeys.erase(it2);
         if (found->second.visible) {
-            _imp->node.lock()->getNode()->getApp()->getTimeLine()->removeKeyFrameIndicator(key);
+            _imp->node.lock()->getNode()->getApp()->removeKeyFrameIndicator(key);
         }
     }
 }
@@ -1712,7 +1711,7 @@ TrackerPanel::onAllKeyframesRemovedOnTrackCenter(const boost::shared_ptr<TrackMa
     
     
     if (it->second.visible) {
-        _imp->node.lock()->getNode()->getApp()->getTimeLine()->removeMultipleKeyframeIndicator(toRemove, true);
+        _imp->node.lock()->getNode()->getApp()->removeMultipleKeyframeIndicator(toRemove, true);
     }
 }
 
@@ -1737,7 +1736,7 @@ TrackerPanel::onMultipleKeyframesSetOnTrackCenter(const boost::shared_ptr<TrackM
             
         }
         if (!reallyInserted.empty() && found->second.visible) {
-            _imp->node.lock()->getNode()->getApp()->getTimeLine()->addMultipleKeyframeIndicatorsAdded(reallyInserted, true);
+            _imp->node.lock()->getNode()->getApp()->addMultipleKeyframeIndicatorsAdded(reallyInserted, true);
         }
         
     }
@@ -1748,9 +1747,9 @@ TrackerPanelPrivate::setVisibleItemKeyframes(const std::list<int>& keyframes,boo
 {
   
     if (!visible) {
-        node.lock()->getNode()->getApp()->getTimeLine()->removeMultipleKeyframeIndicator(keyframes, emitSignal);
+        node.lock()->getNode()->getApp()->removeMultipleKeyframeIndicator(keyframes, emitSignal);
     } else {
-        node.lock()->getNode()->getApp()->getTimeLine()->addMultipleKeyframeIndicatorsAdded(keyframes, emitSignal);
+        node.lock()->getNode()->getApp()->addMultipleKeyframeIndicatorsAdded(keyframes, emitSignal);
     }
 
 }
@@ -2049,3 +2048,10 @@ TrackerPanel::onTrackingProgress(double p)
 {
     
 }
+
+
+NATRON_NAMESPACE_EXIT;
+
+NATRON_NAMESPACE_USING;
+
+#include "moc_TrackerPanel.cpp"

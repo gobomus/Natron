@@ -1,6 +1,6 @@
 /* ***** BEGIN LICENSE BLOCK *****
  * This file is part of Natron <http://www.natron.fr/>,
- * Copyright (C) 2015 INRIA and Alexandre Gauthier-Foichat
+ * Copyright (C) 2016 INRIA and Alexandre Gauthier-Foichat
  *
  * Natron is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -96,11 +96,7 @@ GCC_DIAG_OFF(deprecated-declarations)
 /*This class is the the core of the viewer : what displays images, overlays, etc...
    Everything related to OpenGL will (almost always) be in this class */
 
-//using namespace Imf;
-//using namespace Imath;
-using namespace Natron;
-using std::cout; using std::endl;
-
+NATRON_NAMESPACE_ENTER;
 
 
 ViewerGL::ViewerGL(ViewerTab* parent,
@@ -208,7 +204,7 @@ ViewerGL::resizeGL(int w,
     if ( viewer->getUiContext() && _imp->viewerTab->getGui() &&
          !_imp->viewerTab->getGui()->getApp()->getProject()->isLoadingProject() &&
          ( ( oldWidth != w) || ( oldHeight != h) ) ) {
-        viewer->renderCurrentFrame(false);
+        viewer->renderCurrentFrame(true);
         
         if (!_imp->persistentMessages.empty()) {
             updatePersistentMessageToWidth(w - 20);
@@ -235,13 +231,13 @@ public:
             glEnable(GL_BLEND);
         }
         switch (premult) {
-            case Natron::eImagePremultiplicationPremultiplied:
+            case eImagePremultiplicationPremultiplied:
                 glBlendFunc(GL_ONE,GL_ONE_MINUS_SRC_ALPHA);
                 break;
-            case Natron::eImagePremultiplicationUnPremultiplied:
+            case eImagePremultiplicationUnPremultiplied:
                 glBlendFunc(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA);
                 break;
-            case Natron::eImagePremultiplicationOpaque:
+            case eImagePremultiplicationOpaque:
                 break;
         }
 
@@ -324,6 +320,7 @@ ViewerGL::paintGL()
         if ( (activeInputs[0] == activeInputs[1]) && (compOp != eViewerCompositingOperatorMinus) ) {
             drawTexture[1] = false;
         }
+                
         double wipeMix;
         {
             QMutexLocker l(&_imp->wipeControlsMutex);
@@ -345,7 +342,7 @@ ViewerGL::paintGL()
             ///Depending on the premultiplication of the input image we use a different blending func
             ImagePremultiplicationEnum premultA = _imp->displayingImagePremult[0];
             if (!_imp->viewerTab->isCheckerboardEnabled()) {
-                premultA = Natron::eImagePremultiplicationOpaque; ///When no checkerboard, draw opaque
+                premultA = eImagePremultiplicationOpaque; ///When no checkerboard, draw opaque
             }
 
             if (compOp == eViewerCompositingOperatorWipe) {
@@ -353,7 +350,7 @@ ViewerGL::paintGL()
 
                 if (drawTexture[0]) {
                     BlendSetter b(premultA);
-                    _imp->drawRenderingVAO(_imp->displayingImageMipMapLevel[0], 0, eDrawPolygonModeWhole);
+                    _imp->drawRenderingVAO(_imp->displayingImageMipMapLevel[0], 0, _imp->activeTextures[1] ? eDrawPolygonModeWhole : eDrawPolygonModeWipeLeft);
                 }
                 if (drawTexture[1]) {
                     glEnable(GL_BLEND);
@@ -364,7 +361,7 @@ ViewerGL::paintGL()
             } else if (compOp == eViewerCompositingOperatorMinus) {
                 if (drawTexture[0]) {
                     BlendSetter b(premultA);
-                    _imp->drawRenderingVAO(_imp->displayingImageMipMapLevel[0], 0, eDrawPolygonModeWhole);
+                    _imp->drawRenderingVAO(_imp->displayingImageMipMapLevel[0], 0, _imp->activeTextures[1] ? eDrawPolygonModeWhole : eDrawPolygonModeWipeLeft);
                 }
                 if (drawTexture[1]) {
                     glEnable(GL_BLEND);
@@ -376,7 +373,7 @@ ViewerGL::paintGL()
             } else if (compOp == eViewerCompositingOperatorUnder) {
                 if (drawTexture[0]) {
                     BlendSetter b(premultA);
-                    _imp->drawRenderingVAO(_imp->displayingImageMipMapLevel[0], 0, eDrawPolygonModeWhole);
+                    _imp->drawRenderingVAO(_imp->displayingImageMipMapLevel[0], 0, _imp->activeTextures[1] ? eDrawPolygonModeWhole : eDrawPolygonModeWipeLeft);
                 }
                 if (drawTexture[1]) {
                     glEnable(GL_BLEND);
@@ -395,7 +392,7 @@ ViewerGL::paintGL()
                     ///Depending on the premultiplication of the input image we use a different blending func
                     ImagePremultiplicationEnum premultB = _imp->displayingImagePremult[1];
                     if (!_imp->viewerTab->isCheckerboardEnabled()) {
-                        premultB = Natron::eImagePremultiplicationOpaque; ///When no checkerboard, draw opaque
+                        premultB = eImagePremultiplicationOpaque; ///When no checkerboard, draw opaque
                     }
                     BlendSetter b(premultB);
                     _imp->drawRenderingVAO(_imp->displayingImageMipMapLevel[1], 1, eDrawPolygonModeWipeRight);
@@ -477,10 +474,10 @@ ViewerGL::toggleOverlays()
 void
 ViewerGL::toggleWipe()
 {
-    if (getViewerTab()->getCompositingOperator() != Natron::eViewerCompositingOperatorNone) {
-        getViewerTab()->setCompositingOperator(Natron::eViewerCompositingOperatorNone);
+    if (getViewerTab()->getCompositingOperator() != eViewerCompositingOperatorNone) {
+        getViewerTab()->setCompositingOperator(eViewerCompositingOperatorNone);
     } else {
-        getViewerTab()->setCompositingOperator(Natron::eViewerCompositingOperatorWipe);
+        getViewerTab()->setCompositingOperator(eViewerCompositingOperatorWipe);
     }
 }
 
@@ -614,7 +611,7 @@ ViewerGL::drawOverlay(unsigned int mipMapLevel)
          Draw the overlays corresponding to the image displayed on the viewer, not the current timeline's time
          */
         double time = getCurrentlyDisplayedTime();
-        _imp->viewerTab->drawOverlays(time,scale,scale);
+        _imp->viewerTab->drawOverlays(time, RenderScale(scale));
         
         glCheckErrorIgnoreOSXBug();
 
@@ -1320,25 +1317,25 @@ ViewerGL::initShaderGLSL()
     if (!_imp->shaderLoaded && _imp->supportsGLSL) {
         _imp->shaderBlack = new QGLShaderProgram( context() );
         if ( !_imp->shaderBlack->addShaderFromSourceCode(QGLShader::Vertex, vertRGB) ) {
-            cout << qPrintable( _imp->shaderBlack->log() ) << endl;
+            qDebug() << qPrintable( _imp->shaderBlack->log() );
         }
         if ( !_imp->shaderBlack->addShaderFromSourceCode(QGLShader::Fragment, blackFrag) ) {
-            cout << qPrintable( _imp->shaderBlack->log() ) << endl;
+            qDebug() << qPrintable( _imp->shaderBlack->log() );
         }
         if ( !_imp->shaderBlack->link() ) {
-            cout << qPrintable( _imp->shaderBlack->log() ) << endl;
+            qDebug() << qPrintable( _imp->shaderBlack->log() );
         }
 
         _imp->shaderRGB = new QGLShaderProgram( context() );
         if ( !_imp->shaderRGB->addShaderFromSourceCode(QGLShader::Vertex, vertRGB) ) {
-            cout << qPrintable( _imp->shaderRGB->log() ) << endl;
+            qDebug() << qPrintable( _imp->shaderRGB->log() );
         }
         if ( !_imp->shaderRGB->addShaderFromSourceCode(QGLShader::Fragment, fragRGB) ) {
-            cout << qPrintable( _imp->shaderRGB->log() ) << endl;
+            qDebug() << qPrintable( _imp->shaderRGB->log() );
         }
 
         if ( !_imp->shaderRGB->link() ) {
-            cout << qPrintable( _imp->shaderRGB->log() ) << endl;
+            qDebug() << qPrintable( _imp->shaderRGB->log() );
         }
         _imp->shaderLoaded = true;
     }
@@ -1348,8 +1345,8 @@ ViewerGL::initShaderGLSL()
 
 void
 ViewerGL::transferBufferFromRAMtoGPU(const unsigned char* ramBuffer,
-                                     const std::list<boost::shared_ptr<Natron::Image> >& tiles,
-                                     Natron::ImageBitDepthEnum depth,
+                                     const std::list<boost::shared_ptr<Image> >& tiles,
+                                     ImageBitDepthEnum depth,
                                      int time,
                                      const RectD& rod,
                                      size_t bytesCount,
@@ -1360,7 +1357,7 @@ ViewerGL::transferBufferFromRAMtoGPU(const unsigned char* ramBuffer,
                                      int lut,
                                      int pboIndex,
                                      unsigned int mipMapLevel,
-                                     Natron::ImagePremultiplicationEnum premult,
+                                     ImagePremultiplicationEnum premult,
                                      int textureIndex,
                                      const RectI& roi,
                                      bool updateOnlyRoi,
@@ -1377,23 +1374,23 @@ ViewerGL::transferBufferFromRAMtoGPU(const unsigned char* ramBuffer,
     glGetIntegerv(GL_PIXEL_UNPACK_BUFFER_BINDING, &currentBoundPBO);
     GLenum err = glGetError();
     if ( (err != GL_NO_ERROR) || (currentBoundPBO != 0) ) {
-        qDebug() << "(ViewerGL::allocateAndMapPBO): Another PBO is currently mapped, glMap failed." << endl;
+        qDebug() << "(ViewerGL::allocateAndMapPBO): Another PBO is currently mapped, glMap failed.";
     }
     
     GLuint pboId = getPboID(pboIndex);
     
-    Natron::ImageBitDepthEnum bd = getBitDepth();
+    ImageBitDepthEnum bd = getBitDepth();
     assert(textureIndex == 0 || textureIndex == 1);
     
     if (updateOnlyRoi) {
         //Make sure the texture is allocated on the full portion
         Texture::DataTypeEnum type = Texture::eDataTypeNone;
         switch (bd) {
-            case Natron::eImageBitDepthByte: {
+            case eImageBitDepthByte: {
                 type = Texture::eDataTypeByte;
                 break;
             }
-            case Natron::eImageBitDepthFloat: {
+            case eImageBitDepthFloat: {
                 type = Texture::eDataTypeFloat;
                 //do 32bit fp textures either way, don't bother with half float. We might support it one day.
                 break;
@@ -1440,9 +1437,9 @@ ViewerGL::transferBufferFromRAMtoGPU(const unsigned char* ramBuffer,
     glCheckError();
 
     
-    if (bd == Natron::eImageBitDepthByte) {
+    if (bd == eImageBitDepthByte) {
         _imp->displayTextures[textureIndex]->fillOrAllocateTexture(region, Texture::eDataTypeByte, roi, updateOnlyRoi);
-    } else if (bd == Natron::eImageBitDepthFloat) {
+    } else if (bd == eImageBitDepthFloat) {
         //do 32bit fp textures either way, don't bother with half float. We might support it further on.
         _imp->displayTextures[textureIndex]->fillOrAllocateTexture(region, Texture::eDataTypeFloat, roi, updateOnlyRoi);
     }
@@ -1454,7 +1451,7 @@ ViewerGL::transferBufferFromRAMtoGPU(const unsigned char* ramBuffer,
     _imp->displayingImageGamma[textureIndex] = gamma;
     _imp->displayingImageOffset[textureIndex] = offset;
     _imp->displayingImageMipMapLevel[textureIndex] = mipMapLevel;
-    _imp->displayingImageLut = (Natron::ViewerColorSpaceEnum)lut;
+    _imp->displayingImageLut = (ViewerColorSpaceEnum)lut;
     _imp->displayingImagePremult[textureIndex] = premult;
     _imp->displayingImageTime[textureIndex] = time;
     ViewerInstance* internalNode = getInternalNode();
@@ -1556,7 +1553,7 @@ ViewerGL::setLut(int lut)
 {
     // always running in the main thread
     assert( qApp && qApp->thread() == QThread::currentThread() );
-    _imp->displayingImageLut = (Natron::ViewerColorSpaceEnum)lut;
+    _imp->displayingImageLut = (ViewerColorSpaceEnum)lut;
 }
 
 /**
@@ -1702,7 +1699,7 @@ ViewerGL::mousePressEvent(QMouseEvent* e)
         _imp->overlay ) {
         unsigned int mipMapLevel = getCurrentRenderScale();
         double scale = 1. / (1 << mipMapLevel);
-        overlaysCaught = _imp->viewerTab->notifyOverlaysPenDown(scale, scale, _imp->pointerTypeOnPress, _imp->subsequentMousePressIsTablet, QMouseEventLocalPos(e), zoomPos, _imp->pressureOnPress, currentTimeForEvent(e), e);
+        overlaysCaught = _imp->viewerTab->notifyOverlaysPenDown(RenderScale(scale), _imp->pointerTypeOnPress, _imp->subsequentMousePressIsTablet, QMouseEventLocalPos(e), zoomPos, _imp->pressureOnPress, currentTimeForEvent(e), e);
         if (overlaysCaught) {
             mustRedraw = true;
         }
@@ -1730,6 +1727,12 @@ ViewerGL::mousePressEvent(QMouseEvent* e)
         mustRedraw = true;
         overlaysCaught = true;
     }
+    
+    if (hasPickers && _imp->pickerState == ePickerStateInactive) {
+        _imp->viewerTab->getGui()->clearColorPickers();
+        unsetCursor();
+    }
+    
     if (!overlaysCaught &&
         buttonDownIsLeft(e) &&
         userRoIEnabled &&
@@ -1878,7 +1881,7 @@ ViewerGL::mouseReleaseEvent(QMouseEvent* e)
     }
     unsigned int mipMapLevel = getCurrentRenderScale();
     double scale = 1. / (1 << mipMapLevel);
-    if ( _imp->viewerTab->notifyOverlaysPenUp(scale, scale, QMouseEventLocalPos(e), zoomPos, currentTimeForEvent(e), _imp->pressureOnRelease, e) ) {
+    if ( _imp->viewerTab->notifyOverlaysPenUp(RenderScale(scale), QMouseEventLocalPos(e), zoomPos, currentTimeForEvent(e), _imp->pressureOnRelease, e) ) {
         mustRedraw = true;
     }
     if (mustRedraw) {
@@ -1887,7 +1890,7 @@ ViewerGL::mouseReleaseEvent(QMouseEvent* e)
     
     if (_imp->renderOnPenUp) {
         _imp->renderOnPenUp = false;
-        getInternalNode()->renderCurrentFrame(false);
+        getInternalNode()->renderCurrentFrame(true);
     }
 }
 
@@ -2065,7 +2068,7 @@ ViewerGL::penMotionInternal(int x, int y, double pressure, double timestamp, QIn
                 _imp->viewerTab->synchronizeOtherViewersProjection();
             }
             
-            _imp->viewerTab->getInternalNode()->renderCurrentFrame(false);
+            _imp->viewerTab->getInternalNode()->renderCurrentFrame(true);
             
             //  else {
             mustRedraw = true;
@@ -2104,7 +2107,7 @@ ViewerGL::penMotionInternal(int x, int y, double pressure, double timestamp, QIn
             }
             
             //_imp->oldClick = newClick; // don't update oldClick! this is the zoom center
-            _imp->viewerTab->getInternalNode()->renderCurrentFrame(false);
+            _imp->viewerTab->getInternalNode()->renderCurrentFrame(true);
             
             //  else {
             mustRedraw = true;
@@ -2296,7 +2299,7 @@ ViewerGL::penMotionInternal(int x, int y, double pressure, double timestamp, QIn
             unsigned int mipMapLevel = getCurrentRenderScale();
             double scale = 1. / (1 << mipMapLevel);
             if ( _imp->overlay &&
-                _imp->viewerTab->notifyOverlaysPenMotion(scale, scale, localPos, zoomPos, pressure, timestamp, e) ) {
+                _imp->viewerTab->notifyOverlaysPenMotion(RenderScale(scale), localPos, zoomPos, pressure, timestamp, e) ) {
                 mustRedraw = true;
                 overlaysCaughtByPlugin = true;
             }
@@ -2328,7 +2331,7 @@ ViewerGL::mouseDoubleClickEvent(QMouseEvent* e)
         pos_opengl = _imp->zoomCtx.toZoomCoordinates( e->x(),e->y() );
     }
     double scale = 1. / (1 << mipMapLevel);
-    if ( _imp->viewerTab->notifyOverlaysPenDoubleClick(scale, scale, QMouseEventLocalPos(e), pos_opengl, e) ) {
+    if ( _imp->viewerTab->notifyOverlaysPenDoubleClick(RenderScale(scale), QMouseEventLocalPos(e), pos_opengl, e) ) {
         update();
     }
     QGLWidget::mouseDoubleClickEvent(e);
@@ -2534,7 +2537,7 @@ ViewerGL::wheelEvent(QWheelEvent* e)
         _imp->viewerTab->synchronizeOtherViewersProjection();
     }
 
-    _imp->viewerTab->getInternalNode()->renderCurrentFrame(false);
+    _imp->viewerTab->getInternalNode()->renderCurrentFrame(true);
     
 
     ///Clear green cached line so the user doesn't expect to see things in the cache
@@ -2584,7 +2587,7 @@ ViewerGL::zoomSlot(int v)
         _imp->viewerTab->clearTimelineCacheLine();
     }
     
-    _imp->viewerTab->getInternalNode()->renderCurrentFrame(false);
+    _imp->viewerTab->getInternalNode()->renderCurrentFrame(true);
    
 }
 
@@ -2651,7 +2654,7 @@ ViewerGL::fitImageToFormat(bool useProjectFormat)
         _imp->viewerTab->clearTimelineCacheLine();
     }
     
-    _imp->viewerTab->getInternalNode()->renderCurrentFrame(false);
+    _imp->viewerTab->getInternalNode()->renderCurrentFrame(true);
     
     update();
 }
@@ -2774,6 +2777,9 @@ ViewerGL::onProjectFormatChangedInternal(const Format & format,bool triggerRende
     for (int i = 0; i < 2; ++i) {
         if (_imp->infoViewer[i]) {
             _imp->infoViewer[i]->setResolution(format);
+            if (!_imp->activeTextures[i]) {
+                _imp->currentViewerInfo[i].setRoD(canonicalFormat);
+            }
         }
     }
     {
@@ -2827,7 +2833,7 @@ ViewerGL::setClipToDisplayWindow(bool b)
     ViewerInstance* viewer = _imp->viewerTab->getInternalNode();
     assert(viewer);
     if ( viewer->getUiContext() && !_imp->viewerTab->getGui()->getApp()->getProject()->isLoadingProject() ) {
-        _imp->viewerTab->getInternalNode()->renderCurrentFrame(false);
+        _imp->viewerTab->getInternalNode()->renderCurrentFrame(true);
     }
 }
 
@@ -2862,7 +2868,7 @@ ViewerGL::focusInEvent(QFocusEvent* e)
         return;
     }
     double scale = 1. / (1 << getCurrentRenderScale());
-    if ( _imp->viewerTab->notifyOverlaysFocusGained(scale,scale) ) {
+    if ( _imp->viewerTab->notifyOverlaysFocusGained(RenderScale(scale)) ) {
         update();
     }
     QGLWidget::focusInEvent(e);
@@ -2879,7 +2885,7 @@ ViewerGL::focusOutEvent(QFocusEvent* e)
     }
 
     double scale = 1. / (1 << getCurrentRenderScale());
-    if ( _imp->viewerTab->notifyOverlaysFocusLost(scale,scale) ) {
+    if ( _imp->viewerTab->notifyOverlaysFocusLost(RenderScale(scale)) ) {
         update();
     }
     QGLWidget::focusOutEvent(e);
@@ -2905,13 +2911,13 @@ ViewerGL::resizeEvent(QResizeEvent* e)
 }
 
 
-Natron::ImageBitDepthEnum
+ImageBitDepthEnum
 ViewerGL::getBitDepth() const
 {
     // MT-SAFE
     ///supportsGLSL is set on the main thread only once on startup, it doesn't need to be protected.
     if (!_imp->supportsGLSL) {
-        return Natron::eImageBitDepthByte;
+        return eImageBitDepthByte;
     } else {
         return appPTR->getCurrentSettings()->getViewersBitDepth();
     }
@@ -2934,7 +2940,7 @@ ViewerGL::populateMenu()
     
     QAction* toggleWipe = new ActionWithShortcut(kShortcutGroupViewer,kShortcutIDToggleWipe,kShortcutDescToggleWipe, _imp->menu);
     toggleWipe->setCheckable(true);
-    toggleWipe->setChecked(getViewerTab()->getCompositingOperator() != Natron::eViewerCompositingOperatorNone);
+    toggleWipe->setChecked(getViewerTab()->getCompositingOperator() != eViewerCompositingOperatorNone);
     QObject::connect( toggleWipe,SIGNAL( triggered() ),this,SLOT( toggleWipe() ) );
     _imp->menu->addAction(toggleWipe);
     
@@ -2954,7 +2960,7 @@ ViewerGL::populateMenu()
     QObject::connect( switchAB,SIGNAL( triggered() ),_imp->viewerTab,SLOT( switchInputAAndB() ) );
     _imp->menu->addAction(switchAB);
     
-    Natron::Menu* showHideMenu = new Natron::Menu(tr("Show/Hide"),_imp->menu);
+    Menu* showHideMenu = new Menu(tr("Show/Hide"),_imp->menu);
     //showHideMenu->setFont(QFont(appFont,appFontSize));
     _imp->menu->addAction(showHideMenu->menuAction());
     
@@ -3174,7 +3180,7 @@ ViewerGL::setUserRoIEnabled(bool b)
         _imp->buildUserRoIOnNextPress = false;
     }
     if ( displayingImage() ) {
-        _imp->viewerTab->getInternalNode()->renderCurrentFrame(false);
+        _imp->viewerTab->getInternalNode()->renderCurrentFrame(true);
     }
     update();
 }
@@ -3629,14 +3635,14 @@ ViewerGL::getZoomOrPannedSinceLastFit() const
     return _imp->zoomOrPannedSinceLastFit;
 }
 
-Natron::ViewerCompositingOperatorEnum
+ViewerCompositingOperatorEnum
 ViewerGL::getCompositingOperator() const
 {
     return _imp->viewerTab->getCompositingOperator();
 }
 
 void
-ViewerGL::setCompositingOperator(Natron::ViewerCompositingOperatorEnum op)
+ViewerGL::setCompositingOperator(ViewerCompositingOperatorEnum op)
 {
     _imp->viewerTab->setCompositingOperator(op);
 }
@@ -3791,7 +3797,7 @@ ViewerGL::clearLastRenderedTexture()
 
 
 void
-ViewerGL::getLastRenderedImage(int textureIndex, std::list<boost::shared_ptr<Natron::Image> >* ret) const
+ViewerGL::getLastRenderedImage(int textureIndex, std::list<boost::shared_ptr<Image> >* ret) const
 {
     // always running in the main thread
     assert( qApp && qApp->thread() == QThread::currentThread() );
@@ -3809,7 +3815,7 @@ ViewerGL::getLastRenderedImage(int textureIndex, std::list<boost::shared_ptr<Nat
 }
 
 void
-ViewerGL::getLastRenderedImageByMipMapLevel(int textureIndex,unsigned int mipMapLevel, std::list<boost::shared_ptr<Natron::Image> >* ret) const
+ViewerGL::getLastRenderedImageByMipMapLevel(int textureIndex,unsigned int mipMapLevel, std::list<boost::shared_ptr<Image> >* ret) const
 {
     // always running in the main thread
     assert( qApp && qApp->thread() == QThread::currentThread() );
@@ -3881,8 +3887,8 @@ getColorAtInternal(const ImageList& tiles,
                    int x,
                    int y,             // in pixel coordinates
                    bool forceLinear,
-                   const Natron::Color::Lut* srcColorSpace,
-                   const Natron::Color::Lut* dstColorSpace,
+                   const Color::Lut* srcColorSpace,
+                   const Color::Lut* dstColorSpace,
                    float* r,
                    float* g,
                    float* b,
@@ -3914,10 +3920,7 @@ getColorAtInternal(const ImageList& tiles,
                 *b = 1.;
                 *a = 1.;
             } else {
-                *r = 0.;
-                *g = 0.;
-                *b = 0.;
-                *a = pix[0] / (float)maxValue;
+                *r = *g = *b = *a = pix[0] / (float)maxValue;
             }
             
             
@@ -3976,7 +3979,7 @@ ViewerGL::getColorAt(double x,
         getTextureColorAt(x, y, &colorGPU[0], &colorGPU[1], &colorGPU[2], &colorGPU[3]);
         *a = colorGPU[3];
         if ( forceLinear && (_imp->displayingImageLut != eViewerColorSpaceLinear) ) {
-            const Natron::Color::Lut* srcColorSpace = ViewerInstance::lutFromColorspace(_imp->displayingImageLut);
+            const Color::Lut* srcColorSpace = ViewerInstance::lutFromColorspace(_imp->displayingImageLut);
             
             *r = srcColorSpace->fromColorSpaceFloatToLinearFloat(colorGPU[0]);
             *g = srcColorSpace->fromColorSpaceFloatToLinearFloat(colorGPU[1]);
@@ -3991,10 +3994,10 @@ ViewerGL::getColorAt(double x,
     
     const ImagePtr& firstTile = tiles.front();
     
-    Natron::ImageBitDepthEnum depth = firstTile->getBitDepth();
+    ImageBitDepthEnum depth = firstTile->getBitDepth();
     ViewerColorSpaceEnum srcCS = _imp->viewerTab->getGui()->getApp()->getDefaultColorSpaceForBitDepth(depth);
-    const Natron::Color::Lut* dstColorSpace;
-    const Natron::Color::Lut* srcColorSpace;
+    const Color::Lut* dstColorSpace;
+    const Color::Lut* srcColorSpace;
     if ( (srcCS == _imp->displayingImageLut)
         && ( (_imp->displayingImageLut == eViewerColorSpaceLinear) || !forceLinear ) ) {
         // identity transform
@@ -4119,7 +4122,7 @@ ViewerGL::getColorAtRect(const RectD &rect, // rectangle in canonical coordinate
                 
                 aSum += aF;
                 if ( forceLinear && (_imp->displayingImageLut != eViewerColorSpaceLinear) ) {
-                    const Natron::Color::Lut* srcColorSpace = ViewerInstance::lutFromColorspace(_imp->displayingImageLut);
+                    const Color::Lut* srcColorSpace = ViewerInstance::lutFromColorspace(_imp->displayingImageLut);
                     
                     rSum += srcColorSpace->fromColorSpaceFloatToLinearFloat(rF);
                     gSum += srcColorSpace->fromColorSpaceFloatToLinearFloat(gF);
@@ -4148,7 +4151,7 @@ ViewerGL::getColorAtRect(const RectD &rect, // rectangle in canonical coordinate
                     
                     aSum += aF;
                     if ( forceLinear && (_imp->displayingImageLut != eViewerColorSpaceLinear) ) {
-                        const Natron::Color::Lut* srcColorSpace = ViewerInstance::lutFromColorspace(_imp->displayingImageLut);
+                        const Color::Lut* srcColorSpace = ViewerInstance::lutFromColorspace(_imp->displayingImageLut);
                         
                         rSum += srcColorSpace->fromColorSpaceFloatToLinearFloat(rF);
                         gSum += srcColorSpace->fromColorSpaceFloatToLinearFloat(gF);
@@ -4174,10 +4177,10 @@ ViewerGL::getColorAtRect(const RectD &rect, // rectangle in canonical coordinate
     }
     
     
-    Natron::ImageBitDepthEnum depth = tiles.front()->getBitDepth();
+    ImageBitDepthEnum depth = tiles.front()->getBitDepth();
     ViewerColorSpaceEnum srcCS = _imp->viewerTab->getGui()->getApp()->getDefaultColorSpaceForBitDepth(depth);
-    const Natron::Color::Lut* dstColorSpace;
-    const Natron::Color::Lut* srcColorSpace;
+    const Color::Lut* dstColorSpace;
+    const Color::Lut* srcColorSpace;
     if ( (srcCS == _imp->displayingImageLut) && ( (_imp->displayingImageLut == eViewerColorSpaceLinear) || !forceLinear ) ) {
         // identity transform
         srcColorSpace = 0;
@@ -4279,4 +4282,7 @@ ViewerGL::currentTimeForEvent(QInputEvent* e)
     return now.tv_sec + now.tv_usec / 1000000.0;
 }
 
+NATRON_NAMESPACE_EXIT;
 
+NATRON_NAMESPACE_USING;
+#include "moc_ViewerGL.cpp"

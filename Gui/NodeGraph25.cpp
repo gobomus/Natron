@@ -1,6 +1,6 @@
 /* ***** BEGIN LICENSE BLOCK *****
  * This file is part of Natron <http://www.natron.fr/>,
- * Copyright (C) 2015 INRIA and Alexandre Gauthier-Foichat
+ * Copyright (C) 2016 INRIA and Alexandre Gauthier-Foichat
  *
  * Natron is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -56,7 +56,7 @@ CLANG_DIAG_ON(uninitialized)
 
 #include "Global/QtCompat.h"
 
-using namespace Natron;
+NATRON_NAMESPACE_ENTER;
 
 
 
@@ -202,8 +202,8 @@ NodeGraph::onNodeCreationDialogFinished()
         switch (ret) {
         case QDialog::Accepted: {
             
-            const Natron::PluginsMap & allPlugins = appPTR->getPluginsList();
-            Natron::PluginsMap::const_iterator found = allPlugins.find(res.toStdString());
+            const PluginsMap & allPlugins = appPTR->getPluginsList();
+            PluginsMap::const_iterator found = allPlugins.find(res.toStdString());
             if (found != allPlugins.end()) {
                 QPointF posHint = mapToScene( mapFromGlobal( QCursor::pos() ) );
                 getGui()->getApp()->createNode( CreateNodeArgs( res,
@@ -316,7 +316,7 @@ NodeGraph::keyPressEvent(QKeyEvent* e)
         ///the first valid output node
         if ( !_imp->_selection.empty() ) {
             boost::shared_ptr<NodeGui> lastSelected = ( *_imp->_selection.rbegin() );
-            const std::list<Natron::Node* > & outputs = lastSelected->getNode()->getGuiOutputs();
+            const std::list<Node* > & outputs = lastSelected->getNode()->getGuiOutputs();
             if ( !outputs.empty() ) {
                 boost::shared_ptr<NodeGuiI> output_i = outputs.front()->getNodeGui();
                 boost::shared_ptr<NodeGui> output = boost::dynamic_pointer_cast<NodeGui>(output_i);
@@ -359,9 +359,9 @@ NodeGraph::keyPressEvent(QKeyEvent* e)
             getLastSelectedViewer()->previousFrame();
         }
     } else if ( isKeybind(kShortcutGroupPlayer, kShortcutIDActionPlayerPrevKF, modifiers, key) ) {
-        getGui()->getApp()->getTimeLine()->goToPreviousKeyframe();
+        getGui()->getApp()->goToPreviousKeyframe();
     } else if ( isKeybind(kShortcutGroupPlayer, kShortcutIDActionPlayerNextKF, modifiers, key) ) {
-        getGui()->getApp()->getTimeLine()->goToNextKeyframe();
+        getGui()->getApp()->goToNextKeyframe();
     } else if ( isKeybind(kShortcutGroupNodegraph, kShortcutIDActionGraphRearrangeNodes, modifiers, key) ) {
         _imp->rearrangeSelectedNodes();
     } else if ( isKeybind(kShortcutGroupNodegraph, kShortcutIDActionGraphDisableNodes, modifiers, key) ) {
@@ -398,11 +398,11 @@ NodeGraph::keyPressEvent(QKeyEvent* e)
         
         if (!intercepted) {
             /// Search for a node which has a shortcut bound
-            const Natron::PluginsMap & allPlugins = appPTR->getPluginsList();
-            for (Natron::PluginsMap::const_iterator it = allPlugins.begin() ; it != allPlugins.end() ; ++it) {
+            const PluginsMap & allPlugins = appPTR->getPluginsList();
+            for (PluginsMap::const_iterator it = allPlugins.begin() ; it != allPlugins.end() ; ++it) {
                 
                 assert(!it->second.empty());
-                Natron::Plugin* plugin = *it->second.rbegin();
+                Plugin* plugin = *it->second.rbegin();
                 
                 if ( plugin->getHasShortcut() ) {
                     QString group(kShortcutGroupNodes);
@@ -434,7 +434,6 @@ NodeGraph::keyPressEvent(QKeyEvent* e)
         
         if (!intercepted) {
             accept = false;
-            QGraphicsView::keyPressEvent(e);
         }
     }
     if (accept) {
@@ -442,6 +441,7 @@ NodeGraph::keyPressEvent(QKeyEvent* e)
         e->accept();
     } else {
         handleUnCaughtKeyPressEvent(e);
+        QGraphicsView::keyPressEvent(e);
     }
 } // keyPressEvent
 
@@ -476,3 +476,4 @@ NodeGraph::selectAllNodes(bool onlyInVisiblePortion)
     }
 }
 
+NATRON_NAMESPACE_EXIT;
