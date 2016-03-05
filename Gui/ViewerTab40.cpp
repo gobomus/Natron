@@ -83,16 +83,16 @@ ViewerTab::onInputChanged(int inputNb)
             }
             const std::string & curInputName = input->getLabel();
             found->second.input = inp;
-            int indexInA = _imp->firstInputImage->itemIndex( curInputName.c_str() );
-            int indexInB = _imp->secondInputImage->itemIndex( curInputName.c_str() );
+            int indexInA = _imp->firstInputImage->itemIndex( QString::fromUtf8(curInputName.c_str() ));
+            int indexInB = _imp->secondInputImage->itemIndex( QString::fromUtf8(curInputName.c_str() ));
             assert(indexInA != -1 && indexInB != -1);
-            found->second.name = inp->getLabel().c_str();
+            found->second.name = QString::fromUtf8(inp->getLabel().c_str());
             _imp->firstInputImage->setItemText(indexInA, found->second.name);
             _imp->secondInputImage->setItemText(indexInB, found->second.name);
         } else {
             ViewerTabPrivate::InputName inpName;
             inpName.input = inp;
-            inpName.name = inp->getLabel().c_str();
+            inpName.name = QString::fromUtf8(inp->getLabel().c_str());
             _imp->inputNamesMap.insert( std::make_pair(inputNb,inpName) );
             _imp->firstInputImage->addItem(inpName.name);
             _imp->secondInputImage->addItem(inpName.name);
@@ -110,8 +110,8 @@ ViewerTab::onInputChanged(int inputNb)
             const std::string & curInputName = input->getLabel();
             _imp->firstInputImage->blockSignals(true);
             _imp->secondInputImage->blockSignals(true);
-            _imp->firstInputImage->removeItem( curInputName.c_str() );
-            _imp->secondInputImage->removeItem( curInputName.c_str() );
+            _imp->firstInputImage->removeItem( QString::fromUtf8(curInputName.c_str() ));
+            _imp->secondInputImage->removeItem( QString::fromUtf8(curInputName.c_str() ));
             _imp->firstInputImage->blockSignals(false);
             _imp->secondInputImage->blockSignals(false);
             _imp->inputNamesMap.erase(found);
@@ -158,56 +158,92 @@ ViewerTab::setImageFormat(int textureIndex,const ImageComponents& components,Ima
     _imp->infoWidget[textureIndex]->setImageFormat(components,depth);
 }
 
+
 void
-ViewerTab::onFrameRangeEditingFinished()
+ViewerTab::onPlaybackInButtonClicked()
 {
-    QString text = _imp->frameRangeEdit->text();
-    ///try to parse the frame range, if failed set it back to what the timeline currently is
-    int i = 0;
-    QString firstStr;
-
-    while ( i < text.size() && text.at(i).isDigit() ) {
-        firstStr.push_back( text.at(i) );
-        ++i;
-    }
-
-    ///advance the marker to the second digit if any
-    while ( i < text.size() && !text.at(i).isDigit() ) {
-        ++i;
-    }
-    
-    int curLeft,curRight;
-    getTimelineBounds(&curLeft, &curRight);
-
-    bool ok;
-    int first = firstStr.toInt(&ok);
-    if (!ok) {
-        QString text = QString("%1 - %2").arg( curLeft ).arg( curRight );
-        _imp->frameRangeEdit->setText(text);
-        _imp->frameRangeEdit->adjustSize();
-
-        return;
-    }
-
-    if ( i == text.size() ) {
-        ///there's no second marker, set the timeline's boundaries to be the same frame
-        setTimelineBounds(first, first);
-    } else {
-        QString secondStr;
-        while ( i < text.size() && text.at(i).isDigit() ) {
-            secondStr.push_back( text.at(i) );
-            ++i;
-        }
-        int second = secondStr.toInt(&ok);
-        if (!ok) {
-            ///there's no second marker, set the timeline's boundaries to be the same frame
-            setTimelineBounds(first, first);
-        } else {
-            setTimelineBounds(first, second);
-        }
-    }
-    _imp->frameRangeEdit->adjustSize();
+    SequenceTime curIn,curOut;
+    _imp->timeLineGui->getBounds(&curIn, &curOut);
+    curIn = (SequenceTime)_imp->timeLineGui->getTimeline()->currentFrame();
+    curIn = std::min(curIn, curOut);
+    setTimelineBounds(curIn, curOut);
+    _imp->timeLineGui->recenterOnBounds();
+    onTimelineBoundariesChanged(curIn, curOut);
 }
+
+void
+ViewerTab::onPlaybackOutButtonClicked()
+{
+    SequenceTime curIn,curOut;
+    _imp->timeLineGui->getBounds(&curIn, &curOut);
+    curOut = (SequenceTime)_imp->timeLineGui->getTimeline()->currentFrame();
+    curOut = std::max(curIn, curOut);
+    setTimelineBounds(curIn, curOut);
+    _imp->timeLineGui->recenterOnBounds();
+    onTimelineBoundariesChanged(curIn, curOut);
+
+}
+
+void
+ViewerTab::onPlaybackInSpinboxValueChanged(double value)
+{
+    SequenceTime curIn,curOut;
+    _imp->timeLineGui->getBounds(&curIn, &curOut);
+    curIn = (SequenceTime)value;
+    curIn = std::min(curIn, curOut);
+    setTimelineBounds(curIn, curOut);
+    _imp->timeLineGui->recenterOnBounds();
+    onTimelineBoundariesChanged(curIn, curOut);
+
+}
+
+void
+ViewerTab::onPlaybackOutSpinboxValueChanged(double value)
+{
+    SequenceTime curIn,curOut;
+    _imp->timeLineGui->getBounds(&curIn, &curOut);
+    curOut = (SequenceTime)value;
+    curOut = std::max(curIn, curOut);
+    setTimelineBounds(curIn, curOut);
+    _imp->timeLineGui->recenterOnBounds();
+    onTimelineBoundariesChanged(curIn, curOut);
+}
+
+
+
+void
+ViewerTab::setFrameRange(int left,int right)
+{
+    setTimelineBounds(left, right);
+    onTimelineBoundariesChanged(left, right);
+    _imp->timeLineGui->recenterOnBounds();
+}
+
+
+
+void
+ViewerTab::onTimelineBoundariesChanged(SequenceTime first,
+                                       SequenceTime second)
+{
+    _imp->playBackInputSpinbox->setValue(first);
+    _imp->playBackOutputSpinbox->setValue(second);
+
+    
+    if (getGui() ) {
+        const std::list<ViewerTab*> & activeNodes = getGui()->getViewersList();
+        for (std::list<ViewerTab*>::const_iterator it = activeNodes.begin(); it != activeNodes.end(); ++it) {
+            ViewerInstance* viewer = (*it)->getInternalNode();
+            if (viewer) {
+                RenderEngine* engine = viewer->getRenderEngine();
+                if (engine && engine->hasThreadsWorking()) {
+                    engine->abortRendering(true,false);
+                    engine->renderCurrentFrame(false, true);
+                }
+            }
+        }
+    }
+}
+
 
 
 void
@@ -240,31 +276,6 @@ ViewerTab::setFPSLocked(bool fpsLocked)
     _imp->canEditFpsBox->setChecked(!fpsLocked);
     onCanSetFPSClicked(!fpsLocked);
 }
-
-void
-ViewerTab::onTimelineBoundariesChanged(SequenceTime first,
-                                       SequenceTime second)
-{
-    QString text = QString("%1 - %2").arg(first).arg(second);
-
-    _imp->frameRangeEdit->setText(text);
-    _imp->frameRangeEdit->adjustSize();
-    
-    if (getGui() ) {
-        const std::list<ViewerTab*> & activeNodes = getGui()->getViewersList();
-        for (std::list<ViewerTab*>::const_iterator it = activeNodes.begin(); it != activeNodes.end(); ++it) {
-            ViewerInstance* viewer = (*it)->getInternalNode();
-            if (viewer) {
-                RenderEngine* engine = viewer->getRenderEngine();
-                if (engine && engine->hasThreadsWorking()) {
-                    engine->abortRendering(true,false);
-                    engine->renderCurrentFrame(false, true);
-                }
-            }
-        }
-    }
-}
-
 
 bool
 ViewerTab::isFPSLocked() const
@@ -692,9 +703,9 @@ ViewerTab::setProjection(double zoomLeft, double zoomBottom, double zoomFactor, 
     
     _imp->viewer->setProjection(zoomLeft, zoomBottom, zoomFactor, zoomAspectRatio);
     QString str = QString::number(std::floor(zoomFactor * 100 + 0.5));
-    str.append( QChar('%') );
-    str.prepend("  ");
-    str.append("  ");
+    str.append( QLatin1Char('%') );
+    str.prepend(QString::fromUtf8("  "));
+    str.append(QString::fromUtf8("  "));
     _imp->zoomCombobox->setCurrentText_no_emit(str);
 }
 
@@ -741,6 +752,7 @@ void
 ViewerTab::setTimelineBounds(int left,int right)
 {
     _imp->timeLineGui->setBoundaries(left, right);
+    
 }
 
 void ViewerTab::centerOn(SequenceTime left, SequenceTime right)
@@ -759,14 +771,6 @@ ViewerTab::setFrameRangeEdited(bool edited)
     _imp->timeLineGui->setFrameRangeEdited(edited);
 }
 
-
-void
-ViewerTab::setFrameRange(int left,int right)
-{
-    setTimelineBounds(left, right);
-    onTimelineBoundariesChanged(left, right);
-    _imp->timeLineGui->recenterOnBounds();
-}
 
 void
 ViewerTab::onInternalNodeLabelChanged(const QString& name)
@@ -818,8 +822,8 @@ ViewerTab::refreshLayerAndAlphaChannelComboBox()
     _imp->layerChoice->clear();
     _imp->alphaChannelChoice->clear();
     
-    _imp->layerChoice->addItem("-");
-    _imp->alphaChannelChoice->addItem("-");
+    _imp->layerChoice->addItem(QString::fromUtf8("-"));
+    _imp->alphaChannelChoice->addItem(QString::fromUtf8("-"));
     
     std::set<ImageComponents>::iterator foundColorIt = components.end();
     std::set<ImageComponents>::iterator foundOtherIt = components.end();
@@ -828,15 +832,15 @@ ViewerTab::refreshLayerAndAlphaChannelComboBox()
     std::string foundAlphaChannel;
     
     for (std::set<ImageComponents>::iterator it = components.begin(); it != components.end(); ++it) {
-        QString layerName(it->getLayerName().c_str());
-        QString itemName = layerName + '.' + QString(it->getComponentsGlobalName().c_str());
+        QString layerName = QString::fromUtf8(it->getLayerName().c_str());
+        QString itemName = layerName + QLatin1Char('.') + QString::fromUtf8(it->getComponentsGlobalName().c_str());
         _imp->layerChoice->addItem(itemName);
         
         if (itemName == layerCurChoice) {
             foundCurIt = it;
         }
         
-        if (layerName == kNatronColorPlaneName) {
+        if (layerName == QString::fromUtf8(kNatronColorPlaneName)) {
             foundColorIt = it;
         } else {
             foundOtherIt = it;
@@ -844,7 +848,7 @@ ViewerTab::refreshLayerAndAlphaChannelComboBox()
         
         const std::vector<std::string>& channels = it->getComponentsNames();
         for (U32 i = 0; i < channels.size(); ++i) {
-            QString itemName = layerName + '.' + QString(channels[i].c_str());
+            QString itemName = layerName + QLatin1Char('.') + QString::fromUtf8(channels[i].c_str());
             if (itemName == alphaCurChoice) {
                 foundCurAlphaIt = it;
                 foundAlphaChannel = channels[i];
@@ -852,7 +856,7 @@ ViewerTab::refreshLayerAndAlphaChannelComboBox()
             _imp->alphaChannelChoice->addItem(itemName);
         }
         
-        if (layerName == kNatronColorPlaneName) {
+        if (layerName == QString::fromUtf8(kNatronColorPlaneName)) {
             //There's RGBA or alpha, set it to A
             std::string alphaChoice;
             if (channels.size() == 4) {
@@ -874,25 +878,25 @@ ViewerTab::refreshLayerAndAlphaChannelComboBox()
     
     int layerIdx;
     if (foundCurIt == components.end()) {
-        layerCurChoice = "-";
+        layerCurChoice = QString::fromUtf8("-");
     }
 
     
     
-    if (layerCurChoice == "-") {
+    if (layerCurChoice == QString::fromUtf8("-")) {
         
         ///Try to find color plane, otherwise fallback on any other layer
         if (foundColorIt != components.end()) {
-            layerCurChoice = QString(foundColorIt->getLayerName().c_str())
-            + '.' + QString(foundColorIt->getComponentsGlobalName().c_str());
+            layerCurChoice = QString::fromUtf8(foundColorIt->getLayerName().c_str())
+            + QLatin1Char('.') + QString::fromUtf8(foundColorIt->getComponentsGlobalName().c_str());
             foundCurIt = foundColorIt;
             
         } else if (foundOtherIt != components.end()) {
-            layerCurChoice = QString(foundOtherIt->getLayerName().c_str())
-            + '.' + QString(foundOtherIt->getComponentsGlobalName().c_str());
+            layerCurChoice = QString::fromUtf8(foundOtherIt->getLayerName().c_str())
+            + QLatin1Char('.') + QString::fromUtf8(foundOtherIt->getComponentsGlobalName().c_str());
             foundCurIt = foundOtherIt;
         } else {
-            layerCurChoice = "-";
+            layerCurChoice = QString::fromUtf8("-");
             foundCurIt = components.end();
         }
         
@@ -924,10 +928,10 @@ ViewerTab::refreshLayerAndAlphaChannelComboBox()
     
     int alphaIdx;
     if (foundCurAlphaIt == components.end() || foundAlphaChannel.empty()) {
-        alphaCurChoice = "-";
+        alphaCurChoice = QString::fromUtf8("-");
     }
     
-    if (alphaCurChoice == "-") {
+    if (alphaCurChoice == QString::fromUtf8("-")) {
         
         ///Try to find color plane, otherwise fallback on any other layer
         if (foundColorIt != components.end() &&
@@ -935,14 +939,14 @@ ViewerTab::refreshLayerAndAlphaChannelComboBox()
             
             std::size_t lastComp = foundColorIt->getComponentsNames().size() -1;
             
-            alphaCurChoice = QString(foundColorIt->getLayerName().c_str())
-            + '.' + QString(foundColorIt->getComponentsNames()[lastComp].c_str());
+            alphaCurChoice = QString::fromUtf8(foundColorIt->getLayerName().c_str())
+            + QLatin1Char('.') + QString::fromUtf8(foundColorIt->getComponentsNames()[lastComp].c_str());
             foundAlphaChannel = foundColorIt->getComponentsNames()[lastComp];
             foundCurAlphaIt = foundColorIt;
             
             
         } else {
-            alphaCurChoice = "-";
+            alphaCurChoice = QString::fromUtf8("-");
             foundCurAlphaIt = components.end();
         }
         
@@ -1171,7 +1175,7 @@ ViewerTab::zoomIn()
     factor *= 1.1;
     factor *= 100;
     _imp->viewer->zoomSlot(factor);
-    QString text = QString::number(std::floor(factor + 0.5)) + "%";
+    QString text = QString::number(std::floor(factor + 0.5)) + QLatin1Char('%');
     _imp->zoomCombobox->setCurrentText_no_emit(text);
 }
 
@@ -1182,7 +1186,7 @@ ViewerTab::zoomOut()
     factor *= 0.9;
     factor *= 100;
     _imp->viewer->zoomSlot(factor);
-    QString text = QString::number(std::floor(factor + 0.5)) + "%";
+    QString text = QString::number(std::floor(factor + 0.5)) + QLatin1Char('%');
     _imp->zoomCombobox->setCurrentText_no_emit(text);
 }
 
@@ -1190,14 +1194,14 @@ void
 ViewerTab::onZoomComboboxCurrentIndexChanged(int /*index*/)
 {
     QString text = _imp->zoomCombobox->getCurrentIndexText();
-    if (text == "+") {
+    if (text == QString::fromUtf8("+")) {
         zoomIn();
-    } else if (text == "-") {
+    } else if (text == QString::fromUtf8("-")) {
         zoomOut();
-    } else if (text == "Fit") {
+    } else if (text == QString::fromUtf8("Fit")) {
         centerViewer();
     } else {
-        text.remove( QChar('%') );
+        text.remove( QLatin1Char('%') );
         int v = text.toInt();
         assert(v > 0);
         _imp->viewer->zoomSlot(v);

@@ -256,6 +256,8 @@
         <file>Resources/Images/treeview_vline.png</file>
         <file>Resources/Images/turbo_off.png</file>
         <file>Resources/Images/turbo_on.png</file>
+        <file>Resources/Images/timelineIn.png</file>
+        <file>Resources/Images/timelineOut.png</file>
         <file>Resources/Images/undo.png</file>
         <file>Resources/Images/undo_grayscale.png</file>
         <file>Resources/Images/unhide_unmodified.png</file>
@@ -291,6 +293,7 @@
         <file>Resources/Images/interp_curve_r_selected.png</file>
         <file>Resources/Images/interp_curve_z.png</file>
         <file>Resources/Images/interp_curve_z_selected.png</file>
+        <file>Resources/Images/oneViewNode.png</file>
         <file>Resources/Images/joinViewsNode.png</file>
         <file>Resources/Images/rotoToolPencil.png</file>
         <file>Resources/Images/AutoContrast.png</file>

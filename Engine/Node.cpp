@@ -62,6 +62,7 @@ GCC_DIAG_UNUSED_LOCAL_TYPEDEFS_ON
 #include "Engine/Knob.h"
 #include "Engine/KnobTypes.h"
 #include "Engine/KnobFile.h"
+#include "Engine/OneViewNode.h"
 #include "Engine/LibraryBinary.h"
 #include "Engine/Log.h"
 #include "Engine/Lut.h"
@@ -73,6 +74,7 @@ GCC_DIAG_UNUSED_LOCAL_TYPEDEFS_ON
 #include "Engine/Plugin.h"
 #include "Engine/PrecompNode.h"
 #include "Engine/Project.h"
+#include "Engine/ReadNode.h"
 #include "Engine/RotoLayer.h"
 #include "Engine/RotoPaint.h"
 #include "Engine/RotoStrokeItem.h"
@@ -82,6 +84,7 @@ GCC_DIAG_UNUSED_LOCAL_TYPEDEFS_ON
 #include "Engine/TLSHolder.h"
 #include "Engine/ViewIdx.h"
 #include "Engine/ViewerInstance.h"
+#include "Engine/WriteNode.h"
 
 ///The flickering of edges/nodes in the nodegraph will be refreshed
 ///at most every...
@@ -186,11 +189,15 @@ namespace { // protect local classes in anonymous namespace
         boost::shared_ptr<KnobDouble> center;
     };
     
+ 
+    
     struct FormatKnob {
         boost::weak_ptr<KnobInt> size;
         boost::weak_ptr<KnobDouble> par;
         boost::weak_ptr<KnobChoice> formatChoice;
+    
     };
+    
 }
 
 
@@ -247,6 +254,9 @@ struct Node::Implementation
     , masterNodeMutex()
     , masterNode()
     , nodeLinks()
+#ifdef NATRON_ENABLE_IO_META_NODES
+    , ioContainer()
+#endif
     , frameIncrKnob()
     , nodeSettingsPage()
     , nodeLabelKnob()
@@ -446,6 +456,11 @@ struct Node::Implementation
     NodeWPtr masterNode; //< this points to the master when the node is a clone
     KnobLinkList nodeLinks; //< these point to the parents of the params links
     
+#ifdef NATRON_ENABLE_IO_META_NODES
+    //When creating a Reader or Writer node, this is a pointer to the "bundle" node that the user actually see.
+    NodeWPtr ioContainer;
+#endif
+    
     boost::weak_ptr<KnobInt> frameIncrKnob;
     
     boost::weak_ptr<KnobPage> nodeSettingsPage;
@@ -473,6 +488,7 @@ struct Node::Implementation
     boost::weak_ptr<KnobBool> enabledChan[4];
     boost::weak_ptr<KnobString> premultWarning;
     boost::weak_ptr<KnobDouble> mixWithSource;
+    boost::weak_ptr<KnobButton> renderButton; //< render button for writers
     
     FormatKnob pluginFormatKnobs;
     
@@ -665,6 +681,10 @@ Node::load(const CreateNodeArgs& args)
     assert(!_imp->effect);
     _imp->isPartOfProject = args.addToProject;
     
+#ifdef NATRON_ENABLE_IO_META_NODES
+    _imp->ioContainer = args.ioContainer;
+#endif
+    
     boost::shared_ptr<NodeCollection> group = getGroup();
 
     
@@ -686,7 +706,6 @@ Node::load(const CreateNodeArgs& args)
     if (binary) {
         func = binary->findFunction<EffectBuilder>("BuildEffect");
     }
-    bool isFileDialogPreviewReader = args.fixedName.contains(NATRON_FILE_DIALOG_PREVIEW_READER_NAME);
     
     bool nameSet = false;
     /*
@@ -724,8 +743,10 @@ Node::load(const CreateNodeArgs& args)
         }
     }
 
+#ifndef NATRON_ENABLE_IO_META_NODES
     bool hasUsedFileDialog = false;
-    bool canOpenFileDialog = args.reason == eCreateNodeReasonUserCreate && !args.serialization && args.paramValues.empty() && !isFileDialogPreviewReader;
+#endif
+    bool canOpenFileDialog = args.reason == eCreateNodeReasonUserCreate && !args.serialization && args.paramValues.empty() && getGroup();
 
     if (func.first) {
         /*
@@ -739,7 +760,12 @@ Node::load(const CreateNodeArgs& args)
         initializeInputs();
         initializeKnobs(renderScaleSupportPreference, args.serialization.get() != 0);
         
+        refreshAcceptedBitDepths();
+        
+        _imp->effect->setDefaultMetadata();
+        
         if (args.serialization) {
+            _imp->effect->onKnobsAboutToBeLoaded(args.serialization);
             loadKnobs(*args.serialization);
         }
         if (!args.paramValues.empty()) {
@@ -747,6 +773,7 @@ Node::load(const CreateNodeArgs& args)
         }
         
         
+#ifndef NATRON_ENABLE_IO_META_NODES
         std::string images;
         if (_imp->effect->isReader() && canOpenFileDialog) {
             images = getApp()->openImageFileDialog();
@@ -760,14 +787,16 @@ Node::load(const CreateNodeArgs& args)
             list.push_back(defaultFile);
             setValuesFromSerialization(list);
         }
-        refreshAcceptedBitDepths();
-        if (!args.serialization) {
-            _imp->effect->setDefaultMetadata();
-        }
+#endif
+        
     } else {
-            //ofx plugin   
-        _imp->effect = appPTR->createOFXEffect(thisShared, args.serialization.get(),args.paramValues,canOpenFileDialog,renderScaleSupportPreference == 1, &hasUsedFileDialog);
-            assert(_imp->effect);
+            //ofx plugin
+#ifndef NATRON_ENABLE_IO_META_NODES
+        _imp->effect = appPTR->createOFXEffect(thisShared, args.serialization.get(),args.paramValues,renderScaleSupportPreference == 1,canOpenFileDialog, &hasUsedFileDialog);
+#else
+        _imp->effect = appPTR->createOFXEffect(thisShared, args.serialization.get(),args.paramValues,renderScaleSupportPreference == 1);
+#endif
+        assert(_imp->effect);
     }
     _imp->effect->initializeOverlayInteract();
     
@@ -802,7 +831,11 @@ Node::load(const CreateNodeArgs& args)
                 pluginLabel = _imp->plugin->getPluginLabel();
             }
             try {
-                group->initNodeName(isMultiInstanceChild ? args.multiInstanceParentName + '_' : pluginLabel.toStdString(),&name);
+                if (group) {
+                    group->initNodeName(isMultiInstanceChild ? args.multiInstanceParentName + '_' : pluginLabel.toStdString(),&name);
+                } else {
+                    name = Python::makeNameScriptFriendly(pluginLabel.toStdString());
+                }
             } catch (...) {
                 
             }
@@ -812,11 +845,11 @@ Node::load(const CreateNodeArgs& args)
             try {
                 setScriptName(args.fixedName.toStdString());
             } catch (...) {
-                appPTR->writeToErrorLog_mt_safe("Could not set node name to " + args.fixedName);
+                appPTR->writeToErrorLog_mt_safe(QString::fromUtf8("Could not set node name to ") + args.fixedName);
             }
         }
         if (!isMultiInstanceChild && _imp->isMultiInstance) {
-            updateEffectLabelKnob( getScriptName().c_str() );
+            updateEffectLabelKnob( QString::fromUtf8(getScriptName().c_str() ));
         }
     } else { //nameSet
         //We have to declare the node to Python now since we didn't declare it before
@@ -825,8 +858,10 @@ Node::load(const CreateNodeArgs& args)
     }
     if (isMultiInstanceChild && !args.serialization) {
         assert(nameSet);
-        updateEffectLabelKnob(getScriptName().c_str());
+        updateEffectLabelKnob(QString::fromUtf8(getScriptName().c_str()));
     }
+    restoreSublabel();
+    
     if (args.addToProject) {
         declarePythonFields();
         if  (getRotoContext()) {
@@ -842,7 +877,7 @@ Node::load(const CreateNodeArgs& args)
     //so that if the input of the roto node is RGB, it gets converted with alpha = 0, otherwise the user
     //won't be able to paint the alpha channel
     const QString& pluginID = _imp->plugin->getPluginID();
-    if (isRotoPaintingNode() || pluginID == PLUGINID_OFX_ROTO) {
+    if (isRotoPaintingNode() || pluginID == QString::fromUtf8(PLUGINID_OFX_ROTO)) {
         _imp->useAlpha0ToConvertFromRGBToRGBA = true;
     }
     
@@ -858,11 +893,27 @@ Node::load(const CreateNodeArgs& args)
     _imp->nodeCreated = true;
     
     bool isLoadingPyPlug = getApp()->isCreatingPythonGroup();
+
+    _imp->effect->onEffectCreated(canOpenFileDialog);
+    
+#ifdef NATRON_ENABLE_IO_META_NODES
+    if (args.ioContainer) {
+        ReadNode* isReader = dynamic_cast<ReadNode*>(args.ioContainer->getEffectInstance().get());
+        if (isReader) {
+            isReader->setEmbeddedReader(thisShared);
+        } else {
+            WriteNode* isWriter = dynamic_cast<WriteNode*>(args.ioContainer->getEffectInstance().get());
+            assert(isWriter);
+            isWriter->setEmbeddedWriter(thisShared);
+        }
+    }
+#endif
     
     if (!getApp()->isCreatingNodeTree()) {
         refreshAllInputRelatedData(!args.serialization);
     }
-
+    
+    
     _imp->runOnNodeCreatedCB(!args.serialization && !isLoadingPyPlug);
     
     
@@ -880,12 +931,14 @@ Node::load(const CreateNodeArgs& args)
         }
     }
     
+#ifndef NATRON_ENABLE_IO_META_NODES
     if (hasUsedFileDialog) {
         KnobPtr fileNameKnob = getKnobByName(kOfxImageEffectFileParamName);
         if (fileNameKnob) {
             fileNameKnob->evaluateValueChange(0, time, ViewIdx(0),eValueChangedReasonUserEdited);
         }
     }
+#endif
     
 } // load
 
@@ -1402,7 +1455,7 @@ Node::computeHashInternal()
         //        }
         
         ///Also append the effect's label to distinguish 2 instances with the same parameters
-        Hash64_appendQString( &_imp->hash, QString( getScriptName().c_str() ) );
+        Hash64_appendQString( &_imp->hash, QString::fromUtf8( getScriptName().c_str() ) );
         
         ///Also append the project's creation time in the hash because 2 projects openend concurrently
         ///could reproduce the same (especially simple graphs like Viewer-Reader)
@@ -1571,7 +1624,47 @@ Node::loadKnobs(const NodeSerialization & serialization,bool updateKnobGui)
     
     setKnobsAge( serialization.getKnobsAge() );
     
+    
+    
     _imp->effect->onKnobsLoaded();
+}
+
+void
+Node::restoreSublabel()
+{
+    //Check if natron custom tags are present and insert them if needed
+    /// If the node has a sublabel, restore it in the label
+    boost::shared_ptr<KnobString> labelKnob = _imp->nodeLabelKnob.lock();
+    if (labelKnob) {
+        QString labeltext = QString::fromUtf8(labelKnob->getValue().c_str());
+        int foundNatronCustomTag = labeltext.indexOf(QString::fromUtf8(NATRON_CUSTOM_HTML_TAG_START));
+        if (foundNatronCustomTag == -1) {
+            KnobPtr sublabelKnob = getKnobByName(kNatronOfxParamStringSublabelName);
+            if (sublabelKnob) {
+                KnobString* sublabelKnobIsString = dynamic_cast<KnobString*>(sublabelKnob.get());
+                if (sublabelKnobIsString) {
+                    QString sublabel = QString::fromUtf8(sublabelKnobIsString->getValue(0).c_str());
+                    if (!sublabel.isEmpty()) {
+                        
+                        int fontEndTagFound = labeltext.lastIndexOf(QString::fromUtf8(kFontEndTag));
+                        if (fontEndTagFound == -1) {
+                            labeltext.append(QString::fromUtf8(NATRON_CUSTOM_HTML_TAG_START));
+                            labeltext.append(QLatin1Char('(') + sublabel + QLatin1Char(')'));
+                            labeltext.append(QString::fromUtf8(NATRON_CUSTOM_HTML_TAG_END));
+                        } else {
+                            QString toAppend(QString::fromUtf8(NATRON_CUSTOM_HTML_TAG_START));
+                            toAppend += QLatin1Char('(');
+                            toAppend += sublabel;
+                            toAppend += QLatin1Char(')');
+                            toAppend += QString::fromUtf8(NATRON_CUSTOM_HTML_TAG_END);
+                            labeltext.insert(fontEndTagFound, toAppend);
+                        }
+                        labelKnob->setValue(labeltext.toStdString());
+                    }
+                }
+            }
+        }
+    }
 }
 
 void
@@ -1669,9 +1762,9 @@ Node::Implementation::restoreKnobLinksRecursive(const GroupKnobSerialization* gr
         } else if (isRegular) {
             KnobPtr knob =  _publicInterface->getKnobByName( isRegular->getName() );
             if (!knob) {
-                QString err = _publicInterface->getScriptName_mt_safe().c_str();
+                QString err = QString::fromUtf8(_publicInterface->getScriptName_mt_safe().c_str());
                 err.append(QObject::tr(": Could not find a parameter named ") );
-                err.append(QString((*it)->getName().c_str()));
+                err.append(QString::fromUtf8((*it)->getName().c_str()));
                 appPTR->writeToErrorLog_mt_safe(err);
                 continue;
             }
@@ -1696,9 +1789,9 @@ Node::restoreKnobsLinks(const NodeSerialization & serialization,
     for (NodeSerialization::KnobValues::const_iterator it = knobsValues.begin(); it != knobsValues.end(); ++it) {
         KnobPtr knob = getKnobByName( (*it)->getName() );
         if (!knob) {
-            QString err = getScriptName_mt_safe().c_str();
+            QString err = QString::fromUtf8(getScriptName_mt_safe().c_str());
             err.append(QObject::tr(": Could not find a parameter named ") );
-            err.append(QString((*it)->getName().c_str()));
+            err.append(QString::fromUtf8((*it)->getName().c_str()));
             appPTR->writeToErrorLog_mt_safe(err);
             continue;
         }
@@ -2578,7 +2671,7 @@ Node::setLabel(const std::string& label)
     if (collection) {
         collection->notifyNodeNameChanged(shared_from_this());
     }
-    Q_EMIT labelChanged(QString(label.c_str()));
+    Q_EMIT labelChanged(QString::fromUtf8(label.c_str()));
 
 }
 
@@ -2650,7 +2743,7 @@ Node::setNameInternal(const std::string& name, bool throwErrors, bool declareToP
             try {
                 collection->checkNodeName(this, name,false, false, &newName);
             } catch (const std::exception& e) {
-                appPTR->writeToErrorLog_mt_safe(e.what());
+                appPTR->writeToErrorLog_mt_safe(QString::fromUtf8(e.what()));
                 std::cerr << e.what() << std::endl;
                 return;
             }
@@ -2677,7 +2770,7 @@ Node::setNameInternal(const std::string& name, bool throwErrors, bool declareToP
                 throw std::runtime_error(ss.str());
             } else {
                 std::string err = ss.str();
-                appPTR->writeToErrorLog_mt_safe(err.c_str());
+                appPTR->writeToErrorLog_mt_safe(QString::fromUtf8(err.c_str()));
                 std::cerr << err << std::endl;
                 return;
             }
@@ -2743,7 +2836,7 @@ Node::setNameInternal(const std::string& name, bool throwErrors, bool declareToP
         }
     }
     
-    QString qnewName(newName.c_str());
+    QString qnewName = QString::fromUtf8(newName.c_str());
     Q_EMIT scriptNameChanged(qnewName);
     Q_EMIT labelChanged(qnewName);
 }
@@ -2882,7 +2975,7 @@ Node::makeInfoForInput(int inputNumber) const
     {
         double first = 1., last = 1.;
         input->getFrameRange_public(getHashValue(), &first, &last);
-        ss << "<<b>Frame range:</b> " << first << " - " << last << "<br />";
+        ss << "<b>Frame range:</b> " << first << " - " << last << "<br />";
    }
     {
         RenderScale scale(1.);
@@ -3266,13 +3359,14 @@ Node::createMaskSelectors(const std::vector<std::pair<bool,bool> >& hasMaskChann
     } // for (int i = 0; i < inputsCount; ++i) {
 }
 
+#ifndef NATRON_ENABLE_IO_META_NODES
 void
 Node::createWriterFrameStepKnob(const boost::shared_ptr<KnobPage>& mainPage)
 {
     ///Find a  "lastFrame" parameter and add it after it
-    boost::shared_ptr<KnobInt> frameIncrKnob = AppManager::createKnob<KnobInt>(_imp->effect.get(), kWriteParamFrameStepLabel, 1 , false);
-    frameIncrKnob->setName(kWriteParamFrameStep);
-    frameIncrKnob->setHintToolTip(kWriteParamFrameStepHint);
+    boost::shared_ptr<KnobInt> frameIncrKnob = AppManager::createKnob<KnobInt>(_imp->effect.get(), kNatronWriteParamFrameStepLabel, 1 , false);
+    frameIncrKnob->setName(kNatronWriteParamFrameStep);
+    frameIncrKnob->setHintToolTip(kNatronWriteParamFrameStepHint);
     frameIncrKnob->setAnimationEnabled(false);
     frameIncrKnob->setMinimum(1);
     frameIncrKnob->setDefaultValue(1);
@@ -3292,6 +3386,7 @@ Node::createWriterFrameStepKnob(const boost::shared_ptr<KnobPage>& mainPage)
     }
     _imp->frameIncrKnob = frameIncrKnob;
 }
+#endif
 
 boost::shared_ptr<KnobPage>
 Node::getOrCreateMainPage()
@@ -3414,7 +3509,8 @@ Node::createChannelSelectors(const std::vector<std::pair<bool,bool> >& hasMaskCh
     bool skipSeparator = !mainPageChildren.empty() && dynamic_cast<KnobSeparator*>(mainPageChildren.back().get());
     
     if (!skipSeparator) {
-        boost::shared_ptr<KnobSeparator> sep = AppManager::createKnob<KnobSeparator>(_imp->effect.get(), "Advanced", 1, false);
+        boost::shared_ptr<KnobSeparator> sep = AppManager::createKnob<KnobSeparator>(_imp->effect.get(), "", 1, false);
+        sep->setName("advancedSep");
         mainPage->addKnob(sep);
     }
     
@@ -3432,6 +3528,12 @@ Node::createChannelSelectors(const std::vector<std::pair<bool,bool> >& hasMaskCh
 void
 Node::initializeDefaultKnobs(int renderScaleSupportPref,bool loadingSerialization)
 {
+    //Readers and Writers don't have default knobs since these knobs are on the ReadNode/WriteNode itself
+#ifdef NATRON_ENABLE_IO_META_NODES
+    if (_imp->ioContainer.lock()) {
+        return;
+    }
+#endif
     
     //Add the "Node" page
     boost::shared_ptr<KnobPage> settingsPage = AppManager::createKnob<KnobPage>(_imp->effect.get(), NATRON_PARAMETER_PAGE_NAME_EXTRA,1,false);
@@ -3531,7 +3633,16 @@ Node::initializeDefaultKnobs(int renderScaleSupportPref,bool loadingSerializatio
     
     if (_imp->effect->isWriter()) {
         //Create a frame step parameter for writers, and control it in OutputSchedulerThread.cpp
+#ifndef NATRON_ENABLE_IO_META_NODES
         createWriterFrameStepKnob(mainPage);
+#endif
+        
+        boost::shared_ptr<KnobButton> renderButton = AppManager::createKnob<KnobButton>(_imp->effect.get(), "Render", 1, false);
+        renderButton->setHintToolTip("Starts rendering the specified frame range.");
+        renderButton->setAsRenderButton();
+        renderButton->setName("startRender");
+        _imp->renderButton = renderButton;
+        mainPage->addKnob(renderButton);
         
         createPythonPage();
     }
@@ -3569,10 +3680,10 @@ Node::initializeKnobs(int renderScaleSupportPref,bool loadingSerialization)
     if (effectIsGroup) {
         _imp->effect->initializeKnobsPublic();
     }
-    
+    _imp->effect->endChanges();
+
     _imp->knobsInitialized = true;
 
-    _imp->effect->endChanges();
     Q_EMIT knobsInitialized();
 } // initializeKnobs
 
@@ -3605,11 +3716,25 @@ Node::Implementation::createChannelSelector(int inputNb,const std::string & inpu
     } else {
         baseLayers.push_back("None");
     }
-    baseLayers.push_back(ImageComponents::getRGBAComponents().getComponentsGlobalName());
-    baseLayers.push_back(ImageComponents::getDisparityLeftComponents().getLayerName());
-    baseLayers.push_back(ImageComponents::getDisparityRightComponents().getLayerName());
-    baseLayers.push_back(ImageComponents::getForwardMotionComponents().getLayerName());
-    baseLayers.push_back(ImageComponents::getBackwardMotionComponents().getLayerName());
+    
+    std::map<std::string, int > defaultLayers;
+    {
+        int i = 0;
+        while (ImageComponents::defaultComponents[i][0] != 0) {
+            std::string layer = ImageComponents::defaultComponents[i][0];
+            if (layer != kNatronAlphaComponentsName && layer != kNatronRGBAComponentsName && layer != kNatronRGBComponentsName) {
+                //Do not add the color plane, because it is handled in a separate case to make sure it is always the first choice
+                defaultLayers[layer] = -1;
+            }
+            ++i;
+        }
+    }
+    baseLayers.push_back(kNatronRGBAPlaneUserName);
+    for (std::map<std::string, int>::iterator itl = defaultLayers.begin(); itl != defaultLayers.end(); ++itl) {
+        std::string choiceName = ImageComponents::mapNatronInternalPlaneNameToUserFriendlyPlaneName(itl->first);
+        baseLayers.push_back(choiceName);
+    }
+
     layer->populateChoices(baseLayers);
     int defVal;
     if (isOutput && effect->isPassThroughForNonRenderedPlanes() == EffectInstance::ePassThroughRenderAllRequestedPlanes) {
@@ -3652,6 +3777,7 @@ Node::getFrameStepKnobValue() const
 bool
 Node::handleFormatKnob(KnobI* knob)
 {
+    
     boost::shared_ptr<KnobChoice> choice = _imp->pluginFormatKnobs.formatChoice.lock();
     if (!choice) {
         return false;
@@ -3671,8 +3797,13 @@ Node::handleFormatKnob(KnobI* knob)
     assert(size && par);
     
     _imp->effect->beginChanges();
+    size->blockValueChanges();
     size->setValues(f.width(), f.height(), ViewSpec::all(), Natron::eValueChangedReasonNatronInternalEdited);
+    size->unblockValueChanges();
+    par->blockValueChanges();
     par->setValue(f.getPixelAspectRatio());
+    par->unblockValueChanges();
+    
     _imp->effect->endChanges();
     return true;
 }
@@ -3715,9 +3846,9 @@ Node::makeHTMLDocumentation() const
     {
         QMutexLocker k(&_imp->pluginPythonModuleMutex);
         //isPyPlug = !_imp->pyPlugID.empty();
-        pluginID = _imp->pyPlugID.empty() ? _imp->plugin->getPluginID() : _imp->pyPlugID.c_str();
-        pluginLabel = _imp->pyPlugLabel.empty() ? _imp->plugin->getPluginLabel() : _imp->pyPlugLabel.c_str();
-        pluginDescription = _imp->pyPlugDesc.empty() ? _imp->effect->getPluginDescription().c_str() : _imp->pyPlugDesc.c_str();
+        pluginID = _imp->pyPlugID.empty() ? _imp->plugin->getPluginID() : QString::fromUtf8(_imp->pyPlugID.c_str());
+        pluginLabel = _imp->pyPlugLabel.empty() ? _imp->plugin->getPluginLabel() : QString::fromUtf8(_imp->pyPlugLabel.c_str());
+        pluginDescription = _imp->pyPlugDesc.empty() ? QString::fromUtf8(_imp->effect->getPluginDescription().c_str()) : QString::fromUtf8(_imp->pyPlugDesc.c_str());
     }
     
     ts << "<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.01 Transitional//EN\" \"http://www.w3.org/TR/html4/loose.dtd\">";
@@ -3765,9 +3896,9 @@ Node::makeHTMLDocumentation() const
         if ((*it)->getDefaultIsSecret()) {
             continue;
         }
-        QString knobScriptName((*it)->getName().c_str());
-        QString knobLabel((*it)->getLabel().c_str());
-        QString knobHint((*it)->getHintToolTip().c_str());
+        QString knobScriptName = QString::fromUtf8((*it)->getName().c_str());
+        QString knobLabel = QString::fromUtf8((*it)->getLabel().c_str());
+        QString knobHint = QString::fromUtf8((*it)->getHintToolTip().c_str());
         
         ts << "<td class=\"knobsTableValue\">" << knobLabel << "</td>";
         ts << "<td class=\"knobsTableValue\">" << knobScriptName << "</td>";
@@ -3795,36 +3926,36 @@ Node::makeHTMLDocumentation() const
                         int index = isChoice->getDefaultValue(i);
                         std::vector<std::string> entries = isChoice->getEntries_mt_safe();
                         if (index >= 0 && index < (int)entries.size()) {
-                            valueStr = entries[index].c_str();
+                            valueStr = QString::fromUtf8(entries[index].c_str());
                         }
                     } else if (isInt) {
                         valueStr = QString::number(isInt->getDefaultValue(i));
                     } else if (isDbl) {
                         valueStr = QString::number(isDbl->getDefaultValue(i));
                     } else if (isBool) {
-                        valueStr = isBool->getDefaultValue(i) ? "On" : "Off";
+                        valueStr = isBool->getDefaultValue(i) ? QString::fromUtf8("On") : QString::fromUtf8("Off");
                     } else if (isString) {
-                        valueStr = isString->getDefaultValue(i).c_str();
+                        valueStr = QString::fromUtf8(isString->getDefaultValue(i).c_str());
                     }
                 }
                 
-                dimsDefaultValueStr.push_back(std::make_pair((*it)->getDimensionName(i).c_str(), valueStr));
+                dimsDefaultValueStr.push_back(std::make_pair(QString::fromUtf8((*it)->getDimensionName(i).c_str()), valueStr));
             }
             
             for (std::size_t i = 0; i < dimsDefaultValueStr.size(); ++i) {
                 if (!dimsDefaultValueStr[i].second.isEmpty()) {
                     if (dimsDefaultValueStr.size() > 1) {
                         defValuesStr.append(dimsDefaultValueStr[i].first);
-                        defValuesStr.append(": ");
+                        defValuesStr.append(QString::fromUtf8(": "));
                     }
                     defValuesStr.append(dimsDefaultValueStr[i].second);
                     if (i < dimsDefaultValueStr.size() -1) {
-                        defValuesStr.append(" ");
+                        defValuesStr.append(QString::fromUtf8(" "));
                     }
                 }
             }
             if (defValuesStr.isEmpty()) {
-                defValuesStr = "N/A";
+                defValuesStr = QString::fromUtf8("N/A");
             }
         }
         
@@ -6040,6 +6171,13 @@ Node::setPersistentMessage(MessageTypeEnum type,
 {
     if ( !appPTR->isBackground() ) {
         //if the message is just an information, display a popup instead.
+#ifdef NATRON_ENABLE_IO_META_NODES
+        NodePtr ioContainer = getIOContainer();
+        if (ioContainer) {
+            ioContainer->setPersistentMessage(type, content);
+            return;
+        }
+#endif
         if (type == eMessageTypeInfo) {
             message(type,content);
             
@@ -6048,7 +6186,7 @@ Node::setPersistentMessage(MessageTypeEnum type,
         
         {
             QMutexLocker k(&_imp->persistentMessageMutex);
-            QString mess(content.c_str());
+            QString mess = QString::fromUtf8(content.c_str());
             if (mess == _imp->persistentMessage) {
                 return;
             }
@@ -6075,11 +6213,11 @@ Node::getPersistentMessage(QString* message,int* type,bool prefixLabelAndType) c
     *type = _imp->persistentMessageType;
     
     if (prefixLabelAndType && !_imp->persistentMessage.isEmpty()) {
-        message->append( getLabel_mt_safe().c_str() );
+        message->append( QString::fromUtf8(getLabel_mt_safe().c_str()));
         if (*type == eMessageTypeError) {
-            message->append(" error: ");
+            message->append(QString::fromUtf8(" error: "));
         } else if (*type == eMessageTypeWarning) {
-            message->append(" warning: ");
+            message->append(QString::fromUtf8(" warning: "));
         }
     }
     message->append(_imp->persistentMessage);
@@ -6429,6 +6567,14 @@ Node::onMasterNodeDeactivated()
     _imp->effect->unslaveAllKnobs();
 }
 
+#ifdef NATRON_ENABLE_IO_META_NODES
+NodePtr
+Node::getIOContainer() const
+{
+    return _imp->ioContainer.lock();
+}
+#endif
+
 NodePtr
 Node::getMasterNode() const
 {
@@ -6516,7 +6662,16 @@ Node::findClosestSupportedComponents(int inputNb,
     return findClosestInList(comp, comps, _imp->effect->isMultiPlanar());
 }
 
-
+int
+Node::isMaskChannelKnob(const KnobI* knob) const
+{
+    for ( std::map<int, MaskSelector >::const_iterator it = _imp->maskSelectors.begin(); it!=_imp->maskSelectors.end(); ++it) {
+        if (it->second.channel.lock().get() == knob) {
+            return it->first;
+        }
+    }
+    return -1;
+}
 
 int
 Node::getMaskChannel(int inputNb,ImageComponents* comps,NodePtr* maskInput) const
@@ -6804,7 +6959,16 @@ Node::computeFrameRangeForReader(const KnobI* fileKnob)
      hence may not exactly end-up with the same file sequence as what the user
      selected from the file dialog.
      */
-   
+    ReadNode* isReadNode = dynamic_cast<ReadNode*>(_imp->effect.get());
+    std::string pluginID;
+    if (isReadNode) {
+        NodePtr embeddedPlugin = isReadNode->getEmbeddedReader();
+        if (embeddedPlugin) {
+            pluginID = embeddedPlugin->getPluginID();
+        }
+    } else {
+        pluginID = getPluginID();
+    }
    
     int leftBound = INT_MIN;
     int rightBound = INT_MAX;
@@ -6820,7 +6984,7 @@ Node::computeFrameRangeForReader(const KnobI* fileKnob)
                 throw std::logic_error("Node::computeFrameRangeForReader");
             }
             
-            if (getPluginID() == PLUGINID_OFX_READFFMPEG) {
+            if (pluginID == PLUGINID_OFX_READFFMPEG) {
                 ///If the plug-in is a video, only ffmpeg may know how many frames there are
                 originalFrameRange->setValues(INT_MIN, INT_MAX, ViewSpec::all(), eValueChangedReasonNatronInternalEdited);
             } else {
@@ -7163,15 +7327,15 @@ Node::refreshCreatedViews(KnobI* knob)
     if (!availableViewsKnob) {
         return;
     }
-    QString value(availableViewsKnob->getValue().c_str());
-    QStringList views = value.split(',');
+    QString value = QString::fromUtf8(availableViewsKnob->getValue().c_str());
+    QStringList views = value.split(QLatin1Char(','));
     
     _imp->createdViews.clear();
     
     const std::vector<std::string>& projectViews = getApp()->getProject()->getProjectViewNames();
     QStringList qProjectViews;
     for (std::size_t i = 0; i < projectViews.size(); ++i) {
-        qProjectViews.push_back(projectViews[i].c_str());
+        qProjectViews.push_back(QString::fromUtf8(projectViews[i].c_str()));
     }
     
     QStringList missingViews;
@@ -7267,25 +7431,32 @@ Node::onRefreshIdentityStateRequestReceived()
     Format frmt;
     project->getProjectDefaultFormat(&frmt);
     
+    //The one view node might report it is identity, but we do not want it to display it
+    
+    
     bool isIdentity = false;
     int inputNb = -1;
-    for (int i = 0; i < nViews; ++i) {
-        int identityInputNb = -1;
-        bool isIdentityView = _imp->effect->isIdentity_public(true, hash, time, scale, frmt, ViewIdx(i), &inputTime, &identityInputNb);
-        if (i > 0 && (isIdentityView != isIdentity || identityInputNb != inputNb)) {
-            isIdentity = false;
-            inputNb = -1;
-            break;
+
+    OneViewNode* isOneView = dynamic_cast<OneViewNode*>(_imp->effect.get());
+    if (!isOneView) {
+        for (int i = 0; i < nViews; ++i) {
+            int identityInputNb = -1;
+            ViewIdx identityView;
+            bool isViewIdentity = _imp->effect->isIdentity_public(true, hash, time, scale, frmt, ViewIdx(i), &inputTime, &identityView, &identityInputNb);
+            if (i > 0 && (isViewIdentity != isIdentity || identityInputNb != inputNb || identityView.value() != i)) {
+                isIdentity = false;
+                inputNb = -1;
+                break;
+            }
+            isIdentity |= isViewIdentity;
+            inputNb = identityInputNb;
+            if (!isIdentity) {
+                break;
+            }
+            
         }
-        isIdentity |= isIdentityView;
-        inputNb = identityInputNb;
-        if (!isIdentity) {
-            break;
-        }
-        
     }
     
-   
     //Check for consistency across views or then say the effect is not identity since the UI cannot display 2 different states
     //depending on the view
     
@@ -7348,15 +7519,15 @@ Node::onEffectKnobValueChanged(KnobI* what,
         }
         
     } else if ( what == _imp->nodeLabelKnob.lock().get() ) {
-        Q_EMIT nodeExtraLabelChanged( _imp->nodeLabelKnob.lock()->getValue().c_str() );
+        Q_EMIT nodeExtraLabelChanged(QString::fromUtf8( _imp->nodeLabelKnob.lock()->getValue().c_str() ));
     } else if (what->getName() == kNatronOfxParamStringSublabelName) {
         //special hack for the merge node and others so we can retrieve the sublabel and display it in the node's label
         KnobString* strKnob = dynamic_cast<KnobString*>(what);
         if (strKnob) {
-            QString operation = strKnob->getValue().c_str();
+            QString operation = QString::fromUtf8(strKnob->getValue().c_str());
             if (!operation.isEmpty()) {
-                operation.prepend("(");
-                operation.append(")");
+                operation.prepend(QString::fromUtf8("("));
+                operation.append(QString::fromUtf8(")"));
             }
             replaceCustomDataInlabel(operation);
         }
@@ -7376,8 +7547,7 @@ Node::onEffectKnobValueChanged(KnobI* what,
                 _imp->effect->getFrameRange_public(getHashValue(), &leftBound, &rightBound, true);
                 
                 if (leftBound != INT_MIN && rightBound != INT_MAX) {
-                    bool isFileDialogPreviewReader = getScriptName().find(NATRON_FILE_DIALOG_PREVIEW_READER_NAME) != std::string::npos;
-                    if (!isFileDialogPreviewReader) {
+                    if (getGroup()) {
                         getApp()->getProject()->unionFrameRangeWith(leftBound, rightBound);
                     }
                 }
@@ -7770,15 +7940,15 @@ Node::replaceCustomDataInlabel(const QString & data)
     if (!labelKnob) {
         return;
     }
-    QString label = labelKnob->getValue().c_str();
+    QString label = QString::fromUtf8(labelKnob->getValue().c_str());
     ///Since the label is html encoded, find the text's start
-    int foundFontTag = label.indexOf("<font");
+    int foundFontTag = label.indexOf(QString::fromUtf8("<font"));
     bool htmlPresent =  (foundFontTag != -1);
     ///we're sure this end tag is the one of the font tag
-    QString endFont("\">");
+    QString endFont(QString::fromUtf8("\">"));
     int endFontTag = label.indexOf(endFont,foundFontTag);
-    QString customTagStart(NATRON_CUSTOM_HTML_TAG_START);
-    QString customTagEnd(NATRON_CUSTOM_HTML_TAG_END);
+    QString customTagStart(QString::fromUtf8(NATRON_CUSTOM_HTML_TAG_START));
+    QString customTagEnd(QString::fromUtf8(NATRON_CUSTOM_HTML_TAG_END));
     int foundNatronCustomDataTag = label.indexOf(customTagStart,endFontTag == -1 ? 0 : endFontTag);
     if (foundNatronCustomDataTag != -1) {
         ///remove the current custom data
@@ -8286,6 +8456,7 @@ static void addIdentityNodesRecursively(const Node* caller,
              */
             RenderScale scale(1.);
             double inputTimeId;
+            ViewIdx identityView;
             int inputNbId;
             U64 renderHash;
             
@@ -8299,7 +8470,7 @@ static void addIdentityNodesRecursively(const Node* caller,
             } else {
                 RectI pixelRod;
                 rod.toPixelEnclosing(scale, node->getEffectInstance()->getAspectRatio(-1), &pixelRod);
-                isIdentity = node->getEffectInstance()->isIdentity_public(true, renderHash, time, scale, pixelRod, view, &inputTimeId, &inputNbId);
+                isIdentity = node->getEffectInstance()->isIdentity_public(true, renderHash, time, scale, pixelRod, view, &inputTimeId, &identityView, &inputNbId);
             }
         }
         
@@ -8934,8 +9105,8 @@ Node::setNodeVariableToPython(const std::string& oldName,const std::string& newN
     if (!_imp->isPartOfProject) {
         return;
     }
-    QString appID(getApp()->getAppIDString().c_str());
-    QString str = QString(appID + ".%1 = " + appID + ".%2\ndel " + appID + ".%2\n").arg(newName.c_str()).arg(oldName.c_str());
+    QString appID = QString::fromUtf8(getApp()->getAppIDString().c_str());
+    QString str = QString(appID + QString::fromUtf8(".%1 = ") + appID + QString::fromUtf8(".%2\ndel ") + appID + QString::fromUtf8(".%2\n")).arg(QString::fromUtf8(newName.c_str())).arg(QString::fromUtf8(oldName.c_str()));
     std::string script = str.toStdString();
     std::string err;
     if (!appPTR->isBackground()) {
@@ -8956,8 +9127,8 @@ Node::deleteNodeVariableToPython(const std::string& nodeName)
     if (getParentMultiInstance()) {
         return;
     }
-    QString appID(getApp()->getAppIDString().c_str());
-    QString str = QString("del " + appID + ".%1").arg(nodeName.c_str());
+    QString appID = QString::fromUtf8(getApp()->getAppIDString().c_str());
+    QString str = QString(QString::fromUtf8("del ") + appID + QString::fromUtf8(".%1")).arg(QString::fromUtf8(nodeName.c_str()));
     std::string script = str.toStdString();
     std::string err;
     if (!appPTR->isBackground()) {
@@ -8997,7 +9168,7 @@ Node::declarePythonFields()
     assert(nodeObj);
     Q_UNUSED(nodeObj);
     if (!alreadyDefined) {
-        qDebug() << QString("declarePythonFields(): attribute ") + nodeFullName.c_str() + " is not defined";
+        qDebug() << QString::fromUtf8("declarePythonFields(): attribute ") + QString::fromUtf8(nodeFullName.c_str()) + QString::fromUtf8(" is not defined");
         throw std::logic_error(std::string("declarePythonFields(): attribute ") + nodeFullName + " is not defined");
     }
     
@@ -9048,7 +9219,7 @@ Node::removeParameterFromPython(const std::string& parameterName)
     assert(nodeObj);
     Q_UNUSED(nodeObj);
     if (!alreadyDefined) {
-        qDebug() << QString("declarePythonFields(): attribute ") + nodeFullName.c_str() + " is not defined";
+        qDebug() << QString::fromUtf8("declarePythonFields(): attribute ") + QString::fromUtf8(nodeFullName.c_str()) + QString::fromUtf8(" is not defined");
         throw std::logic_error(std::string("declarePythonFields(): attribute ") + nodeFullName + " is not defined");
     }
     assert(PyObject_HasAttrString(nodeObj, parameterName.c_str()));

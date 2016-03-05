@@ -481,6 +481,7 @@ EffectInstance::retrieveGetImageDataUponFailure(const double time,
                                                 U64* nodeHash_p,
                                                 bool* isIdentity_p,
                                                 double* identityTime,
+                                                ViewIdx* inputView,
                                                 EffectInstPtr* identityInput_p,
                                                 bool* duringPaintStroke_p,
                                                 RectD* rod_p,
@@ -541,7 +542,7 @@ EffectInstance::retrieveGetImageDataUponFailure(const double time,
     rod.toPixelEnclosing(scale, getAspectRatio(-1), &pixelRod);
     try {
         int identityInputNb;
-        *isIdentity_p = isIdentity_public(true, nodeHash, time, scale, pixelRod, view, identityTime, &identityInputNb);
+        *isIdentity_p = isIdentity_public(true, nodeHash, time, scale, pixelRod, view, identityTime, inputView, &identityInputNb);
         if (*isIdentity_p) {
             if (identityInputNb >= 0) {
                 *identityInput_p = getInput(identityInputNb);
@@ -682,6 +683,7 @@ EffectInstance::getImage(int inputNb,
     bool isIdentity = false;
     EffectInstPtr identityInput;
     double inputIdentityTime = 0.;
+    ViewIdx inputIdentityView(view);
     U64 nodeHash;
     bool duringPaintStroke;
     /// Never by-pass the cache here because we already computed the image in renderRoI and by-passing the cache again can lead to
@@ -708,7 +710,7 @@ EffectInstance::getImage(int inputNb,
          This is either a huge bug or an unknown thread that called clipGetImage from the OpenFX plug-in.
          Make-up some reasonable arguments
          */
-        if (!retrieveGetImageDataUponFailure(time, view, scale, optionalBoundsParam, &nodeHash, &isIdentity, &inputIdentityTime, &identityInput, &duringPaintStroke, &thisRod, &inputsRoI, &optionalBounds)) {
+        if (!retrieveGetImageDataUponFailure(time, view, scale, optionalBoundsParam, &nodeHash, &isIdentity, &inputIdentityTime, &inputIdentityView, &identityInput, &duringPaintStroke, &thisRod, &inputsRoI, &optionalBounds)) {
             return ImagePtr();
         }
     } else {
@@ -2387,17 +2389,17 @@ EffectInstance::Implementation::renderHandler(const EffectDataTLSPtr& tls,
         bool unPremultRequired = unPremultIfNeeded && it->second.tmpImage->getComponentsCount() == 4 && it->second.renderMappedImage->getComponentsCount() == 3;
 
         if ( frameArgs->doNansHandling && it->second.tmpImage->checkForNaNs(actionArgs.roi) ) {
-            QString warning( _publicInterface->getNode()->getScriptName_mt_safe().c_str() );
-            warning.append(": ");
+            QString warning = QString::fromUtf8( _publicInterface->getNode()->getScriptName_mt_safe().c_str() );
+            warning.append(QString::fromUtf8(": "));
             warning.append( tr("rendered rectangle (") );
             warning.append( QString::number(actionArgs.roi.x1) );
-            warning.append(',');
+            warning.append(QChar::fromLatin1(','));
             warning.append( QString::number(actionArgs.roi.y1) );
-            warning.append(")-(");
+            warning.append(QString::fromUtf8(")-("));
             warning.append( QString::number(actionArgs.roi.x2) );
-            warning.append(',');
+            warning.append(QChar::fromLatin1(','));
             warning.append( QString::number(actionArgs.roi.y2) );
-            warning.append(") ");
+            warning.append(QString::fromUtf8(") "));
             warning.append( tr("contains NaN values. They have been converted to 1.") );
             _publicInterface->setPersistentMessage( eMessageTypeWarning, warning.toStdString() );
         }
@@ -2639,39 +2641,13 @@ EffectInstance::openImageFileKnob()
 }
 
 void
-EffectInstance::evaluate(KnobI* knob,
-                         bool isSignificant,
-                         bool refreshMetadatas,
-                         ValueChangedReasonEnum /*reason*/)
+EffectInstance::onSignificantEvaluateAboutToBeCalled(KnobI* knob)
 {
-    KnobPage* isPage = dynamic_cast<KnobPage*>(knob);
-    KnobGroup* isGrp = dynamic_cast<KnobGroup*>(knob);
-    if (isGrp || isPage) {
-        return;
-    }
-    
-    ////If the node is currently modifying its input, to ask for a render
-    ////because at then end of the inputChanged handler, it will ask for a refresh
-    ////and a rebuild of the inputs tree.
-    NodePtr node = getNode();
-
-    if ( node->duringInputChangedAction() ) {
-        return;
-    }
-
-    if ( getApp()->getProject()->isLoadingProject() ) {
-        return;
-    }
-    
-    
-   
     KnobButton* button = dynamic_cast<KnobButton*>(knob);
-
-    /*if this is a writer (openfx or built-in writer)*/
-    if (isWriter()) {
-        /*if this is a button and it is a render button,we're safe to assume the plug-ins wants to start rendering.*/
-        if (button) {
-            if ( button->isRenderButton() ) {
+    if (button) {
+        if (isWriter()) {
+            /*if this is a button and it is a render button,we're safe to assume the plug-ins wants to start rendering.*/
+            if (button->isRenderButton()) {
                 
                 AppInstance::RenderWork w;
                 w.writer = dynamic_cast<OutputEffectInstance*>(this);
@@ -2682,22 +2658,42 @@ EffectInstance::evaluate(KnobI* knob,
                 std::list<AppInstance::RenderWork> works;
                 works.push_back(w);
                 getApp()->startWritersRendering(false, works);
-
+                
                 return;
             }
         }
-    }
+        
 
-    ///increments the knobs age following a change
-    if (!button && isSignificant) {
-        //We changed, abort any ongoing current render to refresh them with a newer version
-        abortAnyEvaluation();
-        node->incrementKnobsAge();
+        return;
+    }
+    //We changed, abort any ongoing current render to refresh them with a newer version
+    abortAnyEvaluation();
+    
+    NodePtr node = getNode();
+    
+    if (!knob || knob->getEvaluateOnChange()) {
+        getApp()->triggerAutoSave();
+    }
+    
+    
+    bool isMT = QThread::currentThread() == qApp->thread();
+    if (isMT) {
         node->refreshIdentityState();
         
-        //Clear any persitent message, the user might have unlocked the situation 
-        //node->clearPersistentMessage(false);
+        //Increments the knobs age following a change
+        node->incrementKnobsAge();
     }
+    
+}
+
+void
+EffectInstance::evaluate(bool isSignificant,
+                         bool refreshMetadatas)
+{
+
+  
+    NodePtr node = getNode();
+
 
     if (refreshMetadatas && node->isNodeCreated()) {
         refreshMetaDatas_public(true);
@@ -2725,8 +2721,9 @@ EffectInstance::evaluate(KnobI* knob,
             (*it)->redrawViewer();
         }
     }
-
-    node->refreshPreviewsRecursivelyDownstream(time);
+    if (isSignificant) {
+        node->refreshPreviewsRecursivelyDownstream(time);
+    }
 } // evaluate
 
 bool
@@ -3235,16 +3232,16 @@ EffectInstance::isIdentity_public(bool useIdentityCache, // only set to true whe
                                   const RectI & renderWindow,
                                   ViewIdx view,
                                   double* inputTime,
+                                  ViewIdx* inputView,
                                   int* inputNb)
 {
     assert( !( (supportsRenderScaleMaybe() == eSupportsNo) && !(scale.x == 1. && scale.y == 1.) ) );
-
+    
     if (useIdentityCache) {
         double timeF = 0.;
-        bool foundInCache = _imp->actionsCache.getIdentityResult(hash, time, view, inputNb, &timeF);
+        bool foundInCache = _imp->actionsCache.getIdentityResult(hash, time, view, inputNb, inputView, &timeF);
         if (foundInCache) {
             *inputTime = timeF;
-
             return *inputNb >= 0 || *inputNb == -2;
         }
     }
@@ -3260,15 +3257,18 @@ EffectInstance::isIdentity_public(bool useIdentityCache, // only set to true whe
         ret = true;
         *inputNb = getNode()->getPreferredInput();
         *inputTime = time;
+        *inputView = view;
     } else if ( appPTR->isBackground() && (dynamic_cast<DiskCacheNode*>(this) != NULL) ) {
         ret = true;
         *inputNb = 0;
         *inputTime = time;
+        *inputView = view;
     } else {
         /// Don't call isIdentity if plugin is sequential only.
         if (getSequentialPreference() != eSequentialPreferenceOnlySequential) {
             try {
-                ret = isIdentity(time, scale, renderWindow, view, inputTime, inputNb);
+                *inputView = view;
+                ret = isIdentity(time, scale, renderWindow, view, inputTime, inputView, inputNb);
             } catch (...) {
                 throw;
             }
@@ -3277,10 +3277,11 @@ EffectInstance::isIdentity_public(bool useIdentityCache, // only set to true whe
     if (!ret) {
         *inputNb = -1;
         *inputTime = time;
+        *inputView = view;
     }
 
     if (useIdentityCache) {
-        _imp->actionsCache.setIdentityResult(hash, time, view, *inputNb, *inputTime);
+        _imp->actionsCache.setIdentityResult(hash, time, view, *inputNb, *inputView, *inputTime);
     }
 
     return ret;
@@ -3311,15 +3312,16 @@ EffectInstance::getRegionOfDefinition_publicInternal(U64 hash,
     if (useRenderWindow) {
         double inputTimeIdentity;
         int inputNbIdentity;
-        bool isIdentity = isIdentity_public(true, hash, time, scale, renderWindow, view, &inputTimeIdentity, &inputNbIdentity);
+        ViewIdx inputView;
+        bool isIdentity = isIdentity_public(true, hash, time, scale, renderWindow, view, &inputTimeIdentity, &inputView, &inputNbIdentity);
         if (isIdentity) {
             if (inputNbIdentity >= 0) {
                 EffectInstPtr input = getInput(inputNbIdentity);
                 if (input) {
-                    return input->getRegionOfDefinition_public(input->getRenderHash(), inputTimeIdentity, scale, view, rod, isProjectFormat);
+                    return input->getRegionOfDefinition_public(input->getRenderHash(), inputTimeIdentity, scale, inputView, rod, isProjectFormat);
                 }
             } else if (inputNbIdentity == -2) {
-                return getRegionOfDefinition_public(hash, inputTimeIdentity, scale, view, rod, isProjectFormat);
+                return getRegionOfDefinition_public(hash, inputTimeIdentity, scale, inputView, rod, isProjectFormat);
             } else {
                 return eStatusFailed;
             }
@@ -4327,7 +4329,8 @@ EffectInstance::getNearestNonIdentity(double time)
     
     double inputTimeIdentity;
     int inputNbIdentity;
-    if ( !isIdentity_public(true, hash, time, scale, frmt, ViewIdx(0), &inputTimeIdentity, &inputNbIdentity) ) {
+    ViewIdx inputView;
+    if ( !isIdentity_public(true, hash, time, scale, frmt, ViewIdx(0), &inputTimeIdentity, &inputView, &inputNbIdentity) ) {
         return shared_from_this();
     } else {
         if (inputNbIdentity < 0) {
@@ -4582,12 +4585,24 @@ EffectInstance::getDefaultMetadata(NodeMetadata &metadata)
         }
     }
     
+    double inputPar = 1.;
+    bool inputParSet = false;
+    
     ImagePremultiplicationEnum premult;
     bool premultSet = false;
     for (int i = 0; i < nInputs; ++i) {
         const EffectInstPtr& input = inputs[i];
         if (input) {
             frameRate = std::max(frameRate, input->getFrameRate());
+        }
+        
+        
+        
+        if (input) {
+            if (!inputParSet) {
+                inputPar = input->getAspectRatio(-1);
+                inputParSet = true;
+            }
         }
         
         ImageComponents rawComp = getUnmappedComponentsForInput(this, i, inputs, firstNonOptionalConnectedInputComps);
@@ -4623,7 +4638,8 @@ EffectInstance::getDefaultMetadata(NodeMetadata &metadata)
         }
         
     } // for each input
-
+    
+   
     if (!hasSetCompsAndDepth) {
         mostComponents = ImageComponents::getRGBAComponents();
         deepestBitDepth = eImageBitDepthFloat;
@@ -4638,6 +4654,15 @@ EffectInstance::getDefaultMetadata(NodeMetadata &metadata)
     // now find the best depth that the plugin supports
     deepestBitDepth = node->getClosestSupportedBitDepth(deepestBitDepth);
     
+    bool multipleClipsPAR = supportsMultipleClipsPAR();
+    double projectPAR;
+    {
+        Format f;
+        getRenderFormat(&f);
+        projectPAR =  f.getPixelAspectRatio();
+    }
+    
+    
     // now add the input gubbins to the per inputs metadatas
     for (int i = -1; i < (int)inputs.size(); ++i) {
         
@@ -4647,7 +4672,16 @@ EffectInstance::getDefaultMetadata(NodeMetadata &metadata)
         } else {
             effect = this;
         }
-    
+        
+        double par;
+        if (!multipleClipsPAR && inputParSet) {
+            par = inputPar;
+        } else if (multipleClipsPAR && effect) {
+            par = effect == this ? projectPAR : effect->getAspectRatio(-1);
+        } else {
+            par = projectPAR;
+        }
+        metadata.setPixelAspectRatio(i, par);
         
         if (i == -1 || isInputOptional(i)) {
             // "Optional input clips can always have their component types remapped"
@@ -4985,12 +5019,12 @@ EffectInstance::Implementation::checkMetadata(NodeMetadata &md)
         //If the bit-depth conversion will be lossy, warn the user
         if (Image::isBitDepthConversionLossy(inputOutputDepth, md.getBitDepth(i))) {
             
-            bitDepthWarning.append(inputs[i]->getNode()->getLabel_mt_safe().c_str());
-            bitDepthWarning.append(" (" + QString(Image::getDepthString(inputOutputDepth).c_str()) + ")");
-            bitDepthWarning.append(" ----> ");
-            bitDepthWarning.append(node->getLabel_mt_safe().c_str());
-            bitDepthWarning.append(" (" + QString(Image::getDepthString(md.getBitDepth(i)).c_str()) + ")");
-            bitDepthWarning.append('\n');
+            bitDepthWarning.append(QString::fromUtf8(inputs[i]->getNode()->getLabel_mt_safe().c_str()));
+            bitDepthWarning.append(QString::fromUtf8(" (") + QString::fromUtf8(Image::getDepthString(inputOutputDepth).c_str()) + QChar::fromLatin1(')'));
+            bitDepthWarning.append(QString::fromUtf8(" ----> "));
+            bitDepthWarning.append(QString::fromUtf8(node->getLabel_mt_safe().c_str()));
+            bitDepthWarning.append(QString::fromUtf8(" (") + QString::fromUtf8(Image::getDepthString(md.getBitDepth(i)).c_str()) + QChar::fromLatin1(')'));
+            bitDepthWarning.append(QChar::fromLatin1('\n'));
             setBitDepthWarning = true;
         }
         

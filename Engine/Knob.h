@@ -66,9 +66,9 @@ public:
         return k.lock();
     }
     
-    void s_animationLevelChanged(ViewSpec view, int dim, int level)
+    void s_animationLevelChanged(ViewSpec view, int dim)
     {
-        Q_EMIT animationLevelChanged(view, dim,level);
+        Q_EMIT animationLevelChanged(view, dim);
     }
 
     void s_valueChanged(ViewSpec view,
@@ -232,7 +232,7 @@ Q_SIGNALS:
     
     ///emitted whenever setAnimationLevel is called. It is meant to notify
     ///openfx params whether it is auto-keying or not.
-    void animationLevelChanged(ViewSpec view, int dimension,int level);
+    void animationLevelChanged(ViewSpec view, int dimension);
     
     ///Emitted when the value is changed with a reason different than eValueChangedReasonUserEdited
     ///This can happen as the result of a setValue() call from the plug-in or by
@@ -303,12 +303,16 @@ Q_SIGNALS:
 
 struct KnobChange
 {
-    KnobI* knob;
-    ValueChangedReasonEnum reason;
+    KnobPtr knob;
+    ValueChangedReasonEnum reason,originalReason;
     bool originatedFromMainThread;
+    bool refreshGui;
+    double time;
+    ViewSpec view;
+    std::set<int> dimensionChanged;
 };
 
-typedef std::list<KnobChange> ChangesList;
+typedef std::list<KnobChange> KnobChanges;
 
 
 class KnobI
@@ -351,8 +355,8 @@ public:
      * for Curve.
      **/
     virtual void populate() = 0;
-    virtual void setKnobGuiPointer(KnobGuiI* ptr) = 0;
-    virtual KnobGuiI* getKnobGuiPointer() const = 0;
+    virtual void setKnobGuiPointer(const boost::shared_ptr<KnobGuiI>& ptr) = 0;
+    virtual boost::shared_ptr<KnobGuiI> getKnobGuiPointer() const = 0;
     virtual bool getAllDimensionVisible() const = 0;
     
     static bool areTypesCompatibleForSlave(KnobI* lhs, KnobI* rhs);
@@ -395,6 +399,8 @@ public:
     virtual bool hasModificationsForSerialization() const = 0;
     virtual void computeHasModifications() = 0;
 
+    virtual void checkAnimationLevel(ViewSpec view, int dimension) = 0;
+    
     /**
      * @brief If the parameter is multidimensional, this is the label thats the that will be displayed
      * for a dimension.
@@ -743,6 +749,7 @@ public:
      * @brief Returns a pointer to the holder owning the knob.
      **/
     virtual KnobHolder* getHolder() const = 0;
+    virtual void setHolder(KnobHolder* holder) = 0;
 
     /**
      * @brief Get the knob dimension. MT-safe as it is static and never changes.
@@ -1067,11 +1074,6 @@ public:
      **/
     virtual std::vector<std::pair<int,KnobPtr > > getMasters_mt_safe() const = 0;
 
-    /**
-     * @brief Called by the GUI whenever the animation level changes (due to a time change
-     * or a value changed).
-     **/
-    virtual void setAnimationLevel(ViewSpec view, int dimension,AnimationLevelEnum level) = 0;
 
     /**
      * @brief Get the current animation level.
@@ -1144,8 +1146,8 @@ public:
     };
     typedef boost::shared_ptr<KnobTLSData> KnobDataTLSPtr;
     
-    virtual void setKnobGuiPointer(KnobGuiI* ptr) OVERRIDE FINAL;
-    virtual KnobGuiI* getKnobGuiPointer() const OVERRIDE FINAL WARN_UNUSED_RETURN;
+    virtual void setKnobGuiPointer(const boost::shared_ptr<KnobGuiI>& ptr) OVERRIDE FINAL;
+    virtual boost::shared_ptr<KnobGuiI> getKnobGuiPointer() const OVERRIDE FINAL WARN_UNUSED_RETURN;
     
     virtual bool getAllDimensionVisible() const OVERRIDE FINAL WARN_UNUSED_RETURN;
     /**
@@ -1267,6 +1269,9 @@ public:
     
 protected:
     
+    template <typename T>
+    T pyObjectToType(PyObject* o) const;
+    
     virtual void refreshListenersAfterValueChange(ViewSpec view, ValueChangedReasonEnum reason, int dimension) OVERRIDE FINAL;
 
 public:
@@ -1284,6 +1289,7 @@ public:
     virtual void hideLabel()  OVERRIDE FINAL;
     virtual bool isLabelVisible() const OVERRIDE FINAL WARN_UNUSED_RETURN;
     virtual KnobHolder* getHolder() const OVERRIDE FINAL WARN_UNUSED_RETURN;
+    virtual void setHolder(KnobHolder* holder) OVERRIDE FINAL;
     virtual int getDimension() const OVERRIDE FINAL WARN_UNUSED_RETURN;
     virtual void setAddNewLine(bool newLine) OVERRIDE FINAL;
     virtual void setAddSeparator(bool addSep) OVERRIDE FINAL;
@@ -1341,6 +1347,9 @@ public:
     virtual bool hasModifications(int dimension) const OVERRIDE FINAL WARN_UNUSED_RETURN;
     virtual bool hasModificationsForSerialization() const OVERRIDE FINAL WARN_UNUSED_RETURN;
     
+    virtual void checkAnimationLevel(ViewSpec view, int dimension) OVERRIDE FINAL;
+
+    
     virtual KnobPtr createDuplicateOnNode(EffectInstance* effect,
                                                            const boost::shared_ptr<KnobPage>& page,
                                                            const boost::shared_ptr<KnobGroup>& group,
@@ -1377,7 +1386,6 @@ public:
     virtual std::pair<int,KnobPtr > getMaster(int dimension) const OVERRIDE FINAL WARN_UNUSED_RETURN;
     virtual bool isSlave(int dimension) const OVERRIDE FINAL WARN_UNUSED_RETURN;
     virtual std::vector<std::pair<int,KnobPtr > > getMasters_mt_safe() const OVERRIDE FINAL WARN_UNUSED_RETURN;
-    virtual void setAnimationLevel(ViewSpec view, int dimension,AnimationLevelEnum level) OVERRIDE FINAL;
     virtual AnimationLevelEnum getAnimationLevel(int dimension) const OVERRIDE FINAL WARN_UNUSED_RETURN;
     virtual bool isTypeCompatible(const KnobPtr & other) const OVERRIDE WARN_UNUSED_RETURN = 0;
 
@@ -1484,9 +1492,6 @@ protected:
     
     void setGuiCurveHasChanged(ViewSpec view, int dimension,bool changed);
     bool hasGuiCurveChanged(ViewSpec view, int dimension) const;
-
-    void checkAnimationLevel(ViewSpec view, int dimension);
-    
     void clearExpressionsResultsIfNeeded(std::map<int,ValueChangedReasonEnum>& modifiedDimensions);
 
     
@@ -1834,11 +1839,7 @@ private:
         QMutexLocker k(&_valueMutex);
         _exprRes[dimension].clear();
     }
-    
-public:
-    
-    T pyObjectToType(PyObject* o) const;
-    
+
 private:
     
     T evaluateExpression(double time, ViewIdx view, int dimension) const;
@@ -2000,7 +2001,9 @@ public:
     
     void discardPanelPointer();
     
-    void refreshKnobs(bool keepCurPageIndex = true);
+    void recreateUserKnobs(bool keepCurPageIndex);
+    
+    void recreateKnobs(bool keepCurPageIndex);
     
     /**
      * @brief Dynamically removes a knob (from the GUI also)
@@ -2142,7 +2145,13 @@ public:
     
     bool isEvaluationBlocked() const;
 
-    void appendValueChange(KnobI* knob,double time, ViewSpec view, ValueChangedReasonEnum reason);
+    void appendValueChange(const KnobPtr& knob,
+                           int dimension,
+                           bool refreshGui,
+                           double time,
+                           ViewSpec view,
+                           ValueChangedReasonEnum originalReason,
+                           ValueChangedReasonEnum reason);
     
     bool isSetValueCurrentlyPossible() const;
     
@@ -2199,7 +2208,6 @@ public:
     void beginChanges();
     void endChanges(bool discardEverything = false);
     
-    ChangesList getKnobChanges() const;
 
     /**
      * @brief The virtual portion of notifyProjectBeginValuesChanged(). This is called by the project
@@ -2225,13 +2233,6 @@ public:
     virtual void onKnobValueChanged_public(KnobI* k,ValueChangedReasonEnum reason,double time, ViewSpec view,
                                            bool originatedFromMainThread);
 
-
-    /**
-     * @brief Must be implemented to evaluate a value change
-     * made to a knob(e.g: force a new render).
-     * @param knob[in] The knob whose value changed.
-     **/
-    void evaluate_public(KnobI* knob,bool isSignificant,bool refreshMetadatas,ValueChangedReasonEnum reason);
 
     /**
      * @brief To be called after each function that modifies actionsRecursionLevel that is not
@@ -2283,9 +2284,20 @@ public:
     }
     
     int getPageIndex(const KnobPage* page) const;
+
+    
+    //Calls onSignificantEvaluateAboutToBeCalled + evaluate
+    void incrHashAndEvaluate(bool isSignificant, bool refreshMetadatas);
     
 protected:
 
+    
+    /**
+     * @brief Must be implemented to evaluate a value change
+     * made to a knob(e.g: force a new render).
+     * @param knob[in] The knob whose value changed.
+     **/
+    virtual void evaluate(bool /*isSignificant*/, bool /*refreshMetadatas*/) {}
 
     /**
      * @brief The virtual portion of notifyProjectBeginValuesChanged(). This is called by the project
@@ -2321,13 +2333,9 @@ protected:
     {
     }
 
-    /**
-     * @brief Must be implemented to evaluate a value change
-     * made to a knob(e.g: force a new render).
-     * @param knob[in] The knob whose value changed.
-     **/
-    virtual void evaluate(KnobI* /*knob*/,bool /*isSignificant*/, bool /*refreshMetadatas*/, ValueChangedReasonEnum /*reason*/) {}
 
+    virtual void onSignificantEvaluateAboutToBeCalled(KnobI* /*knob*/) {}
+    
     /**
      * @brief Called when the knobHolder is made slave or unslaved.
      * @param master The master knobHolder.
@@ -2354,7 +2362,7 @@ public Q_SLOTS:
     
     void onDoEndChangesOnMainThreadTriggered();
 
-    void onDoEvaluateOnMainThread(KnobI* knob,bool significant,bool refreshMetadata,int reason);
+    void onDoEvaluateOnMainThread(bool significant,bool refreshMetadata);
     
     void onDoValueChangeOnMainThread(KnobI* knob, int reason, double time, ViewSpec view, bool originatedFromMT);
     
@@ -2362,7 +2370,7 @@ Q_SIGNALS:
     
     void doEndChangesOnMainThread();
     
-    void doEvaluateOnMainThread(KnobI* knob,bool significant,bool refreshMetadata, int reason);
+    void doEvaluateOnMainThread(bool significant,bool refreshMetadata);
     
     void doValueChangeOnMainThread(KnobI* knob, int reason, double time, ViewSpec view, bool originatedFromMT);
     

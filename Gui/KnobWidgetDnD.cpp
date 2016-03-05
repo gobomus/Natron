@@ -54,14 +54,15 @@ NATRON_NAMESPACE_ENTER;
 
 struct KnobWidgetDnDPrivate
 {
-    KnobGui* knob;
+    KnobGuiWPtr knob;
     int dimension;
     QPoint dragPos;
     bool dragging;
     QWidget* widget;
     bool userInputSinceFocusIn;
     
-    KnobWidgetDnDPrivate(KnobGui* knob, int dimension, QWidget* widget)
+    
+    KnobWidgetDnDPrivate(const KnobGuiPtr& knob, int dimension, QWidget* widget)
     : knob(knob)
     , dimension(dimension)
     , dragPos()
@@ -73,9 +74,14 @@ struct KnobWidgetDnDPrivate
     }
     
     bool canDrop(bool warn,bool setCursor) const;
+    
+    KnobGuiPtr getKnob() const
+    {
+        return knob.lock();
+    }
 };
 
-KnobWidgetDnD::KnobWidgetDnD(KnobGui* knob, int dimension, QWidget* widget)
+KnobWidgetDnD::KnobWidgetDnD(const KnobGuiPtr& knob, int dimension, QWidget* widget)
 : _imp(new KnobWidgetDnDPrivate(knob, dimension, widget))
 {
     widget->setMouseTracking(true);
@@ -91,7 +97,7 @@ bool
 KnobWidgetDnD::mousePress(QMouseEvent* e)
 {
     _imp->userInputSinceFocusIn = true;
-    if ( buttonDownIsLeft(e) && (modCASIsControl(e) || modCASIsControlShift(e))) {
+    if ( buttonDownIsLeft(e) && (modCASIsControl(e) || modCASIsControlShift(e)) && _imp->getKnob()->getKnob()->isEnabled(0)) {
         _imp->dragPos = e->pos();
         _imp->dragging = true;
         return true;
@@ -159,21 +165,21 @@ KnobWidgetDnD::startDrag()
 {
     QDrag* drag = new QDrag(_imp->widget);
     QMimeData* mimeData = new QMimeData;
-    mimeData->setData(KNOB_DND_MIME_DATA_KEY, QByteArray());
+    mimeData->setData(QString::fromUtf8(KNOB_DND_MIME_DATA_KEY), QByteArray());
     drag->setMimeData(mimeData);
     
-    
-    KnobPtr internalKnob = _imp->knob->getKnob();
+    KnobGuiPtr guiKnob = _imp->getKnob();
+    KnobPtr internalKnob = guiKnob->getKnob();
     if (!internalKnob) {
         return;
     }
     
     int dragDim = _imp->dimension;
-    if (dragDim == 0 && !_imp->knob->getAllDimensionsVisible()) {
+    if (dragDim == 0 && !guiKnob->getAllDimensionsVisible()) {
         dragDim = -1;
     }
     
-    _imp->knob->getGui()->getApp()->setKnobDnDData(drag, internalKnob, dragDim);
+    guiKnob->getGui()->getApp()->setKnobDnDData(drag, internalKnob, dragDim);
     
     QFont font = _imp->widget->font();
     font.setBold(true);
@@ -195,26 +201,26 @@ KnobWidgetDnD::startDrag()
     QString knobLine;
     EffectInstance* isEffect = dynamic_cast<EffectInstance*>(internalKnob->getHolder());
     if (isEffect) {
-        knobLine.append(isEffect->getNode()->getFullyQualifiedName().c_str());
-        knobLine += '.';
+        knobLine.append(QString::fromUtf8(isEffect->getNode()->getFullyQualifiedName().c_str()));
+        knobLine += QLatin1Char('.');
     }
-    knobLine += (internalKnob->getName().c_str());
+    knobLine += QString::fromUtf8(internalKnob->getName().c_str());
     
     
     if (internalKnob->getDimension() > 1) {
         if (dragDim != -1) {
-            knobLine += '.';
-            knobLine += internalKnob->getDimensionName(dragDim).c_str();
+            knobLine += QLatin1Char('.');
+            knobLine += QString::fromUtf8(internalKnob->getDimensionName(dragDim).c_str());
         } else {
             if (!isExprMult) {
-                knobLine += ' ';
+                knobLine += QLatin1Char(' ');
                 knobLine += QObject::tr("(all dimensions)");
             }
         }
     }
     
     if (isExprMult) {
-        knobLine += " * curve(frame, dimension)";
+        knobLine += QString::fromUtf8(" * curve(frame, dimension)");
     }
    
     QString textThirdLine;
@@ -252,7 +258,7 @@ KnobWidgetDnD::dragEnter(QDragEnterEvent* e)
         return false;
     }
     QStringList formats = e->mimeData()->formats();
-    if (formats.contains(KNOB_DND_MIME_DATA_KEY) && _imp->canDrop(false, true) ) {
+    if (formats.contains(QString::fromUtf8(KNOB_DND_MIME_DATA_KEY)) && _imp->canDrop(false, true) ) {
         e->acceptProposedAction();
         return true;
     }
@@ -266,7 +272,7 @@ KnobWidgetDnD::dragMove(QDragMoveEvent* e)
         return false;
     }
     QStringList formats = e->mimeData()->formats();
-    if (formats.contains(KNOB_DND_MIME_DATA_KEY) && _imp->canDrop(false, true) ) {
+    if (formats.contains(QString::fromUtf8(KNOB_DND_MIME_DATA_KEY)) && _imp->canDrop(false, true) ) {
         e->acceptProposedAction();
         return true;
     }
@@ -277,16 +283,21 @@ bool
 KnobWidgetDnDPrivate::canDrop(bool warn, bool setCursor) const
 {
     KnobPtr source;
-    KnobPtr thisKnob = knob->getKnob();
+    KnobGuiPtr guiKnob = knob.lock();
+    KnobPtr thisKnob = guiKnob->getKnob();
+    if (!thisKnob->isEnabled(0)) {
+        return false;
+    }
     int srcDim;
     QDrag* drag;
-    knob->getGui()->getApp()->getKnobDnDData(&drag, &source, &srcDim);
+    guiKnob->getGui()->getApp()->getKnobDnDData(&drag, &source, &srcDim);
+    
     
     bool ret = true;
     if (source) {
         
         int targetDim = dimension;
-        if (targetDim == 0 && !knob->getAllDimensionsVisible()) {
+        if (targetDim == 0 && !guiKnob->getAllDimensionsVisible()) {
             targetDim = -1;
         }
         
@@ -330,18 +341,19 @@ KnobWidgetDnD::drop(QDropEvent* e)
     e->accept();
     QStringList formats = e->mimeData()->formats();
     
-    if (formats.contains(KNOB_DND_MIME_DATA_KEY) && _imp->canDrop(true, false)) {
+    if (formats.contains(QString::fromUtf8(KNOB_DND_MIME_DATA_KEY)) && _imp->canDrop(true, false)) {
         
+        KnobGuiPtr guiKnob = _imp->getKnob();
         KnobPtr source;
-        KnobPtr thisKnob = _imp->knob->getKnob();
+        KnobPtr thisKnob = guiKnob->getKnob();
         int srcDim;
         QDrag* drag;
-        _imp->knob->getGui()->getApp()->getKnobDnDData(&drag, &source, &srcDim);
-        _imp->knob->getGui()->getApp()->setKnobDnDData(0, KnobPtr(), -1);
+        guiKnob->getGui()->getApp()->getKnobDnDData(&drag, &source, &srcDim);
+        guiKnob->getGui()->getApp()->setKnobDnDData(0, KnobPtr(), -1);
         if (source && source != thisKnob) {
             
             int targetDim = _imp->dimension;
-            if (targetDim == 0 && !_imp->knob->getAllDimensionsVisible()) {
+            if (targetDim == 0 && !guiKnob->getAllDimensionsVisible()) {
                 targetDim = -1;
             }
             
@@ -383,9 +395,9 @@ KnobWidgetDnD::drop(QDropEvent* e)
                 
 
                 expr = ss.str();
-                _imp->knob->pushUndoCommand(new SetExpressionCommand(_imp->knob->getKnob(), false, targetDim,expr));
+                guiKnob->pushUndoCommand(new SetExpressionCommand(guiKnob->getKnob(), false, targetDim,expr));
             } else if ((mods & (Qt::ControlModifier | Qt::AltModifier | Qt::ShiftModifier)) == (Qt::ControlModifier)) {
-                _imp->knob->pushUndoCommand(new PasteUndoCommand(_imp->knob, eKnobClipBoardTypeCopyLink, srcDim, targetDim, source));
+                guiKnob->pushUndoCommand(new PasteUndoCommand(guiKnob, eKnobClipBoardTypeCopyLink, srcDim, targetDim, source));
             }
             return true;
         }

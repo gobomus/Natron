@@ -41,6 +41,15 @@ CLANG_DIAG_ON(deprecated)
 #include "Engine/ViewIdx.h"
 #include "Engine/EngineFwd.h"
 
+#define kFontSizeTag "<font size=\""
+#define kFontColorTag "color=\""
+#define kFontFaceTag "face=\""
+#define kFontEndTag "</font>"
+#define kBoldStartTag "<b>"
+#define kBoldEndTag "</b>"
+#define kItalicStartTag "<i>"
+#define kItalicEndTag "</i>"
+
 NATRON_NAMESPACE_ENTER;
 
 /******************************KnobInt**************************************/
@@ -483,9 +492,6 @@ private:
     std::vector<std::string> _entries;
     std::vector<std::string> _entriesHelp;
     
-#ifdef DEBUG
-#pragma message WARN("When enabling multi-view knobs, make this multi-view too")
-#endif
     std::string _lastValidEntry; // protected by _entriesMutex
     bool _addNewChoice;
     static const std::string _typeNameStr;

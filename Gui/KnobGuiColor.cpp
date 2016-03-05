@@ -154,36 +154,37 @@ KnobGuiColor::createWidget(QHBoxLayout* layout)
     const std::vector<double> & minimums = _knob->getMinimums();
     const std::vector<double> & maximums = _knob->getMaximums();
 #endif
+    KnobGuiPtr thisShared = shared_from_this();
     
-    _rBox = new KnobSpinBox(boxContainers, SpinBox::eSpinBoxTypeDouble, this, 0);
+    _rBox = new KnobSpinBox(boxContainers, SpinBox::eSpinBoxTypeDouble, thisShared, 0);
     {
-        NumericKnobValidator* validator = new NumericKnobValidator(_rBox,this);
+        NumericKnobValidator* validator = new NumericKnobValidator(_rBox,thisShared);
         _rBox->setValidator(validator);
     }
     
     QObject::connect( _rBox, SIGNAL(valueChanged(double)), this, SLOT(onSpinBoxValueChanged()) );
     
     if (_dimension >= 3) {
-        _gBox = new KnobSpinBox(boxContainers, SpinBox::eSpinBoxTypeDouble, this, 1);
+        _gBox = new KnobSpinBox(boxContainers, SpinBox::eSpinBoxTypeDouble, thisShared, 1);
         QObject::connect( _gBox, SIGNAL(valueChanged(double)), this, SLOT(onSpinBoxValueChanged()) );
         {
-            NumericKnobValidator* validator = new NumericKnobValidator(_gBox,this);
+            NumericKnobValidator* validator = new NumericKnobValidator(_gBox,thisShared);
             _gBox->setValidator(validator);
         }
         
-        _bBox = new KnobSpinBox(boxContainers, SpinBox::eSpinBoxTypeDouble, this, 2);
+        _bBox = new KnobSpinBox(boxContainers, SpinBox::eSpinBoxTypeDouble, thisShared, 2);
         QObject::connect( _bBox, SIGNAL(valueChanged(double)), this, SLOT(onSpinBoxValueChanged()) );
         
         {
-            NumericKnobValidator* validator = new NumericKnobValidator(_bBox,this);
+            NumericKnobValidator* validator = new NumericKnobValidator(_bBox,thisShared);
             _bBox->setValidator(validator);
         }
     }
     if (_dimension >= 4) {
-        _aBox = new KnobSpinBox(boxContainers, SpinBox::eSpinBoxTypeDouble, this, 3);
+        _aBox = new KnobSpinBox(boxContainers, SpinBox::eSpinBoxTypeDouble, thisShared, 3);
         QObject::connect( _aBox, SIGNAL(valueChanged(double)), this, SLOT(onSpinBoxValueChanged()) );
         {
-            NumericKnobValidator* validator = new NumericKnobValidator(_aBox,this);
+            NumericKnobValidator* validator = new NumericKnobValidator(_aBox,thisShared);
             _aBox->setValidator(validator);
         }
     }
@@ -207,10 +208,10 @@ KnobGuiColor::createWidget(QHBoxLayout* layout)
     boost::shared_ptr<KnobColor> knob = _knob.lock();
     
     std::string dimLabel = knob->getDimensionName(0);
-    if (!dimLabel.empty()) {
+    /*if (!dimLabel.empty()) {
         dimLabel.append(":");
-    }
-    _rLabel = new Label(QString(dimLabel.c_str()).toLower(), boxContainers);
+    }*/
+    _rLabel = new Label(QString::fromUtf8(dimLabel.c_str()).toLower(), boxContainers);
     //_rLabel->setFont(font);
     if ( hasToolTip() ) {
         _rLabel->setToolTip( toolTip() );
@@ -236,11 +237,11 @@ KnobGuiColor::createWidget(QHBoxLayout* layout)
         }
         
         dimLabel = knob->getDimensionName(1);
-        if (!dimLabel.empty()) {
+        /*if (!dimLabel.empty()) {
             dimLabel.append(":");
-        }
+        }*/
         
-        _gLabel = new Label(QString(dimLabel.c_str()).toLower(), boxContainers);
+        _gLabel = new Label(QString::fromUtf8(dimLabel.c_str()).toLower(), boxContainers);
         //_gLabel->setFont(font);
         if ( hasToolTip() ) {
             _gLabel->setToolTip( toolTip() );
@@ -265,11 +266,11 @@ KnobGuiColor::createWidget(QHBoxLayout* layout)
         }
         
         dimLabel = knob->getDimensionName(2);
-        if (!dimLabel.empty()) {
+        /*if (!dimLabel.empty()) {
             dimLabel.append(":");
-        }
+        }*/
         
-        _bLabel = new Label(QString(dimLabel.c_str()).toLower(), boxContainers);
+        _bLabel = new Label(QString::fromUtf8(dimLabel.c_str()).toLower(), boxContainers);
         //_bLabel->setFont(font);
         if ( hasToolTip() ) {
             _bLabel->setToolTip( toolTip() );
@@ -296,11 +297,11 @@ KnobGuiColor::createWidget(QHBoxLayout* layout)
         }
         
         dimLabel = knob->getDimensionName(3);
-        if (!dimLabel.empty()) {
+        /*if (!dimLabel.empty()) {
             dimLabel.append(":");
-        }
+        }*/
         
-        _aLabel = new Label(QString(dimLabel.c_str()).toLower(), boxContainers);
+        _aLabel = new Label(QString::fromUtf8(dimLabel.c_str()).toLower(), boxContainers);
         //_aLabel->setFont(font);
         if ( hasToolTip() ) {
             _aLabel->setToolTip( toolTip() );
@@ -339,7 +340,7 @@ KnobGuiColor::createWidget(QHBoxLayout* layout)
                                                                 "To deselect the picker left click anywhere."
                                                                 "Note that by default %1 converts to linear the color picked\n"
                                                                 "because all the processing pipeline is linear, but you can turn this off in the\n"
-                                                                "preferences panel.").arg(NATRON_APPLICATION_NAME), Qt::WhiteSpaceNormal) );
+                                                                "preferences panel.").arg(QString::fromUtf8(NATRON_APPLICATION_NAME)), Qt::WhiteSpaceNormal) );
     }
 
     QSize medSize(TO_DPIX(NATRON_MEDIUM_BUTTON_SIZE), TO_DPIY(NATRON_MEDIUM_BUTTON_SIZE));
@@ -357,7 +358,7 @@ KnobGuiColor::createWidget(QHBoxLayout* layout)
 
 
     appPTR->getIcon(NATRON_PIXMAP_COLORWHEEL, NATRON_MEDIUM_BUTTON_ICON_SIZE, &buttonPix);
-    _colorDialogButton = new Button(QIcon(buttonPix), "", colorContainer);
+    _colorDialogButton = new Button(QIcon(buttonPix), QString(), colorContainer);
     _colorDialogButton->setFixedSize(medSize);
     _colorDialogButton->setIconSize(medIconSize);
     _colorDialogButton->setToolTip(GuiUtils::convertFromPlainText(tr("Open the color dialog."), Qt::WhiteSpaceNormal));
@@ -610,7 +611,7 @@ KnobGuiColor::setEnabled()
     bool enabled0 = r && knob->getExpression(0).empty();
 
     //_rBox->setEnabled(r);
-    _rBox->setReadOnly(!r);
+    _rBox->setReadOnly_NoFocusRect(!r);
     _rLabel->setEnabled(r);
 
     _slider->setReadOnly(!enabled0);
@@ -621,16 +622,16 @@ KnobGuiColor::setEnabled()
         bool g = knob->isEnabled(1) && !knob->isSlave(1);
         bool b = knob->isEnabled(2) && !knob->isSlave(2);
         //_gBox->setEnabled(g);
-        _gBox->setReadOnly(!g);
+        _gBox->setReadOnly_NoFocusRect(!g);
         _gLabel->setEnabled(g);
         //_bBox->setEnabled(b);
-        _bBox->setReadOnly(!b);
+        _bBox->setReadOnly_NoFocusRect(!b);
         _bLabel->setEnabled(b);
     }
     if (_dimension >= 4) {
         bool a = knob->isEnabled(3) && !knob->isSlave(3);
         //_aBox->setEnabled(a);
-        _aBox->setReadOnly(!a);
+        _aBox->setReadOnly_NoFocusRect(!a);
         _aLabel->setEnabled(a);
     }
     _colorLabel->setEnabledMode(enabled0);
@@ -832,19 +833,19 @@ KnobGuiColor::reflectExpressionState(int dimension,
     switch (dimension) {
         case 0:
             _rBox->setAnimation(3);
-            //_rBox->setReadOnly(hasExpr || !isEnabled);
+            //_rBox->setReadOnly_NoFocusRect(hasExpr || !isEnabled);
             break;
         case 1:
             _gBox->setAnimation(3);
-            //_gBox->setReadOnly(hasExpr || !isEnabled);
+            //_gBox->setReadOnly_NoFocusRect(hasExpr || !isEnabled);
             break;
         case 2:
             _bBox->setAnimation(3);
-            //_bBox->setReadOnly(hasExpr || !isEnabled);
+            //_bBox->setReadOnly_NoFocusRect(hasExpr || !isEnabled);
             break;
         case 3:
             _aBox->setAnimation(3);
-            //_aBox->setReadOnly(hasExpr || !isEnabled);
+            //_aBox->setReadOnly_NoFocusRect(hasExpr || !isEnabled);
             break;
         default:
             break;
@@ -1014,7 +1015,7 @@ KnobGuiColor::onSpinBoxValueChanged()
         assert(spinboxdim != -1);
         newValue = isSpinbox->value();
         oldValue = _knob.lock()->getValue(spinboxdim);
-        pushUndoCommand( new KnobUndoCommand<double>(this,oldValue, newValue, spinboxdim ,false) );
+        pushUndoCommand( new KnobUndoCommand<double>(shared_from_this(),oldValue, newValue, spinboxdim ,false) );
     } else {
         // use the value of the first dimension only, and set all spinboxes
         newValue = _rBox->value();
@@ -1036,7 +1037,7 @@ KnobGuiColor::onSpinBoxValueChanged()
             newValues.push_back(newValue);
         }
         
-        pushUndoCommand( new KnobUndoCommand<double>(this,oldValues, newValues ,false) );
+        pushUndoCommand( new KnobUndoCommand<double>(shared_from_this(),oldValues, newValues ,false) );
 
     }
     if (_slider) {
@@ -1087,7 +1088,7 @@ KnobGuiColor::onColorChangedInternal()
     for (std::list<double>::iterator it = oldValues.begin() ; it != oldValues.end() ; ++it, ++itNew) {
         if (*it != *itNew) {
             updateLabel(r, g, b, a);
-            pushUndoCommand( new KnobUndoCommand<double>(this, oldValues, newValues,false) );
+            pushUndoCommand( new KnobUndoCommand<double>(shared_from_this(), oldValues, newValues,false) );
             break;
         }
     }
@@ -1302,13 +1303,13 @@ KnobGuiColor::setReadOnly(bool readOnly,
                            int dimension)
 {
     if ( (dimension == 0) && _rBox ) {
-        _rBox->setReadOnly(readOnly);
+        _rBox->setReadOnly_NoFocusRect(readOnly);
     } else if ( (dimension == 1) && _gBox ) {
-        _gBox->setReadOnly(readOnly);
+        _gBox->setReadOnly_NoFocusRect(readOnly);
     } else if ( (dimension == 2) && _bBox ) {
-        _bBox->setReadOnly(readOnly);
+        _bBox->setReadOnly_NoFocusRect(readOnly);
     } else if ( (dimension == 3) && _aBox ) {
-        _aBox->setReadOnly(readOnly);
+        _aBox->setReadOnly_NoFocusRect(readOnly);
     } else {
         assert(false); //< dim invalid
     }

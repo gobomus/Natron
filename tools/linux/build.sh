@@ -41,7 +41,6 @@
 # BUILD_NUMBER=X: To be set to indicate the revision number of the build. For example RC1,RC2, RC3 etc...
 # TARSRC=1 : tar sources
 # NATRON_LICENSE=(GPL,COMMERCIAL)
-# UNIT_TESTS=1 : do unit tests
 
 # USAGE example: BUILD_CONFIG=STABLE BUILD_NUMBER=1 NATRON_LICENSE=GPL BUILD_CONFIG=SNAPSHOT build2.sh workshop<branch> 8<noThreads>
 
@@ -142,7 +141,19 @@ fi
 
 
 if [ "$NOBUILD" != "1" ]; then
-    if [ "$ONLY_PLUGINS" != "1" ]; then
+    if [ "$ONLY_NATRON" != "1" ]; then
+        log="$LOGS/plugins.$PKGOS$BIT.$TAG.log"
+        echo -n "Building Plugins (log in $log)..."
+        env MKJOBS=$JOBS MKSRC=${TARSRC} BUILD_CONFIG=${BUILD_CONFIG} CUSTOM_BUILD_USER_NAME=${CUSTOM_BUILD_USER_NAME} BUILD_NUMBER=$BUILD_NUMBER BUILD_CV=$CV BUILD_IO=$IO BUILD_MISC=$MISC BUILD_ARENA=$ARENA sh "$INC_PATH/scripts/build-plugins.sh" $BRANCH >& "$log" || FAIL=1
+        if [ "$FAIL" != "1" ]; then
+            echo OK
+        else
+            echo ERROR
+            echo "BUILD__ERROR" >> $log
+            cat "$log"
+        fi
+    fi
+    if [ "$FAIL" != "1" -a "$ONLY_PLUGINS" != "1" ]; then
         log="$LOGS/natron.$PKGOS$BIT.$TAG.log"
         echo -n "Building Natron (log in $log)..."
         env MKJOBS=$JOBS MKSRC=${TARSRC} BUILD_CONFIG=${BUILD_CONFIG} CUSTOM_BUILD_USER_NAME=${CUSTOM_BUILD_USER_NAME} BUILD_NUMBER=$BUILD_NUMBER DISABLE_BREAKPAD=$DISABLE_BREAKPAD sh "$INC_PATH/scripts/build-natron.sh" $BRANCH >& "$log" || FAIL=1
@@ -153,18 +164,6 @@ if [ "$NOBUILD" != "1" ]; then
             echo "BUILD__ERROR" >> $log
             cat "$log"
         fi
-    fi
-    if [ "$FAIL" != "1" -a "$ONLY_NATRON" != "1" ]; then
-        log="$LOGS/plugins.$PKGOS$BIT.$TAG.log"
-        echo -n "Building Plugins (log in $log)..."
-        env MKJOBS=$JOBS MKSRC=${TARSRC} BUILD_CONFIG=${BUILD_CONFIG} CUSTOM_BUILD_USER_NAME=${CUSTOM_BUILD_USER_NAME} BUILD_NUMBER=$BUILD_NUMBER BUILD_CV=$CV BUILD_IO=$IO BUILD_MISC=$MISC BUILD_ARENA=$ARENA sh "$INC_PATH/scripts/build-plugins.sh" $BRANCH >& "$log" || FAIL=1
-        if [ "$FAIL" != "1" ]; then
-            echo OK
-        else
-            echo ERROR
-            echo "BUILD__ERROR" >> $log
-            cat "$log"
-        fi  
     fi
 fi
 
@@ -181,25 +180,6 @@ if [ "$NOPKG" != "1" -a "$FAIL" != "1" ]; then
     fi 
 fi
 
-if [ "$UNIT_TESTS" = "1" ]; then
-  log="$LOGS/unit_tests.$PKGOS$BIT.$TAG.log"
-  if [ ! -d "$CWD/Natron-Tests" ]; then
-    cd $CWD || exit 1
-    git clone $GIT_UNIT || exit 1
-    cd Natron-Tests || exit 1
-  else
-    cd $CWD/Natron-Tests || exit 1
-    git pull
-  fi
-  sh runOnServer.sh >& "$log"
-fi
-
-if [ "$BRANCH" = "workshop" ]; then
-    ONLINE_REPO_BRANCH=snapshots
-else
-    ONLINE_REPO_BRANCH=releases
-fi
-
 BIT_SUFFIX=bit
 BIT_TAG="$BIT$BIT_SUFFIX"
 
@@ -207,6 +187,11 @@ $KILLSCRIPT $PID &
 KILLBOT=$!
 
 if [ "$SYNC" = "1" -a "$FAIL" != "1" ]; then
+    if [ "$BRANCH" = "workshop" ]; then
+        ONLINE_REPO_BRANCH=snapshots
+    else
+        ONLINE_REPO_BRANCH=releases
+    fi
     echo "Syncing packages ... "
     rsync -avz --progress --delete --verbose -e ssh "$REPO_DIR/packages/" "$REPO_DEST/$PKGOS/$ONLINE_REPO_BRANCH/$BIT_TAG/packages"
 

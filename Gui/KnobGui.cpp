@@ -41,12 +41,28 @@ NATRON_NAMESPACE_ENTER;
 
 
 /////////////// KnobGui
-KnobGui::KnobGui(const KnobPtr& knob,
+KnobGui::KnobGui(const KnobPtr& /*knob*/,
                  DockablePanel* container)
-: _imp( new KnobGuiPrivate(container) )
+: QObject()
+, KnobGuiI()
+, boost::enable_shared_from_this<KnobGui>()
+, _imp( new KnobGuiPrivate(container) )
 {
-    knob->setKnobGuiPointer(this);
-    KnobHelper* helper = dynamic_cast<KnobHelper*>( knob.get() );
+}
+
+KnobGui::~KnobGui()
+{
+
+}
+
+void
+KnobGui::initialize()
+{
+    KnobPtr knob = getKnob();
+    KnobGuiPtr thisShared = shared_from_this();
+    assert(thisShared);
+    knob->setKnobGuiPointer(thisShared);
+    KnobHelper* helper = dynamic_cast<KnobHelper*>(knob.get()) ;
     assert(helper);
     if (helper) {
         KnobSignalSlotHandler* handler = helper->getSignalSlotHandler().get();
@@ -64,7 +80,7 @@ KnobGui::KnobGui(const KnobPtr& knob,
         QObject::connect( handler,SIGNAL(animationRemoved(ViewSpec,int)),this,SLOT(onInternalAnimationRemoved()) );
         QObject::connect( handler,SIGNAL(setValueWithUndoStack(Variant,ViewSpec,int)),this,SLOT(onSetValueUsingUndoStack(Variant,ViewSpec,int)) );
         QObject::connect( handler,SIGNAL(dirty(bool)),this,SLOT(onSetDirty(bool)) );
-        QObject::connect( handler,SIGNAL(animationLevelChanged(ViewSpec,int,int)),this,SLOT(onAnimationLevelChanged(ViewSpec,int,int)) );
+        QObject::connect( handler,SIGNAL(animationLevelChanged(ViewSpec,int)),this,SLOT(onAnimationLevelChanged(ViewSpec,int)) );
         QObject::connect( handler,SIGNAL(appendParamEditChange(int,Variant,ViewSpec,int,double,bool,bool)),this,
                          SLOT(onAppendParamEditChanged(int,Variant,ViewSpec,int,double,bool,bool)) );
         QObject::connect( handler,SIGNAL(frozenChanged(bool)),this,SLOT(onFrozenChanged(bool)) );
@@ -79,10 +95,6 @@ KnobGui::KnobGui(const KnobPtr& knob,
             _imp->guiCurves[i].reset(new Curve(*(knob->getCurve(ViewIdx(0),i))));
         }
     }
-}
-
-KnobGui::~KnobGui()
-{
 
 }
 
@@ -95,29 +107,39 @@ KnobGui::getContainer()
 void
 KnobGui::removeGui()
 {
+    assert(!_imp->guiRemoved);
     for (std::vector< boost::weak_ptr< KnobI > >::iterator it = _imp->knobsOnSameLine.begin(); it != _imp->knobsOnSameLine.end(); ++it) {
-        KnobGui* kg = _imp->container->getKnobGui(it->lock());
-        assert(kg);
-        kg->_imp->removeFromKnobsOnSameLineVector(getKnob());
+        KnobGuiPtr kg = _imp->container->getKnobGui(it->lock());
+        if (kg) {
+            kg->_imp->removeFromKnobsOnSameLineVector(getKnob());
+        }
     }
     
     if (_imp->knobsOnSameLine.empty()) {
         if (_imp->isOnNewLine) {
-            delete _imp->labelContainer;
+            if (_imp->labelContainer) {
+                _imp->labelContainer->deleteLater();
+                _imp->labelContainer = 0;
+            }
         }
-        delete _imp->field;
+        if (_imp->field) {
+            _imp->field->deleteLater();
+            _imp->field = 0;
+        }
     } else {
-        delete _imp->descriptionLabel;
+        if (_imp->descriptionLabel) {
+            _imp->descriptionLabel->deleteLater();
+            _imp->descriptionLabel = 0;
+        }
         removeSpecificGui();
     }
     _imp->guiRemoved = true;
 }
 
 void
-KnobGui::callDeleteLater()
+KnobGui::setGuiRemoved()
 {
     _imp->guiRemoved = true;
-    deleteLater();
 }
 
 Gui*
@@ -139,6 +161,7 @@ KnobGui::pushUndoCommand(QUndoCommand* cmd)
         _imp->container->pushUndoCommand(cmd);
     } else {
         cmd->redo();
+        delete cmd;
     }
 }
 
@@ -151,6 +174,7 @@ KnobGui::createGUI(QGridLayout* containerLayout,
                    bool isOnNewLine,
                    const std::vector< boost::shared_ptr< KnobI > > & knobsOnSameLine)
 {
+    _imp->guiRemoved = false;
     KnobPtr knob = getKnob();
 
     _imp->containerLayout = containerLayout;
@@ -177,7 +201,7 @@ KnobGui::createGUI(QGridLayout* containerLayout,
 
     boost::shared_ptr<OfxParamOverlayInteract> customInteract = knob->getCustomInteract();
     if (customInteract != 0) {
-        _imp->customInteract = new CustomParamInteract(this,knob->getOfxParamHandle(),customInteract);
+        _imp->customInteract = new CustomParamInteract(shared_from_this(),knob->getOfxParamHandle(),customInteract);
         layout->addWidget(_imp->customInteract);
     } else {
         createWidget(layout);
@@ -193,7 +217,7 @@ KnobGui::createGUI(QGridLayout* containerLayout,
         std::string exp = knob->getExpression(i);
         reflectExpressionState(i,!exp.empty());
         if (exp.empty()) {
-            onAnimationLevelChanged(ViewSpec::all(), i, knob->getAnimationLevel(i) );
+            onAnimationLevelChanged(ViewSpec::all(), i);
         }
     }
 }
@@ -216,7 +240,7 @@ KnobGui::onRightClickClicked(const QPoint & pos)
 
     if (widget) {
         QString objName = widget->objectName();
-        objName = objName.remove("dim-");
+        objName = objName.remove(QString::fromUtf8("dim-"));
         showRightClickMenuForDimension( pos, objName.toInt() );
     }
 }
@@ -225,7 +249,7 @@ void
 KnobGui::enableRightClickMenu(QWidget* widget,
                               int dimension)
 {
-    QString name("dim-");
+    QString name = QString::fromUtf8("dim-");
 
     name.append( QString::number(dimension) );
     widget->setContextMenuPolicy(Qt::CustomContextMenu);
@@ -239,6 +263,18 @@ KnobGui::isLabelVisible() const
     KnobPtr knob = getKnob();
     KnobString* isStringKnob = dynamic_cast<KnobString*>(knob.get());
     return isStringKnob || (!knob->getLabel().empty() && knob->isLabelVisible());
+}
+
+bool
+KnobGui::isLabelOnSameColumn() const
+{
+    return false;
+}
+
+bool
+KnobGui::isLabelBold() const
+{
+    return false;
 }
 
 void
@@ -361,7 +397,7 @@ KnobGui::createAnimationMenu(QMenu* menu,int dimension)
     if (knob->getDimension() > 1 && knob->isAnimationEnabled() && !hasDimensionSlaved && isAppKnob) {
         ///Multi-dim actions
         if (!hasAllKeyframesAtTime) {
-            QAction* setKeyAction = new QAction(tr("Set Key")+' '+tr("(all dimensions)"),menu);
+            QAction* setKeyAction = new QAction(tr("Set Key")+ QLatin1Char(' ')+ tr("(all dimensions)"),menu);
             setKeyAction->setData(-1);
             QObject::connect( setKeyAction,SIGNAL(triggered()),this,SLOT(onSetKeyActionTriggered()) );
             menu->addAction(setKeyAction);
@@ -369,7 +405,7 @@ KnobGui::createAnimationMenu(QMenu* menu,int dimension)
                 setKeyAction->setEnabled(false);
             }
         } else {
-            QAction* removeKeyAction = new QAction(tr("Remove Key")+' '+tr("(all dimensions)"),menu);
+            QAction* removeKeyAction = new QAction(tr("Remove Key") + QLatin1Char(' ') + tr("(all dimensions)"),menu);
             removeKeyAction->setData(-1);
             QObject::connect( removeKeyAction,SIGNAL(triggered()),this,SLOT(onRemoveKeyActionTriggered()) );
             menu->addAction(removeKeyAction);
@@ -379,7 +415,7 @@ KnobGui::createAnimationMenu(QMenu* menu,int dimension)
         }
         
         if (hasAnimation) {
-            QAction* removeAnyAnimationAction = new QAction(tr("Remove animation")+' '+tr("(all dimensions)"),menu);
+            QAction* removeAnyAnimationAction = new QAction(tr("Remove animation") + QLatin1Char(' ') + tr("(all dimensions)"),menu);
             removeAnyAnimationAction->setData(-1);
             QObject::connect( removeAnyAnimationAction,SIGNAL(triggered()),this,SLOT(onRemoveAnimationActionTriggered()) );
             if (!isEnabled) {
@@ -506,7 +542,7 @@ KnobGui::createAnimationMenu(QMenu* menu,int dimension)
                 if (cbDim == -1 && fromKnob->getDimension() == knob->getDimension() && !hasDimensionSlaved) {
                     QString title = titlebase;
                     if (knob->getDimension() > 1) {
-                        title += ' ';
+                        title += QLatin1Char(' ');
                         title += tr("(all dimensions)");
                     }
                     QAction* pasteAction = new QAction(title,menu);
@@ -532,7 +568,7 @@ KnobGui::createAnimationMenu(QMenu* menu,int dimension)
     }
     
     if (knob->getDimension() > 1 && !hasDimensionSlaved) {
-        QAction* resetDefaultAction = new QAction(tr("Reset to default")+' '+tr("(all dimensions)"), _imp->copyRightClickMenu);
+        QAction* resetDefaultAction = new QAction(tr("Reset to default")+QLatin1Char(' ')+tr("(all dimensions)"), _imp->copyRightClickMenu);
         resetDefaultAction->setData( QVariant(-1) );
         QObject::connect( resetDefaultAction,SIGNAL(triggered()), this, SLOT(onResetDefaultValuesActionTriggered()) );
         menu->addAction(resetDefaultAction);
@@ -566,7 +602,7 @@ KnobGui::createAnimationMenu(QMenu* menu,int dimension)
     }
     if (knob->getDimension() > 1 && !hasDimensionSlaved && isAppKnob) {
         QAction* setExprsAction = new QAction((hasExpression ? tr("Edit expression") :
-                                               tr("Set expression"))+' '+tr("(all dimensions)"),menu);
+                                               tr("Set expression"))+QLatin1Char(' ')+tr("(all dimensions)"),menu);
         setExprsAction->setData(-1);
         QObject::connect(setExprsAction,SIGNAL(triggered()),this,SLOT(onSetExprActionTriggered()));
         if (!isEnabled) {
@@ -575,7 +611,7 @@ KnobGui::createAnimationMenu(QMenu* menu,int dimension)
         menu->addAction(setExprsAction);
         
         if (hasExpression) {
-            QAction* clearExprAction = new QAction(tr("Clear expression")+' '+tr("(all dimensions)"),menu);
+            QAction* clearExprAction = new QAction(tr("Clear expression")+QLatin1Char(' ')+tr("(all dimensions)"),menu);
             QObject::connect(clearExprAction,SIGNAL(triggered()),this,SLOT(onClearExprActionTriggered()));
             clearExprAction->setData(-1);
             if (!isEnabled) {
@@ -668,8 +704,8 @@ KnobGui::createAnimationMenu(QMenu* menu,int dimension)
             actionText.append(tr("Unlink"));
         }
         if (!knobName.empty()) {
-            actionText.append(" from ");
-            actionText.append(knobName.c_str());
+            actionText.append(QString::fromUtf8(" from "));
+            actionText.append(QString::fromUtf8(knobName.c_str()));
         }
         QAction* unlinkAction = new QAction(actionText,menu);
         unlinkAction->setData( QVariant(dimension) );

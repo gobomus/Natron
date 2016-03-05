@@ -213,9 +213,9 @@ TimeLineGui::setTimeline(const boost::shared_ptr<TimeLine>& timeline)
     }
 
     //connect the internal timeline to the gui
-    QObject::connect( timeline.get(), SIGNAL(frameChanged(SequenceTime,int)), this, SLOT(onFrameChanged(SequenceTime,int)) );
+    QObject::connect( timeline.get(), SIGNAL(frameChanged(SequenceTime,int)), this, SLOT(onFrameChanged(SequenceTime,int)), Qt::UniqueConnection );
     
-    QObject::connect( _imp->gui->getApp(), SIGNAL(keyframeIndicatorsChanged()), this, SLOT(onKeyframesIndicatorsChanged()) );
+    QObject::connect( _imp->gui->getApp(), SIGNAL(keyframeIndicatorsChanged()), this, SLOT(onKeyframesIndicatorsChanged()),Qt::UniqueConnection );
 
     _imp->timeline = timeline;
 
@@ -423,7 +423,7 @@ TimeLineGui::paintGL()
         ticks_fill(half_tick, ticks_max, m1, m2, &ticks);
         const double smallestTickSize = range * smallestTickSizePixel / rangePixel;
         const double largestTickSize = range * largestTickSizePixel / rangePixel;
-        const double minTickSizeTextPixel = fontM.width( QString("00") ); // AXIS-SPECIFIC
+        const double minTickSizeTextPixel = fontM.width( QLatin1String("00") ); // AXIS-SPECIFIC
         const double minTickSizeText = range * minTickSizeTextPixel / rangePixel;
         for (int i = m1; i <= m2; ++i) {
             double value = i * smallTickSize + offset;
@@ -590,7 +590,7 @@ TimeLineGui::paintGL()
         glEnd();
         glCheckErrorIgnoreOSXBug();
 
-        if ( rightBound != cur ) {
+        if ( rightBound != cur  && rightBound != leftBound) {
             QString rightBoundStr( QString::number( rightBound ) );
             double rightBoundTextXposWidget = toWidgetCoordinates( ( rightBoundBtm.x() + rightBoundBtmLeft.x() ) / 2.,0 ).x() - fontM.width(rightBoundStr) / 2.;
             double rightBoundTextPos = toTimeLine(rightBoundTextXposWidget);

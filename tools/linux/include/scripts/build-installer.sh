@@ -167,7 +167,7 @@ rm -f $IO_LIBS/{liblcms*,libgcc*,libstdc*,libbz2*,libfont*,libfree*,libpng*,libj
   ln -sf ../../../../../lib/libfontconfig.so.1 .
   ln -sf ../../../../../lib/libfreetype.so.6 .
   ln -sf ../../../../../lib/libpng16.so.16 .
-  ln -sf ../../../../../lib/libjpeg.so.9 .
+  ln -sf ../../../../../lib/libjpeg.so.8 .
   ln -sf ../../../../../lib/libtiff.so.5 .
   ln -sf ../../../../../lib/libz.so.1 .
   ln -sf ../../../../../lib/libgcc_s.so.1 .
@@ -532,5 +532,20 @@ if [ "$RPM_BUILD" = "1" ]; then
 fi
 
 rm $REPO_DIR/installers/$ONLINE_INSTALL $REPO_DIR/installers/$BUNDLED_INSTALL
+
+# Unit tests
+if [ "$BIT" = "64" ]; then
+  UNIT_LOG="$REPO_DIR/logs/unit_tests.Linux$BIT.$TAG.log"
+  if [ ! -d "$CWD/Natron-Tests" ]; then
+    cd $CWD || exit 1
+    git clone $GIT_UNIT || exit 1
+    cd Natron-Tests || exit 1
+  else
+    cd $CWD/Natron-Tests || exit 1
+    git pull
+  fi
+  echo "Running unit tests ..."
+  sh runOnServer.sh >& "$UNIT_LOG"
+fi
 
 echo "All Done!!!"

@@ -134,6 +134,7 @@ SOURCES += \
     OfxMemory.cpp \
     OfxOverlayInteract.cpp \
     OfxParamInstance.cpp \
+    OneViewNode.cpp \
     OutputEffectInstance.cpp \
     OutputSchedulerThread.cpp \
     ParallelRenderArgs.cpp \
@@ -150,6 +151,7 @@ SOURCES += \
     PyParameter.cpp \
     PyRoto.cpp \
     PySideCompat.cpp \
+    ReadNode.cpp \
     RectD.cpp \
     RectI.cpp \
     RenderStats.cpp \
@@ -170,6 +172,7 @@ SOURCES += \
     TLSHolder.cpp \
     Transform.cpp \
     ViewerInstance.cpp \
+    WriteNode.cpp \
     ../Global/ProcInfo.cpp \
     ../libs/SequenceParsing/SequenceParsing.cpp \
     NatronEngine/natronengine_module_wrapper.cpp \
@@ -212,7 +215,7 @@ SOURCES += \
     NatronEngine/userparamholder_wrapper.cpp \
     NatronEngine/rectd_wrapper.cpp \
     NatronEngine/recti_wrapper.cpp \
-    NatronEngine/separatorparam_wrapper.cpp
+    NatronEngine/separatorparam_wrapper.cpp \
 
 HEADERS += \
     AppInstance.h \
@@ -300,6 +303,7 @@ HEADERS += \
     OfxOverlayInteract.h \
     OfxMemory.h \
     OfxParamInstance.h \
+    OneViewNode.h \
     OpenGLViewerI.h \
     OutputEffectInstance.h \
     OutputSchedulerThread.h \
@@ -319,6 +323,7 @@ HEADERS += \
     PyParameter.h \
     PyRoto.h \
     Pyside_Engine_Python.h \
+    ReadNode.h \
     RectD.h \
     RectDSerialization.h \
     RectI.h \
@@ -358,6 +363,7 @@ HEADERS += \
     ViewerInstance.h \
     ViewerInstancePrivate.h \
     ViewIdx.h \
+    WriteNode.h \
     ../Global/Enums.h \
     ../Global/GitVersion.h \
     ../Global/GLIncludes.h \

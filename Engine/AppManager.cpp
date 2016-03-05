@@ -75,18 +75,22 @@
 #include "Engine/LibraryBinary.h"
 #include "Engine/Log.h"
 #include "Engine/Node.h"
+#include "Engine/FileSystemModel.h"
 #include "Engine/JoinViewsNode.h"
 #include "Engine/OfxImageEffectInstance.h"
 #include "Engine/OfxEffectInstance.h"
 #include "Engine/OfxHost.h"
+#include "Engine/OneViewNode.h"
 #include "Engine/ProcessHandler.h" // ProcessInputChannel
 #include "Engine/Project.h"
 #include "Engine/PrecompNode.h"
+#include "Engine/ReadNode.h"
 #include "Engine/RotoPaint.h"
 #include "Engine/RotoSmear.h"
 #include "Engine/StandardPaths.h"
 #include "Engine/ViewIdx.h"
 #include "Engine/ViewerInstance.h" // RenderStatsMap
+#include "Engine/WriteNode.h"
 
 #if QT_VERSION < 0x050000
 Q_DECLARE_METATYPE(QAbstractSocket::SocketState)
@@ -128,7 +132,7 @@ setShutDownSignal(int signalId)
 #endif
 
 
-#if defined(__NATRON_LINUX__)
+#if defined(__NATRON_LINUX__) && !defined(__FreeBSD__)
 
 #define NATRON_UNIX_BACKTRACE_STACK_DEPTH 16
 
@@ -217,6 +221,10 @@ AppManager::AppManager()
     _instance = this;
 
     QObject::connect(this, SIGNAL(s_requestOFXDialogOnMainThread(OfxImageEffectInstance*,void*)), this, SLOT(onOFXDialogOnMainThreadReceived(OfxImageEffectInstance*,void*)));
+	
+#ifdef __NATRON_WIN32__
+	FileSystemModel::initDriveLettersToNetworkShareNamesMapping();
+#endif
 }
 
 void
@@ -259,8 +267,8 @@ AppManager::load(int &argc,
     // set fontconfig path on all platforms
     if (qgetenv("FONTCONFIG_PATH").isNull()) {
         // set FONTCONFIG_PATH to Natron/Resources/etc/fonts (required by plugins using fontconfig)
-        QString path = QCoreApplication::applicationDirPath() + "/../Resources/etc/fonts";
-        QString pathcfg = path + "/fonts.conf";
+        QString path = QCoreApplication::applicationDirPath() + QString::fromUtf8("/../Resources/etc/fonts");
+        QString pathcfg = path + QString::fromUtf8("/fonts.conf");
         if (!QFile(pathcfg).exists()) {
             qWarning() << "Fontconfig configuration file" << pathcfg << "does not exist, not setting FONTCONFIG_PATH";
         } else {
@@ -281,7 +289,9 @@ AppManager::load(int &argc,
     //otherwise it might crash with thread local storage
 
 #if QT_VERSION < 0x050000
+    // be forward compatible: source code is UTF-8, and Qt5 assumes UTF-8 by default
     QTextCodec::setCodecForCStrings(QTextCodec::codecForName("UTF-8"));
+    QTextCodec::setCodecForTr(QTextCodec::codecForName("UTF-8"));
 #endif
 
     assert(argv);
@@ -432,9 +442,9 @@ AppManager::loadInternal(const CLArgs& cl)
     registerEngineMetaTypes();
     registerGuiMetaTypes();
 
-    qApp->setOrganizationName(NATRON_ORGANIZATION_NAME);
-    qApp->setOrganizationDomain(NATRON_ORGANIZATION_DOMAIN);
-    qApp->setApplicationName(NATRON_APPLICATION_NAME);
+    qApp->setOrganizationName(QString::fromUtf8(NATRON_ORGANIZATION_NAME));
+    qApp->setOrganizationDomain(QString::fromUtf8(NATRON_ORGANIZATION_DOMAIN));
+    qApp->setApplicationName(QString::fromUtf8(NATRON_APPLICATION_NAME));
 
     //Set it once setApplicationName is set since it relies on it
     _imp->diskCachesLocation = StandardPaths::writableLocation(StandardPaths::eStandardLocationCache) ;
@@ -518,7 +528,7 @@ AppManager::loadInternal(const CLArgs& cl)
     }
 #endif
     
-#if defined(__NATRON_LINUX__)
+#if defined(__NATRON_LINUX__) && !defined(__FreeBSD__)
     if (mustSetSignalsHandlers) {
         setShutDownSignal(SIGINT);   // shut down on ctrl-c
         setShutDownSignal(SIGTERM);   // shut down on killall
@@ -577,12 +587,12 @@ AppManager::loadInternalAfterInitGui(const CLArgs& cl)
     
     int oldCacheVersion = 0;
     {
-        QSettings settings(NATRON_ORGANIZATION_NAME,NATRON_APPLICATION_NAME);
+        QSettings settings(QString::fromUtf8(NATRON_ORGANIZATION_NAME),QString::fromUtf8(NATRON_APPLICATION_NAME));
         
-        if (settings.contains(kNatronCacheVersionSettingsKey)) {
-            oldCacheVersion = settings.value(kNatronCacheVersionSettingsKey).toInt();
+        if (settings.contains(QString::fromUtf8(kNatronCacheVersionSettingsKey))) {
+            oldCacheVersion = settings.value(QString::fromUtf8(kNatronCacheVersionSettingsKey)).toInt();
         }
-        settings.setValue(kNatronCacheVersionSettingsKey, NATRON_CACHE_VERSION);
+        settings.setValue(QString::fromUtf8(kNatronCacheVersionSettingsKey), NATRON_CACHE_VERSION);
     }
     
     setLoadingStatus( tr("Restoring the image cache...") );
@@ -1036,10 +1046,10 @@ AppManager::onAllPluginsLoaded()
         
             QString otherLabelWithoutSuffix = Plugin::makeLabelWithoutSuffix((*other)->getPluginLabel());
             if (otherLabelWithoutSuffix == labelWithoutSuffix) {
-                QString otherGrouping = (*other)->getGrouping().join("/");
+                QString otherGrouping = (*other)->getGrouping().join(QChar::fromLatin1('/'));
                 
                 const QStringList& thisGroupingSplit = (*first)->getGrouping();
-                QString thisGrouping = thisGroupingSplit.join("/");
+                QString thisGrouping = thisGroupingSplit.join(QChar::fromLatin1('/'));
                 if (otherGrouping == thisGrouping) {
                     labelWithoutSuffix = (*first)->getPluginLabel();
                 }
@@ -1075,9 +1085,9 @@ AppManager::registerBuiltInPlugin(const QString& iconPath, bool isDeprecated, bo
     QStringList qgrouping;
     
     for (std::list<std::string>::iterator it = grouping.begin(); it != grouping.end(); ++it) {
-        qgrouping.push_back( it->c_str() );
+        qgrouping.push_back(QString::fromUtf8(it->c_str()));
     }
-    Plugin* p = registerPlugin(qgrouping, node->getPluginID().c_str(), node->getPluginLabel().c_str(),
+    Plugin* p = registerPlugin(qgrouping, QString::fromUtf8(node->getPluginID().c_str()), QString::fromUtf8(node->getPluginLabel().c_str()),
                                        iconPath, QStringList(), node->isReader(), node->isWriter(), binary, node->renderThreadSafety() == eRenderSafetyUnsafe, node->getMajorVersion(), node->getMinorVersion(), isDeprecated);
     if (internalUseOnly) {
         p->setForInternalUseOnly(true);
@@ -1088,19 +1098,24 @@ void
 AppManager::loadBuiltinNodePlugins(std::map<std::string,std::vector< std::pair<std::string,double> > >* /*readersMap*/,
                                    std::map<std::string,std::vector< std::pair<std::string,double> > >* /*writersMap*/)
 {
-    registerBuiltInPlugin<Backdrop>(NATRON_IMAGES_PATH "backdrop_icon.png", false, false);
-    registerBuiltInPlugin<GroupOutput>(NATRON_IMAGES_PATH "output_icon.png", false, false);
-    registerBuiltInPlugin<GroupInput>(NATRON_IMAGES_PATH "input_icon.png", false, false);
-    registerBuiltInPlugin<NodeGroup>(NATRON_IMAGES_PATH "group_icon.png", false, false);
-    registerBuiltInPlugin<Dot>(NATRON_IMAGES_PATH "dot_icon.png", false, false);
-    registerBuiltInPlugin<DiskCacheNode>(NATRON_IMAGES_PATH "diskcache_icon.png", false, false);
-    registerBuiltInPlugin<RotoPaint>(NATRON_IMAGES_PATH "GroupingIcons/Set2/paint_grouping_2.png", false, false);
-    registerBuiltInPlugin<RotoNode>(NATRON_IMAGES_PATH "rotoNodeIcon.png", false, false);
-    registerBuiltInPlugin<RotoSmear>("", false, true);
-    registerBuiltInPlugin<PrecompNode>(NATRON_IMAGES_PATH "precompNodeIcon.png", false, false);
-    registerBuiltInPlugin<JoinViewsNode>(NATRON_IMAGES_PATH "joinViewsNode.png", false, false);
+    registerBuiltInPlugin<Backdrop>(QString::fromUtf8(NATRON_IMAGES_PATH "backdrop_icon.png"), false, false);
+    registerBuiltInPlugin<GroupOutput>(QString::fromUtf8(NATRON_IMAGES_PATH "output_icon.png"), false, false);
+    registerBuiltInPlugin<GroupInput>(QString::fromUtf8(NATRON_IMAGES_PATH "input_icon.png"), false, false);
+    registerBuiltInPlugin<NodeGroup>(QString::fromUtf8(NATRON_IMAGES_PATH "group_icon.png"), false, false);
+    registerBuiltInPlugin<Dot>(QString::fromUtf8(NATRON_IMAGES_PATH "dot_icon.png"), false, false);
+    registerBuiltInPlugin<DiskCacheNode>(QString::fromUtf8(NATRON_IMAGES_PATH "diskcache_icon.png"), false, false);
+    registerBuiltInPlugin<RotoPaint>(QString::fromUtf8(NATRON_IMAGES_PATH "GroupingIcons/Set2/paint_grouping_2.png"), false, false);
+    registerBuiltInPlugin<RotoNode>(QString::fromUtf8(NATRON_IMAGES_PATH "rotoNodeIcon.png"), false, false);
+    registerBuiltInPlugin<RotoSmear>(QString::fromUtf8(""), false, true);
+    registerBuiltInPlugin<PrecompNode>(QString::fromUtf8(NATRON_IMAGES_PATH "precompNodeIcon.png"), false, false);
+    registerBuiltInPlugin<JoinViewsNode>(QString::fromUtf8(NATRON_IMAGES_PATH "joinViewsNode.png"), false, false);
+    registerBuiltInPlugin<OneViewNode>(QString::fromUtf8(NATRON_IMAGES_PATH "oneViewNode.png"), false, false);
+#ifdef NATRON_ENABLE_IO_META_NODES
+    registerBuiltInPlugin<ReadNode>(QString::fromUtf8(NATRON_IMAGES_PATH "readImage.png"), false, false);
+    registerBuiltInPlugin<WriteNode>(QString::fromUtf8(NATRON_IMAGES_PATH "writeImage.png"), false, false);
+#endif
     if (!isBackground()) {
-        registerBuiltInPlugin<ViewerInstance>(NATRON_IMAGES_PATH "viewer_icon.png", false, false);
+        registerBuiltInPlugin<ViewerInstance>(QString::fromUtf8(NATRON_IMAGES_PATH "viewer_icon.png"), false, false);
     }
 }
 
@@ -1140,10 +1155,10 @@ static bool findAndRunScriptFile(const QString& path,const QStringList& files,co
                 }
 
                 if (!error.empty()) {
-                    QString message("Failed to load ");
+                    QString message(QString::fromUtf8("Failed to load "));
                     message.append(script);
-                    message.append(": ");
-                    message.append(error.c_str());
+                    message.append(QString::fromUtf8(": "));
+                    message.append(QString::fromUtf8(error.c_str()));
                     appPTR->writeToErrorLog_mt_safe(message);
                     std::cerr << message.toStdString() << std::endl;
                     return false;
@@ -1164,18 +1179,18 @@ AppManager::getAllNonOFXPluginsPaths() const
     
     //add ~/.Natron
     QString dataLocation = QDir::homePath();
-    QString mainPath = dataLocation + "/." + QString(NATRON_APPLICATION_NAME);
+    QString mainPath = dataLocation + QString::fromUtf8("/.") + QString::fromUtf8(NATRON_APPLICATION_NAME);
 
     QDir mainPathDir(mainPath);
     if (!mainPathDir.exists()) {
         QDir dataDir(dataLocation);
         if (dataDir.exists()) {
-            dataDir.mkdir("." + QString(NATRON_APPLICATION_NAME));
+            dataDir.mkdir(QChar::fromLatin1('.') + QString(QString::fromUtf8(NATRON_APPLICATION_NAME)));
         }
     }
     
-    QString envvar(qgetenv(NATRON_PATH_ENV_VAR));
-    QStringList splitDirs = envvar.split(QChar(';'));
+    QString envvar(QString::fromUtf8(qgetenv(NATRON_PATH_ENV_VAR)));
+    QStringList splitDirs = envvar.split(QChar::fromLatin1(';'));
     std::list<std::string> userSearchPaths;
     _imp->_settings->getPythonGroupsSearchPaths(&userSearchPaths);
     
@@ -1183,7 +1198,7 @@ AppManager::getAllNonOFXPluginsPaths() const
     //This is the bundled location for PyPlugs
     QDir cwd( QCoreApplication::applicationDirPath() );
     cwd.cdUp();
-    QString natronBundledPluginsPath = QString(cwd.absolutePath() +  "/Plugins/PyPlugs");
+    QString natronBundledPluginsPath = QString(cwd.absolutePath() +  QString::fromUtf8("/Plugins/PyPlugs"));
     
 
     bool preferBundleOverSystemWide = _imp->_settings->preferBundledPlugins();
@@ -1206,7 +1221,7 @@ AppManager::getAllNonOFXPluginsPaths() const
     ///look-in extra search path set in the preferences
     for (std::list<std::string>::iterator it = userSearchPaths.begin(); it != userSearchPaths.end(); ++it) {
         if (!it->empty()) {
-            templatesSearchPath.push_back(QString(it->c_str()));
+            templatesSearchPath.push_back(QString::fromUtf8(it->c_str()));
         }
     }
     
@@ -1229,7 +1244,7 @@ static void operateOnPathRecursive(NatronPathFunctor functor, const QDir& direct
     
     QStringList subDirs = directory.entryList(QDir::AllDirs | QDir::NoDotAndDotDot);
     for (int i = 0; i < subDirs.size(); ++i) {
-        QDir d(directory.absolutePath() + "/" + subDirs[i]);
+        QDir d(directory.absolutePath() + QChar::fromLatin1('/') + subDirs[i]);
         operateOnPathRecursive(functor,d);
     }
 }
@@ -1264,28 +1279,28 @@ static void findAllScriptsRecursive(const QDir& directory,
     }
     
     QStringList filters;
-    filters << "*.py";
+    filters << QString::fromUtf8("*.py");
     QStringList files = directory.entryList(filters,QDir::Files | QDir::NoDotAndDotDot);
-    bool ok = findAndRunScriptFile(directory.absolutePath() + '/', files,"init.py");
+    bool ok = findAndRunScriptFile(directory.absolutePath() + QChar::fromLatin1('/'), files,QString::fromUtf8("init.py"));
     if (ok) {
-        foundInit->append(directory.absolutePath() + "/init.py");
+        foundInit->append(directory.absolutePath() + QString::fromUtf8("/init.py"));
     }
     if (!appPTR->isBackground()) {
-        ok = findAndRunScriptFile(directory.absolutePath() + '/',files,"initGui.py");
+        ok = findAndRunScriptFile(directory.absolutePath() + QChar::fromLatin1('/'),files,QString::fromUtf8("initGui.py"));
         if (ok) {
-            foundInitGui->append(directory.absolutePath() + "/initGui.py");
+            foundInitGui->append(directory.absolutePath() + QString::fromUtf8("/initGui.py"));
         }
     }
     
     for (QStringList::iterator it = files.begin(); it != files.end(); ++it) {
-        if (it->endsWith(".py") && *it != QString("init.py") && *it != QString("initGui.py")) {
-            allPlugins.push_back(directory.absolutePath() + "/" + *it);
+        if (it->endsWith(QString::fromUtf8(".py")) && *it != QString::fromUtf8("init.py") && *it != QString::fromUtf8("initGui.py")) {
+            allPlugins.push_back(directory.absolutePath() + QChar::fromLatin1('/') + *it);
         }
     }
     
     QStringList subDirs = directory.entryList(QDir::AllDirs | QDir::NoDotAndDotDot);
     for (int i = 0; i < subDirs.size(); ++i) {
-        QDir d(directory.absolutePath() + "/" + subDirs[i]);
+        QDir d(directory.absolutePath() + QChar::fromLatin1('/') + subDirs[i]);
         findAllScriptsRecursive(d,allPlugins, foundInit, foundInitGui);
     }
 
@@ -1308,7 +1323,7 @@ AppManager::loadPythonGroups()
     ///For all search paths, first add the path to the python path, then run in order the init.py and initGui.py
     for (int i = 0; i < templatesSearchPath.size(); ++i) {
         //Adding Qt resources to Python path is useless as Python does not know how to use it
-        if (templatesSearchPath[i].startsWith(":/Resources")) {
+        if (templatesSearchPath[i].startsWith(QString::fromUtf8(":/Resources"))) {
             continue;
         }
         QDir d(templatesSearchPath[i]);
@@ -1324,7 +1339,7 @@ AppManager::loadPythonGroups()
                                               "or reachable through the Python path. (Note that Natron disables usage "
                                               "of site-packages ").toStdString();
             std::cerr << message << std::endl;
-            appPTR->writeToErrorLog_mt_safe(message.c_str());
+            appPTR->writeToErrorLog_mt_safe(QString::fromUtf8(message.c_str()));
         }
     }
     
@@ -1334,7 +1349,7 @@ AppManager::loadPythonGroups()
         if (!ok) {
             std::string message = QObject::tr("Failed to import PySide.QtGui").toStdString();
             std::cerr << message << std::endl;
-            appPTR->writeToErrorLog_mt_safe(message.c_str());
+            appPTR->writeToErrorLog_mt_safe(QString::fromUtf8(message.c_str()));
         }
     }
 
@@ -1410,11 +1425,11 @@ AppManager::loadPythonGroups()
         
         QString moduleName = allPlugins[i];
         QString modulePath;
-        int lastDot = moduleName.lastIndexOf('.');
+        int lastDot = moduleName.lastIndexOf(QChar::fromLatin1('.'));
         if (lastDot != -1) {
             moduleName = moduleName.left(lastDot);
         }
-        int lastSlash = moduleName.lastIndexOf('/');
+        int lastSlash = moduleName.lastIndexOf(QChar::fromLatin1('/'));
         if (lastSlash != -1) {
             modulePath = moduleName.mid(0,lastSlash + 1);
             moduleName = moduleName.remove(0,lastSlash + 1);
@@ -1428,8 +1443,8 @@ AppManager::loadPythonGroups()
         
         if (gotInfos) {
             qDebug() << "Loading " << moduleName;
-            QStringList grouping = QString(pluginGrouping.c_str()).split(QChar('/'));
-            Plugin* p = registerPlugin(grouping, pluginID.c_str(), pluginLabel.c_str(), iconFilePath.c_str(), QStringList(), false, false, 0, false, version, 0, false);
+            QStringList grouping = QString::fromUtf8(pluginGrouping.c_str()).split(QChar::fromLatin1('/'));
+            Plugin* p = registerPlugin(grouping, QString::fromUtf8(pluginID.c_str()), QString::fromUtf8(pluginLabel.c_str()), QString::fromUtf8(iconFilePath.c_str()), QStringList(), false, false, 0, false, version, 0, false);
             
             p->setPythonModule(modulePath + moduleName);
             p->setToolsetScript(isToolset);
@@ -1460,6 +1475,13 @@ AppManager::registerPlugin(const QStringList & groups,
     Plugin* plugin = new Plugin(binary,pluginID,pluginLabel,pluginIconPath,groupIconPath,groups,pluginMutex,major,minor,
                                                 isReader,isWriter, isDeprecated);
     std::string stdID = pluginID.toStdString();
+    
+#ifdef NATRON_ENABLE_IO_META_NODES
+    if (ReadNode::isBundledReader(stdID) || WriteNode::isBundledWriter(stdID)) {
+        plugin->setForInternalUseOnly(true);
+    }
+#endif
+    
     PluginsMap::iterator found = _imp->_plugins.find(stdID);
     if (found != _imp->_plugins.end()) {
         found->second.insert(plugin);
@@ -1568,16 +1590,16 @@ AppManager::getPluginBinaryFromOldID(const QString & pluginId,int majorVersion,i
 {
     std::map<int,Plugin*> matches;
     
-    if (pluginId == "Viewer") {
-        return _imp->findPluginById(PLUGINID_NATRON_VIEWER, majorVersion, minorVersion);
-    } else if (pluginId == "Dot") {
-        return _imp->findPluginById(PLUGINID_NATRON_DOT,majorVersion, minorVersion );
-    } else if (pluginId == "DiskCache") {
-        return _imp->findPluginById(PLUGINID_NATRON_DISKCACHE, majorVersion, minorVersion);
-    } else if (pluginId == "Backdrop") { // DO NOT change the capitalization, even if it's wrong
-        return _imp->findPluginById(PLUGINID_NATRON_BACKDROP, majorVersion, minorVersion);
-    } else if (pluginId == "RotoOFX  [Draw]") {
-        return _imp->findPluginById(PLUGINID_NATRON_ROTO, majorVersion, minorVersion);
+    if (pluginId == QString::fromUtf8("Viewer")) {
+        return _imp->findPluginById(QString::fromUtf8(PLUGINID_NATRON_VIEWER), majorVersion, minorVersion);
+    } else if (pluginId == QString::fromUtf8("Dot")) {
+        return _imp->findPluginById(QString::fromUtf8(PLUGINID_NATRON_DOT),majorVersion, minorVersion );
+    } else if (pluginId == QString::fromUtf8("DiskCache")) {
+        return _imp->findPluginById(QString::fromUtf8(PLUGINID_NATRON_DISKCACHE), majorVersion, minorVersion);
+    } else if (pluginId == QString::fromUtf8("Backdrop")) { // DO NOT change the capitalization, even if it's wrong
+        return _imp->findPluginById(QString::fromUtf8(PLUGINID_NATRON_BACKDROP), majorVersion, minorVersion);
+    } else if (pluginId == QString::fromUtf8("RotoOFX  [Draw]")) {
+        return _imp->findPluginById(QString::fromUtf8(PLUGINID_NATRON_ROTO), majorVersion, minorVersion);
     }
     
     ///Try remapping these ids to old ids we had in Natron < 1.0 for backward-compat
@@ -1593,7 +1615,7 @@ AppManager::getPluginBinaryFromOldID(const QString & pluginId,int majorVersion,i
         if (s.size() > 0) {
             grouping = s[0];
         }
-        friendlyLabel += "  [" + grouping + "]";
+        friendlyLabel += QString::fromUtf8("  [") + grouping + QChar::fromLatin1(']');
 
         if (friendlyLabel == pluginId) {
             if (majorVersion == -1) {
@@ -1627,16 +1649,16 @@ AppManager::getPluginBinary(const QString & pluginId,
     PluginsMap::const_iterator foundID = _imp->_plugins.end();
     for (PluginsMap::const_iterator it = _imp->_plugins.begin(); it != _imp->_plugins.end(); ++it) {
         if (convertToLowerCase &&
-            !pluginId.startsWith(NATRON_ORGANIZATION_DOMAIN_TOPLEVEL "." NATRON_ORGANIZATION_DOMAIN_SUB ".built-in.")) {
+            !pluginId.startsWith(QString::fromUtf8(NATRON_ORGANIZATION_DOMAIN_TOPLEVEL "." NATRON_ORGANIZATION_DOMAIN_SUB ".built-in."))) {
             
-            QString lowerCase = QString(it->first.c_str()).toLower();
+            QString lowerCase = QString::fromUtf8(it->first.c_str()).toLower();
             if (lowerCase == pluginId) {
                 foundID = it;
                 break;
             }
             
         } else {
-            if (QString(it->first.c_str()) == pluginId) {
+            if (QString::fromUtf8(it->first.c_str()) == pluginId) {
                 foundID = it;
                 break;
             }
@@ -1664,7 +1686,7 @@ AppManager::getPluginBinary(const QString & pluginId,
         ///Could not find the exact version... let's just use the highest version found
         return *foundID->second.rbegin();
     }
-    QString exc = QString("Couldn't find a plugin attached to the ID %1, with a major version of %2")
+    QString exc = QString::fromUtf8("Couldn't find a plugin attached to the ID %1, with a major version of %2")
     .arg(pluginId)
     .arg(majorVersion);
     throw std::invalid_argument( exc.toStdString() );
@@ -1676,11 +1698,19 @@ EffectInstPtr
 AppManager::createOFXEffect(NodePtr node,
                             const NodeSerialization* serialization,
                             const std::list<boost::shared_ptr<KnobSerialization> >& paramValues,
-                            bool allowFileDialogs,
-                            bool disableRenderScaleSupport,
-                            bool *hasUsedFileDialog) const
+                            bool disableRenderScaleSupport
+#ifndef NATRON_ENABLE_IO_META_NODES
+                            ,bool allowFileDialogs,
+                            bool *hasUsedFileDialog
+#endif
+                            ) const
 {
-    return _imp->ofxHost->createOfxEffect(node,serialization,paramValues,allowFileDialogs,disableRenderScaleSupport,hasUsedFileDialog);
+    return _imp->ofxHost->createOfxEffect(node,serialization,paramValues,disableRenderScaleSupport
+#ifndef NATRON_ENABLE_IO_META_NODES
+                                          ,allowFileDialogs,
+                                          hasUsedFileDialog
+#endif
+                                          );
 }
 
 void
@@ -2028,7 +2058,7 @@ AppManager::writeToErrorLog_mt_safe(const QString & str)
 {
     QMutexLocker l(&_imp->errorLogMutex);
 
-    _imp->errorLog.append(str + '\n' + '\n');
+    _imp->errorLog.append(str + QChar::fromLatin1('\n') + QChar::fromLatin1('\n'));
 }
 
 void
@@ -2283,12 +2313,12 @@ AppManager::getPluginIDs() const
 std::list<std::string>
 AppManager::getPluginIDs(const std::string& filter)
 {
-    QString qFilter(filter.c_str());
+    QString qFilter = QString::fromUtf8(filter.c_str());
     std::list<std::string> ret;
     for (PluginsMap::const_iterator it = _imp->_plugins.begin() ; it != _imp->_plugins.end(); ++it) {
         assert(!it->second.empty());
         
-        QString pluginID(it->first.c_str());
+        QString pluginID = QString::fromUtf8(it->first.c_str());
         if (pluginID.contains(qFilter,Qt::CaseInsensitive)) {
             ret.push_back(it->first);
         }
@@ -2435,30 +2465,37 @@ AppManager::initPython(int argc,char* argv[])
     qputenv("PYTHONNOUSERSITE","1");
     ++Py_NoUserSiteDirectory;
     
-    QString pythonPath(qgetenv("PYTHONPATH"));
+    QString pythonPath = QString::fromUtf8(qgetenv("PYTHONPATH"));
     //Add the Python distribution of Natron to the Python path
     QString binPath = QCoreApplication::applicationDirPath();
     binPath = QDir::toNativeSeparators(binPath);
     bool pathEmpty = pythonPath.isEmpty();
     QString toPrepend;
 #ifdef __NATRON_WIN32__
-    toPrepend.append(binPath + "\\..\\Plugins");
+    toPrepend.append(binPath + QString::fromUtf8("\\..\\Plugins"));
     if (!pathEmpty) {
-        toPrepend.push_back(';');
+        toPrepend.push_back(QChar::fromLatin1(';'));
     }
 #elif defined(__NATRON_OSX__)
-    toPrepend.append(binPath + "/../Frameworks/Python.framework/Versions/" NATRON_PY_VERSION_STRING "/lib/python" NATRON_PY_VERSION_STRING);
-    toPrepend.append(':');
-    toPrepend.append(binPath + "/../Plugins");
-    if (!pathEmpty) {
-        toPrepend.push_back(':');
+    toPrepend.append(binPath + QString::fromUtf8("/../Frameworks/Python.framework/Versions/" NATRON_PY_VERSION_STRING "/lib/python" NATRON_PY_VERSION_STRING));
+    toPrepend.append(QChar::fromLatin1(':'));
+    toPrepend.append(binPath + QString::fromUtf8("/../Plugins"));
+#ifdef DEBUG
+    // in debug mode, also prepend the local PySide directory
+    // homebrew's pyside directory
+    toPrepend.append(QString::fromUtf8(":/usr/local/Cellar/pyside/1.2.2_1/lib/python" NATRON_PY_VERSION_STRING "/site-packages"));
+    // macport's pyside directory
+    toPrepend.append(QString::fromUtf8(":/opt/local/Library/Frameworks/Python.framework/Versions/" NATRON_PY_VERSION_STRING "/lib/python" NATRON_PY_VERSION_STRING "/site-packages"));
+#endif
+if (!pathEmpty) {
+        toPrepend.push_back(QChar::fromLatin1(':'));
     }
 #elif defined(__NATRON_LINUX__)
-    toPrepend.append(binPath + "/../lib/python" NATRON_PY_VERSION_STRING);
-    toPrepend.append(':');
-    toPrepend.append(binPath + "/../Plugins");
+    toPrepend.append(binPath + QString::fromUtf8("/../lib/python" NATRON_PY_VERSION_STRING));
+    toPrepend.append(QChar::fromLatin1(':'));
+    toPrepend.append(binPath + QString::fromUtf8("/../Plugins"));
     if (!pathEmpty) {
-        toPrepend.push_back(':');
+        toPrepend.push_back(QChar::fromLatin1(':'));
     }
 #endif
 
@@ -2773,9 +2810,9 @@ AppManager::mapUNCPathToPathWithDriveLetter(const QString& uncPath) const
             ret.remove(0,it->second.size());
             QString drive;
             drive.append(it->first);
-            drive.append(':');
-            if (!ret.isEmpty() && !ret.startsWith('/')) {
-                drive.append('/');
+            drive.append(QLatin1Char(':'));
+            if (!ret.isEmpty() && !ret.startsWith(QLatin1Char('/'))) {
+                drive.append(QLatin1Char('/'));
             }
             ret.prepend(drive);
             return ret;
@@ -3161,7 +3198,7 @@ static bool getGroupInfosInternal(const std::string& modulePath,
 #endif
     PythonGILLocker pgl;
     
-    QString script("import sys\n"
+    static const QString script = QString::fromUtf8("import sys\n"
                    "import %1\n"
                    "ret = True\n"
                    "if not hasattr(%1,\"createInstance\") or not hasattr(%1.createInstance,\"__call__\"):\n"
@@ -3192,14 +3229,14 @@ static bool getGroupInfosInternal(const std::string& modulePath,
                    "    global templateGrouping\n"
                    "    templateGrouping =  %1.getGrouping()\n");
     
-    std::string toRun = script.arg(pythonModule.c_str()).toStdString();
+    std::string toRun = script.arg(QString::fromUtf8(pythonModule.c_str())).toStdString();
     
     std::string err;
     if (!Python::interpretPythonScript(toRun, &err, 0)) {
         QString logStr;
-        logStr.append(pythonModule.c_str());
+        logStr.append(QString::fromUtf8(pythonModule.c_str()));
         logStr.append(QObject::tr(" was not recognized as a PyPlug: "));
-        logStr.append(err.c_str());
+        logStr.append(QString::fromUtf8(err.c_str()));
         appPTR->writeToErrorLog_mt_safe(logStr);
         return false;
     }
@@ -3260,7 +3297,7 @@ static bool getGroupInfosInternal(const std::string& modulePath,
     
     if (iconObj) {
         *iconFilePath = Python::PY3String_asString(iconObj);
-        QFileInfo iconInfo(QString(modulePath.c_str()) + QString(iconFilePath->c_str()));
+        QFileInfo iconInfo(QString::fromUtf8(modulePath.c_str()) + QString::fromUtf8(iconFilePath->c_str()));
         *iconFilePath =  iconInfo.canonicalFilePath().toStdString();
         
         deleteScript.append("del templateIcon\n");
@@ -3319,15 +3356,15 @@ getGroupInfosFromQtResourceFile(const std::string& resourceFileName,
                                 bool* isToolset,
                                 unsigned int* version)
 {
-    QString qModulePath(resourceFileName.c_str());
-    assert(qModulePath.startsWith(":/Resources"));
+    QString qModulePath = QString::fromUtf8(resourceFileName.c_str());
+    assert(qModulePath.startsWith(QString::fromUtf8(":/Resources")));
     
     QFile moduleContent(qModulePath);
     if (!moduleContent.open(QIODevice::ReadOnly | QIODevice::Text)) {
         return false;
     }
     
-    QByteArray utf8bytes = QString(pythonModule.c_str()).toUtf8();
+    QByteArray utf8bytes = QString::fromUtf8(pythonModule.c_str()).toUtf8();
     char *moduleName = utf8bytes.data();
     
     PyObject* moduleCode = Py_CompileString(moduleContent.readAll().constData(), moduleName, Py_file_input);

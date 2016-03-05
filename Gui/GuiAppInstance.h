@@ -179,6 +179,8 @@ public:
 
     virtual void renderAllViewers(bool canAbort) OVERRIDE FINAL;
     
+    virtual void refreshAllPreviews() OVERRIDE FINAL;
+    
     virtual void abortAllViewers() OVERRIDE FINAL;
     
     virtual void queueRedrawForAllViewers() OVERRIDE FINAL;
@@ -189,6 +191,8 @@ public:
     
     void setKnobDnDData(QDrag* drag, const KnobPtr& knob, int dimension);
     void getKnobDnDData(QDrag** drag,  KnobPtr* knob, int* dimension) const;
+    
+    bool checkAllReadersModificationDate(bool errorAndWarn);
     
 public Q_SLOTS:
     

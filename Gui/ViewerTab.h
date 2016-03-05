@@ -278,6 +278,11 @@ public:
 
 public Q_SLOTS:
 
+    void onPlaybackInButtonClicked();
+    void onPlaybackOutButtonClicked();
+    void onPlaybackInSpinboxValueChanged(double value);
+    void onPlaybackOutSpinboxValueChanged(double value);
+    
     void onZoomComboboxCurrentIndexChanged(int index);
     
     void toggleStartForward();
@@ -308,7 +313,7 @@ public Q_SLOTS:
 
     void refresh();
 
-    void showView(int /* Qt slot, no ViewIdx */ view);
+    void onViewsComboboxChanged(int  index);
 
     void onEnableViewerRoIButtonToggle(bool);
     
@@ -343,8 +348,6 @@ public Q_SLOTS:
     void onInputNameChanged(int inputNb,const QString & name);
 
     void onInputChanged(int inputNb);
-
-    void onFrameRangeEditingFinished();
     
     void onCanSetFPSClicked(bool toggled);
     void onCanSetFPSLabelClicked(bool toggled);
@@ -416,6 +419,9 @@ public Q_SLOTS:
     
     void nextLayer();
     void previousLayer();
+    
+    void previousView();
+    void nextView();
     
     void toggleTripleSync(bool toggled);
     

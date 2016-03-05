@@ -55,14 +55,7 @@
 
 NATRON_NAMESPACE_ENTER;
 
-enum ProgressTaskStatusEnum
-{
-    eProgressTaskStatusPaused,
-    eProgressTaskStatusRunning,
-    eProgressTaskStatusQueued,
-    eProgressTaskStatusFinished,
-    eProgressTaskStatusCanceled
-};
+
 
 namespace {
     class MetaTypesRegistration
@@ -91,7 +84,7 @@ struct ProgressTaskInfoPrivate {
     TableItem* timeRemainingItem;
     TableItem* taskInfoItem;
     
-    ProgressTaskStatusEnum status;
+    ProgressTaskInfo::ProgressTaskStatusEnum status;
     
     QProgressBar* progressBar;
     double progressPercent;
@@ -140,7 +133,7 @@ struct ProgressTaskInfoPrivate {
     , controlsItem(0)
     , timeRemainingItem(0)
     , taskInfoItem(0)
-    , status(eProgressTaskStatusQueued)
+    , status(ProgressTaskInfo::eProgressTaskStatusQueued)
     , progressBar(0)
     , progressPercent(0)
     , controlsButtonsContainer(0)
@@ -203,6 +196,12 @@ ProgressTaskInfo::ProgressTaskInfo(ProgressPanel* panel,
 ProgressTaskInfo::~ProgressTaskInfo()
 {
     
+}
+
+ProgressTaskInfo::ProgressTaskStatusEnum
+ProgressTaskInfo::getStatus() const
+{
+    return _imp->status;
 }
 
 void
@@ -384,9 +383,9 @@ ProgressTaskInfo::onRefreshLabelTimeout()
         if (!_imp->canBePaused && wasCanceled()) {
             return;
         }
-        if ( _imp->timer->getTimeSinceCreation() * 1000 > NATRON_SHOW_PROGRESS_TOTAL_ESTIMATED_TIME_MS) {
+        /*if ((_imp->timer->getTimeSinceCreation() * 1000) > NATRON_SHOW_PROGRESS_TOTAL_ESTIMATED_TIME_MS) {
             _imp->createItems();
-        }
+        }*/
         return;
     }
     QString timeStr;
@@ -429,7 +428,7 @@ ProgressTaskInfoPrivate::createItems()
             item->setTextColor(Qt::black);
             item->setBackgroundColor(color);
         }
-        item->setText(node->getLabel().c_str());
+        item->setText(QString::fromUtf8(node->getLabel().c_str()));
         nameItem = item;
     }
     {
@@ -453,7 +452,7 @@ ProgressTaskInfoPrivate::createItems()
         if (nodeUI) {
             item->setIcon(QIcon());
         }
-        item->setText(canBePaused ? "Yes":"No");
+        item->setText(canBePaused ? QObject::tr("Yes"):QObject::tr("No"));
         controlsItem = item;
     }
     {
@@ -493,10 +492,14 @@ ProgressTaskInfo::updateProgressBar(double totalProgress,double subTaskProgress)
     if (!_imp->nameItem && !wasCanceled()) {
         
         ///Show the item if the total estimated time is gt NATRON_SHOW_PROGRESS_TOTAL_ESTIMATED_TIME_MS
-        double totalTime = subTaskProgress == 0 ? 0 : timeElapsedSecs * 1. / subTaskProgress;
-        //also,  don't show if it was not shown yet but there are less than NATRON_SHOW_PROGRESS_TOTAL_ESTIMATED_TIME_MS remaining
-        if (std::min(_imp->timeRemaining, totalTime) * 1000 > NATRON_SHOW_PROGRESS_TOTAL_ESTIMATED_TIME_MS) {
+        //double totalTime = subTaskProgress == 0 ? 0 : timeElapsedSecs * 1. / subTaskProgress;
+        
+        // If we estimate that the task will be longer than NATRON_SHOW_PROGRESS_TOTAL_ESTIMATED_TIME_MS and it has been
+        // NATRON_PROGRESS_DIALOG_ETA_REFRESH_MS elapsed, show it
+        if (_imp->timeRemaining * 1000 > NATRON_SHOW_PROGRESS_TOTAL_ESTIMATED_TIME_MS &&
+            timeElapsedSecs * 1000 > NATRON_PROGRESS_DIALOG_ETA_REFRESH_MS) {
             _imp->createItems();
+            _imp->panel->onShowProgressPanelTimerTriggered();
         }
     }
     
@@ -578,7 +581,7 @@ ProgressTaskInfo::createCellWidgets()
     QIcon pauseIc;
     pauseIc.addPixmap(pauseOnPix, QIcon::Normal, QIcon::On);
     pauseIc.addPixmap(pauseOffPix, QIcon::Normal, QIcon::Off);
-    _imp->pauseTasksButton = new Button(pauseIc,"",_imp->controlsButtonsContainer);
+    _imp->pauseTasksButton = new Button(pauseIc,QString(),_imp->controlsButtonsContainer);
     _imp->pauseTasksButton->setFixedSize(medButtonSize);
     _imp->pauseTasksButton->setIconSize(medButtonIconSize);
     _imp->pauseTasksButton->setFocusPolicy(Qt::NoFocus);
@@ -588,7 +591,7 @@ ProgressTaskInfo::createCellWidgets()
     _imp->pauseTasksButton->setEnabled(_imp->canBePaused);
     layout->addWidget(_imp->pauseTasksButton);
     
-    _imp->restartTasksButton = new Button(QIcon(restartPix),"",_imp->controlsButtonsContainer);
+    _imp->restartTasksButton = new Button(QIcon(restartPix),QString(),_imp->controlsButtonsContainer);
     _imp->restartTasksButton->setFixedSize(medButtonSize);
     _imp->restartTasksButton->setIconSize(medButtonIconSize);
     _imp->restartTasksButton->setFocusPolicy(Qt::NoFocus);
@@ -599,7 +602,7 @@ ProgressTaskInfo::createCellWidgets()
     
     
     
-    _imp->cancelTasksButton = new Button(QIcon(clearTasksPix),"",_imp->controlsButtonsContainer);
+    _imp->cancelTasksButton = new Button(QIcon(clearTasksPix),QString(),_imp->controlsButtonsContainer);
     _imp->cancelTasksButton->setFixedSize(medButtonSize);
     _imp->cancelTasksButton->setIconSize(medButtonIconSize);
     _imp->cancelTasksButton->setFocusPolicy(Qt::NoFocus);
@@ -649,23 +652,23 @@ void
 ProgressTaskInfoPrivate::refreshButtons()
 {
     switch (status) {
-        case eProgressTaskStatusRunning:
+        case ProgressTaskInfo::eProgressTaskStatusRunning:
             pauseTasksButton->setEnabled(canBePaused);
             restartTasksButton->setEnabled(false);
             break;
-        case eProgressTaskStatusQueued:
+        case ProgressTaskInfo::eProgressTaskStatusQueued:
             pauseTasksButton->setEnabled(false);
             restartTasksButton->setEnabled(false);
             break;
-        case eProgressTaskStatusFinished:
+        case ProgressTaskInfo::eProgressTaskStatusFinished:
             pauseTasksButton->setEnabled(false);
             restartTasksButton->setEnabled(canBePaused);
             break;
-        case eProgressTaskStatusCanceled:
+        case ProgressTaskInfo::eProgressTaskStatusCanceled:
             pauseTasksButton->setEnabled(false);
             restartTasksButton->setEnabled(false);
             break;
-        case eProgressTaskStatusPaused:
+        case ProgressTaskInfo::eProgressTaskStatusPaused:
             pauseTasksButton->setEnabled(false);
             restartTasksButton->setEnabled(canBePaused);
             break;

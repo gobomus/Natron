@@ -142,15 +142,15 @@ NodeGraph::refreshAllKnobsGui()
 {
     for (NodesGuiList::iterator it = _imp->_nodes.begin(); it != _imp->_nodes.end(); ++it) {
         if ((*it)->isSettingsPanelVisible()) {
-            const std::map<boost::weak_ptr<KnobI>,KnobGui*> & knobs = (*it)->getKnobs();
+            const std::list<std::pair<boost::weak_ptr<KnobI>,KnobGuiPtr> > & knobs = (*it)->getKnobs();
             
-            for (std::map<boost::weak_ptr<KnobI>,KnobGui*>::const_iterator it2 = knobs.begin(); it2!=knobs.end(); ++it2) {
+            for (std::list<std::pair<boost::weak_ptr<KnobI>,KnobGuiPtr> >::const_iterator it2 = knobs.begin(); it2!=knobs.end(); ++it2) {
                 KnobPtr knob = it2->first.lock();
                 if (!knob->getIsSecret()) {
                     for (int i = 0; i < knob->getDimension(); ++i) {
                         if (knob->isAnimated(i)) {
                             it2->second->onInternalValueChanged(ViewSpec::all(), i, eValueChangedReasonPluginEdited);
-                            it2->second->onAnimationLevelChanged(ViewSpec::all(), i, eValueChangedReasonPluginEdited);
+                            it2->second->onAnimationLevelChanged(ViewSpec::all(), i);
                         }
                     }
                 }
@@ -360,7 +360,7 @@ FindNodeDialog::updateFindResults(const QString& filter)
     _imp->graph->deselect();
     
     if (_imp->currentFilter.isEmpty()) {
-        _imp->resultLabel->setText("");
+        _imp->resultLabel->setText(QString());
         return;
     }
     Qt::CaseSensitivity sensitivity = _imp->caseSensitivity->isChecked() ? Qt::CaseSensitive : Qt::CaseInsensitive;
@@ -376,13 +376,13 @@ FindNodeDialog::updateFindResults(const QString& filter)
         
         
         for (NodesGuiList::const_iterator it = activeNodes.begin(); it != activeNodes.end(); ++it) {
-            if ((*it)->isVisible() && exp.exactMatch((*it)->getNode()->getLabel().c_str())) {
+            if ((*it)->isVisible() && exp.exactMatch(QString::fromUtf8((*it)->getNode()->getLabel().c_str()))) {
                 _imp->nodeResults.push_back(*it);
             }
         }
     } else {
         for (NodesGuiList::const_iterator it = activeNodes.begin(); it != activeNodes.end(); ++it) {
-            if ((*it)->isVisible() && QString((*it)->getNode()->getLabel().c_str()).contains(filter,sensitivity)) {
+            if ((*it)->isVisible() && QString::fromUtf8((*it)->getNode()->getLabel().c_str()).contains(filter,sensitivity)) {
                 _imp->nodeResults.push_back(*it);
             }
         }
@@ -390,7 +390,7 @@ FindNodeDialog::updateFindResults(const QString& filter)
     }
     
     if ((_imp->nodeResults.size()) == 0) {
-        _imp->resultLabel->setText("");
+        _imp->resultLabel->setText(QString());
     }
 
     
@@ -415,7 +415,7 @@ FindNodeDialog::selectNextResult()
     _imp->graph->centerOnItem(it->get());
     
     
-    QString text = QString("Selecting result %1 of %2").arg(_imp->currentFindIndex + 1).arg(_imp->nodeResults.size());
+    QString text = QString::fromUtf8("Selecting result %1 of %2").arg(_imp->currentFindIndex + 1).arg(_imp->nodeResults.size());
     _imp->resultLabel->setText(text);
 
     
@@ -562,7 +562,7 @@ NodeGraph::onNodeNameEditDialogFinished()
         QDialog::DialogCode code =  (QDialog::DialogCode)dialog->result();
         if (code == QDialog::Accepted) {
             QString newName = dialog->getTypedName();
-            QString oldName = QString(dialog->getNode()->getNode()->getLabel().c_str());
+            QString oldName = QString::fromUtf8(dialog->getNode()->getNode()->getLabel().c_str());
             pushUndoCommand(new RenameNodeUndoRedoCommand(dialog->getNode(),oldName,newName));
             
         }
@@ -610,7 +610,7 @@ NodeGraph::onGroupNameChanged(const QString& /*name*/)
         setLabel(label);
         TabWidget* parent = dynamic_cast<TabWidget*>(parentWidget() );
         if (parent) {
-            parent->setTabLabel(this, label.c_str());
+            parent->setTabLabel(this, QString::fromUtf8(label.c_str()));
         }
     }
 }

@@ -42,6 +42,9 @@ KnobGui::onInternalValueChanged(ViewSpec /*view*/,
                                 int dimension,
                                 int reason)
 {
+    if (_imp->guiRemoved) {
+        return;
+    }
     if (_imp->widgetCreated && (ValueChangedReasonEnum)reason != eValueChangedReasonUserEdited) {
         updateGuiInternal(dimension);
         if (!getKnob()->getExpression(dimension).empty()) {
@@ -62,7 +65,7 @@ KnobGui::onMultipleKeySet(const std::list<double>& keys, ViewSpec /*view*/,int /
     
     if ((ValueChangedReasonEnum)reason != eValueChangedReasonUserEdited) {
         KnobPtr knob = getKnob();
-        if ( !knob->getIsSecret() && knob->isDeclaredByPlugin()) {
+        if ( !knob->getIsSecret() && (knob->isDeclaredByPlugin()  || knob->isUserKnob())) {
             std::list<SequenceTime> intKeys;
             for (std::list<double>::const_iterator it = keys.begin() ; it != keys.end(); ++it) {
                 intKeys.push_back(*it);
@@ -85,7 +88,7 @@ KnobGui::onInternalKeySet(double time,
     if ((ValueChangedReasonEnum)reason != eValueChangedReasonUserEdited) {
         if (added) {
             KnobPtr knob = getKnob();
-            if ( !knob->getIsSecret() && knob->isDeclaredByPlugin()) {
+            if ( !knob->getIsSecret() && (knob->isDeclaredByPlugin() || knob->isUserKnob())) {
                 knob->getHolder()->getApp()->addKeyframeIndicator(time);
             }
         }
@@ -102,7 +105,7 @@ KnobGui::onInternalKeyRemoved(double time,
                               int /*reason*/)
 {
     KnobPtr knob = getKnob();
-    if ( !knob->getIsSecret() && knob->isDeclaredByPlugin()) {
+    if ( !knob->getIsSecret() && (knob->isDeclaredByPlugin() || knob->isUserKnob())) {
         knob->getHolder()->getApp()->removeKeyFrameIndicator(time);
     }
     Q_EMIT keyFrameRemoved();
@@ -216,7 +219,7 @@ KnobGui::pasteClipBoard(int targetDimension)
         return;
     }
 
-    pushUndoCommand(new PasteUndoCommand(this,type, cbDim, targetDimension, fromKnob));
+    pushUndoCommand(new PasteUndoCommand(shared_from_this(),type, cbDim, targetDimension, fromKnob));
 } // pasteClipBoard
 
 
@@ -265,7 +268,7 @@ KnobGui::linkTo(int dimension)
         }
     }
     
-    LinkToKnobDialog dialog( this,_imp->copyRightClickMenu->parentWidget() );
+    LinkToKnobDialog dialog( shared_from_this(),_imp->copyRightClickMenu->parentWidget() );
 
     if ( dialog.exec() ) {
         KnobPtr  otherKnob = dialog.getSelectedKnobs();
@@ -423,13 +426,13 @@ KnobGui::onSetValueUsingUndoStack(const Variant & v,
     Knob<std::string>* isString = dynamic_cast<Knob<std::string>*>( knob.get() );
 
     if (isInt) {
-        pushUndoCommand( new KnobUndoCommand<int>(this,isInt->getValue(dim),v.toInt(),dim) );
+        pushUndoCommand( new KnobUndoCommand<int>(shared_from_this(),isInt->getValue(dim),v.toInt(),dim) );
     } else if (isBool) {
-        pushUndoCommand( new KnobUndoCommand<bool>(this,isBool->getValue(dim),v.toBool(),dim) );
+        pushUndoCommand( new KnobUndoCommand<bool>(shared_from_this(),isBool->getValue(dim),v.toBool(),dim) );
     } else if (isDouble) {
-        pushUndoCommand( new KnobUndoCommand<double>(this,isDouble->getValue(dim),v.toDouble(),dim) );
+        pushUndoCommand( new KnobUndoCommand<double>(shared_from_this(),isDouble->getValue(dim),v.toDouble(),dim) );
     } else if (isString) {
-        pushUndoCommand( new KnobUndoCommand<std::string>(this,isString->getValue(dim),v.toString().toStdString(),dim) );
+        pushUndoCommand( new KnobUndoCommand<std::string>(shared_from_this(),isString->getValue(dim),v.toString().toStdString(),dim) );
     }
 }
 
@@ -505,7 +508,7 @@ KnobGui::restoreOpenGLContext()
 void
 KnobGui::setKnobGuiPointer()
 {
-    getKnob()->setKnobGuiPointer(this);
+    getKnob()->setKnobGuiPointer(shared_from_this());
 }
 
 void
@@ -525,7 +528,7 @@ void
 KnobGui::removeAllKeyframeMarkersOnTimeline(int dimension)
 {
     KnobPtr knob = getKnob();
-    if ( knob->getHolder() && knob->getHolder()->getApp() && !knob->getIsSecret() && knob->isDeclaredByPlugin()) {
+    if ( knob->getHolder() && knob->getHolder()->getApp() && !knob->getIsSecret() && (knob->isDeclaredByPlugin() || knob->isUserKnob())) {
         AppInstance* app = knob->getHolder()->getApp();
         assert(app);
         std::list<SequenceTime> times;
@@ -588,7 +591,7 @@ void
 KnobGui::setKeyframeMarkerOnTimeline(double time)
 {
     KnobPtr knob = getKnob();
-    if (knob->isDeclaredByPlugin()) {
+    if (knob->isDeclaredByPlugin() || knob->isUserKnob()) {
         knob->getHolder()->getApp()->addKeyframeIndicator(time);
     }
 }
@@ -604,7 +607,7 @@ KnobGui::onKeyFrameMoved(ViewSpec /*view*/,
     if ( !knob->isAnimationEnabled() || !knob->canAnimate() ) {
         return;
     }
-    if (knob->isDeclaredByPlugin()) {
+    if (knob->isDeclaredByPlugin() || knob->isUserKnob()) {
         AppInstance* app = knob->getHolder()->getApp();
         assert(app);
         app->removeKeyFrameIndicator(oldTime);
@@ -614,15 +617,17 @@ KnobGui::onKeyFrameMoved(ViewSpec /*view*/,
 
 void
 KnobGui::onAnimationLevelChanged(ViewSpec /*idx*/,
-                                 int dimension,
-                                 int level)
+                                 int dimension)
 {
     if (!_imp->customInteract) {
-        //std::string expr = getKnob()->getExpression(dim);
-        //reflectExpressionState(dim,!expr.empty());
-        //if (expr.empty()) {
-            reflectAnimationLevel(dimension, (AnimationLevelEnum)level);
-        //}
+        KnobPtr knob = getKnob();
+        int dim = knob->getDimension();
+        for (int i = 0; i < dim; ++i) {
+            if (i == dimension || dimension == -1) {
+                reflectAnimationLevel(i, knob->getAnimationLevel(i));
+            }
+        }
+        
         
     }
 }
@@ -636,7 +641,7 @@ KnobGui::onAppendParamEditChanged(int reason,
                                   bool createNewCommand,
                                   bool setKeyFrame)
 {
-    pushUndoCommand( new MultipleKnobEditsUndoCommand(this,(ValueChangedReasonEnum)reason, createNewCommand, setKeyFrame, v, dimension, time) );
+    pushUndoCommand( new MultipleKnobEditsUndoCommand(shared_from_this(),(ValueChangedReasonEnum)reason, createNewCommand, setKeyFrame, v, dimension, time) );
 }
 
 void
@@ -729,6 +734,9 @@ KnobGui::onHelpChanged()
 void
 KnobGui::onHasModificationsChanged()
 {
+    if (_imp->guiRemoved) {
+        return;
+    }
     if (_imp->descriptionLabel) {
         bool hasModif = getKnob()->hasModifications();
         _imp->descriptionLabel->setAltered(!hasModif);
@@ -757,7 +765,7 @@ KnobGui::onLabelChanged()
             descriptionLabel = knob->getLabel();
         }
         
-        _imp->descriptionLabel->setText_overload(QString(QString(descriptionLabel.c_str()) + ":"));
+        _imp->descriptionLabel->setText_overload(QString::fromUtf8(descriptionLabel.c_str()));
         onLabelChangedInternal();
     }
 }

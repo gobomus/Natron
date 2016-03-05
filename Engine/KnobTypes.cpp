@@ -593,10 +593,14 @@ KnobChoice::typeName() const
     return typeNameStatic();
 }
 
+#ifdef DEBUG
+#pragma message WARN("When enabling multi-view knobs, make this multi-view too")
+#endif
 void
-KnobChoice::onInternalValueChanged(int dimension, double time, ViewSpec /*view*/)
+KnobChoice::onInternalValueChanged(int /*dimension*/, double time, ViewSpec /*view*/)
 {
-    int index = getValueAtTime(time, dimension);
+    
+    int index = getValueAtTime(time, 0);
     QMutexLocker k(&_entriesMutex);
     if (index >= 0 &&  index < (int)_entries.size()) {
         _lastValidEntry = _entries[index];
@@ -677,7 +681,7 @@ KnobChoice::appendChoice(const std::string& entry, const std::string& help)
     if (_signalSlotHandler) {
         _signalSlotHandler->s_helpChanged();
     }
-    Q_EMIT entryAppended(QString(entry.c_str()), QString(help.c_str()));
+    Q_EMIT entryAppended(QString::fromUtf8(entry.c_str()), QString::fromUtf8(help.c_str()));
 }
 
 std::vector<std::string>
@@ -1061,6 +1065,20 @@ KnobString::hasContentWithoutHtmlTags() const
     std::string str = getValue();
     if (str.empty()) {
         return false;
+    }
+    
+    //First remove content in the NATRON_CUSTOM_HTML tags
+    const std::string customTagStart(NATRON_CUSTOM_HTML_TAG_START);
+    const std::string customTagEnd(NATRON_CUSTOM_HTML_TAG_END);
+    
+    std::size_t foundNatronCustomDataTag = str.find(customTagStart,0);
+    if (foundNatronCustomDataTag != std::string::npos) {
+        ///remove the current custom data
+        int foundNatronEndTag = str.find(customTagEnd,foundNatronCustomDataTag);
+        assert(foundNatronEndTag != (int)std::string::npos);
+        
+        foundNatronEndTag += customTagEnd.size();
+        str.erase(foundNatronCustomDataTag, foundNatronEndTag - foundNatronCustomDataTag);
     }
     
     std::size_t foundOpen = str.find("<");

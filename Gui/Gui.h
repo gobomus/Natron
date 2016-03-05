@@ -587,7 +587,7 @@ public Q_SLOTS:
     
         
     ///Called whenever the time changes on the timeline
-    void onTimeChanged(SequenceTime time,int reason);
+    void renderViewersAndRefreshKnobsAfterTimelineTimeChange(SequenceTime time,int reason);
     
     void onTimelineTimeAboutToChange();
 
@@ -666,7 +666,7 @@ public Q_SLOTS:
 
     NodePtr createReader();
     NodePtr createWriter();
-
+    
     void renderAllWriters();
 
     void renderSelectedNode();

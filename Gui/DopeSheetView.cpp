@@ -671,8 +671,8 @@ std::vector<DopeSheetKey> DopeSheetViewPrivate::isNearByKeyframe(boost::shared_p
 
     for (DSTreeItemKnobMap::const_iterator it = dsKnobs.begin(); it != dsKnobs.end(); ++it) {
         boost::shared_ptr<DSKnob> dsKnob = (*it).second;
-        KnobGui *knobGui = dsKnob->getKnobGui();
-
+        KnobGuiPtr knobGui = dsKnob->getKnobGui();
+        assert(knobGui);
         int dim = dsKnob->getDimension();
 
         if (dim == -1) {
@@ -714,24 +714,24 @@ double DopeSheetViewPrivate::clampedMouseOffset(double fromTime, double toTime)
 void DopeSheetViewPrivate::generateKeyframeTextures()
 {
     QImage kfTexturesImages[KF_TEXTURES_COUNT];
-    kfTexturesImages[0].load(NATRON_IMAGES_PATH "interp_constant.png");
-    kfTexturesImages[1].load(NATRON_IMAGES_PATH "interp_constant_selected.png");
-    kfTexturesImages[2].load(NATRON_IMAGES_PATH "interp_linear.png");
-    kfTexturesImages[3].load(NATRON_IMAGES_PATH "interp_linear_selected.png");
-    kfTexturesImages[4].load(NATRON_IMAGES_PATH "interp_curve.png");
-    kfTexturesImages[5].load(NATRON_IMAGES_PATH "interp_curve_selected.png");
-    kfTexturesImages[6].load(NATRON_IMAGES_PATH "interp_break.png");
-    kfTexturesImages[7].load(NATRON_IMAGES_PATH "interp_break_selected.png");
-    kfTexturesImages[8].load(NATRON_IMAGES_PATH "interp_curve_c.png");
-    kfTexturesImages[9].load(NATRON_IMAGES_PATH "interp_curve_c_selected.png");
-    kfTexturesImages[10].load(NATRON_IMAGES_PATH "interp_curve_h.png");
-    kfTexturesImages[11].load(NATRON_IMAGES_PATH "interp_curve_h_selected.png");
-    kfTexturesImages[12].load(NATRON_IMAGES_PATH "interp_curve_r.png");
-    kfTexturesImages[13].load(NATRON_IMAGES_PATH "interp_curve_r_selected.png");
-    kfTexturesImages[14].load(NATRON_IMAGES_PATH "interp_curve_z.png");
-    kfTexturesImages[15].load(NATRON_IMAGES_PATH "interp_curve_z_selected.png");
-    kfTexturesImages[16].load(NATRON_IMAGES_PATH "keyframe_node_root.png");
-    kfTexturesImages[17].load(NATRON_IMAGES_PATH "keyframe_node_root_selected.png");
+    kfTexturesImages[0].load(QString::fromUtf8(NATRON_IMAGES_PATH "interp_constant.png"));
+    kfTexturesImages[1].load(QString::fromUtf8(NATRON_IMAGES_PATH "interp_constant_selected.png"));
+    kfTexturesImages[2].load(QString::fromUtf8(NATRON_IMAGES_PATH "interp_linear.png"));
+    kfTexturesImages[3].load(QString::fromUtf8(NATRON_IMAGES_PATH "interp_linear_selected.png"));
+    kfTexturesImages[4].load(QString::fromUtf8(NATRON_IMAGES_PATH "interp_curve.png"));
+    kfTexturesImages[5].load(QString::fromUtf8(NATRON_IMAGES_PATH "interp_curve_selected.png"));
+    kfTexturesImages[6].load(QString::fromUtf8(NATRON_IMAGES_PATH "interp_break.png"));
+    kfTexturesImages[7].load(QString::fromUtf8(NATRON_IMAGES_PATH "interp_break_selected.png"));
+    kfTexturesImages[8].load(QString::fromUtf8(NATRON_IMAGES_PATH "interp_curve_c.png"));
+    kfTexturesImages[9].load(QString::fromUtf8(NATRON_IMAGES_PATH "interp_curve_c_selected.png"));
+    kfTexturesImages[10].load(QString::fromUtf8(NATRON_IMAGES_PATH "interp_curve_h.png"));
+    kfTexturesImages[11].load(QString::fromUtf8(NATRON_IMAGES_PATH "interp_curve_h_selected.png"));
+    kfTexturesImages[12].load(QString::fromUtf8(NATRON_IMAGES_PATH "interp_curve_r.png"));
+    kfTexturesImages[13].load(QString::fromUtf8(NATRON_IMAGES_PATH "interp_curve_r_selected.png"));
+    kfTexturesImages[14].load(QString::fromUtf8(NATRON_IMAGES_PATH "interp_curve_z.png"));
+    kfTexturesImages[15].load(QString::fromUtf8(NATRON_IMAGES_PATH "interp_curve_z_selected.png"));
+    kfTexturesImages[16].load(QString::fromUtf8(NATRON_IMAGES_PATH "keyframe_node_root.png"));
+    kfTexturesImages[17].load(QString::fromUtf8(NATRON_IMAGES_PATH "keyframe_node_root_selected.png"));
     
     glGenTextures(KF_TEXTURES_COUNT, kfTexturesIDs);
     
@@ -857,7 +857,7 @@ void DopeSheetViewPrivate::drawScale() const
 
         const double smallestTickSize = range * smallestTickSizePixel / rangePixel;
         const double largestTickSize = range * largestTickSizePixel / rangePixel;
-        const double minTickSizeTextPixel = fontM.width( QString("00") );
+        const double minTickSizeTextPixel = fontM.width( QString::fromUtf8("00") );
         const double minTickSizeText = range * minTickSizeTextPixel / rangePixel;
 
         glCheckError();
@@ -1830,11 +1830,17 @@ void DopeSheetViewPrivate::computeReaderRange(DSNode *reader)
     NodePtr node = reader->getInternalNode();
 
     Knob<int> *startingTimeKnob = dynamic_cast<Knob<int> *>(node->getKnobByName(kReaderParamNameStartingTime).get());
-    assert(startingTimeKnob);
+    if (!startingTimeKnob) {
+        return;
+    }
     Knob<int> *firstFrameKnob = dynamic_cast<Knob<int> *>(node->getKnobByName(kReaderParamNameFirstFrame).get());
-    assert(firstFrameKnob);
+    if (!firstFrameKnob) {
+        return;
+    }
     Knob<int> *lastFrameKnob = dynamic_cast<Knob<int> *>(node->getKnobByName(kReaderParamNameLastFrame).get());
-    assert(lastFrameKnob);
+    if (!lastFrameKnob) {
+        return;
+    }
 
     int startingTimeValue = startingTimeKnob->getValue();
     int firstFrameValue = firstFrameKnob->getValue();
@@ -2037,12 +2043,12 @@ void DopeSheetViewPrivate::computeGroupRange(DSNode *group)
             times.insert(found->second.second);
         }
 
-        const KnobsAndGuis &knobs = nodeGui->getKnobs();
+        const std::list<std::pair<boost::weak_ptr<KnobI>, KnobGuiPtr> > &knobs = nodeGui->getKnobs();
 
-        for (KnobsAndGuis::const_iterator it = knobs.begin();
+        for (std::list<std::pair<boost::weak_ptr<KnobI>, KnobGuiPtr> >::const_iterator it = knobs.begin();
              it != knobs.end();
              ++it) {
-            KnobGui *knobGui = (*it).second;
+            const KnobGuiPtr& knobGui = (*it).second;
             KnobPtr knob = knobGui->getKnob();
 
             if (!knob->isAnimationEnabled() || !knob->hasAnimation()) {
@@ -2805,14 +2811,17 @@ void DopeSheetView::onTimeLineFrameChanged(SequenceTime sTime, int reason)
 
     _imp->computeTimelinePositions();
 
-    redraw();
+    if (isVisible()) {
+        redraw();
+    }
 }
 
 void DopeSheetView::onTimeLineBoundariesChanged(int, int)
 {
     running_in_main_thread();
-
-    redraw();
+    if (isVisible()) {
+        redraw();
+    }
 }
 
 void DopeSheetView::onNodeAdded(DSNode *dsNode)
@@ -2824,18 +2833,18 @@ void DopeSheetView::onNodeAdded(DSNode *dsNode)
 
     if (nodeType == eDopeSheetItemTypeCommon) {
         if (_imp->model->isPartOfGroup(dsNode)) {
-            const KnobsAndGuis &knobs = dsNode->getNodeGui()->getKnobs();
+            const std::list<std::pair<boost::weak_ptr<KnobI>, KnobGuiPtr> > &knobs = dsNode->getNodeGui()->getKnobs();
 
-            for (KnobsAndGuis::const_iterator knobIt = knobs.begin(); knobIt != knobs.end(); ++knobIt) {
+            for (std::list<std::pair<boost::weak_ptr<KnobI>, KnobGuiPtr> >::const_iterator knobIt = knobs.begin(); knobIt != knobs.end(); ++knobIt) {
                 KnobPtr knob = knobIt->first.lock();
-                KnobGui *knobGui = knobIt->second;
-                connect(knob->getSignalSlotHandler().get(), SIGNAL(keyFrameMoved(ViewIdx,int,double,double)),
+                const KnobGuiPtr& knobGui = knobIt->second;
+                connect(knob->getSignalSlotHandler().get(), SIGNAL(keyFrameMoved(ViewSpec,int,double,double)),
                         this, SLOT(onKeyframeChanged()));
 
-                connect(knobGui, SIGNAL(keyFrameSet()),
+                connect(knobGui.get(), SIGNAL(keyFrameSet()),
                         this, SLOT(onKeyframeChanged()));
 
-                connect(knobGui, SIGNAL(keyFrameRemoved()),
+                connect(knobGui.get(), SIGNAL(keyFrameRemoved()),
                         this, SLOT(onKeyframeChanged()));
             }
         }
@@ -2845,12 +2854,16 @@ void DopeSheetView::onNodeAdded(DSNode *dsNode)
     else if (nodeType == eDopeSheetItemTypeReader) {
         // The dopesheet view must refresh if the user set some values in the settings panel
         // so we connect some signals/slots
-        boost::shared_ptr<KnobSignalSlotHandler> lastFrameKnob =  node->getKnobByName(kReaderParamNameLastFrame)->getSignalSlotHandler();
+        KnobPtr lastFrameKnob = node->getKnobByName(kReaderParamNameLastFrame);
+        if (!lastFrameKnob) {
+            return;
+        }
+        boost::shared_ptr<KnobSignalSlotHandler> lastFrameKnobHandler =  lastFrameKnob->getSignalSlotHandler();
         assert(lastFrameKnob);
         boost::shared_ptr<KnobSignalSlotHandler> startingTimeKnob = node->getKnobByName(kReaderParamNameStartingTime)->getSignalSlotHandler();
         assert(startingTimeKnob);
 
-        connect(lastFrameKnob.get(), SIGNAL(valueChanged(ViewSpec,int,int)),
+        connect(lastFrameKnobHandler.get(), SIGNAL(valueChanged(ViewSpec,int,int)),
                 this, SLOT(onRangeNodeChanged(ViewSpec,int,int)));
 
         connect(startingTimeKnob.get(), SIGNAL(valueChanged(ViewSpec,int,int)),

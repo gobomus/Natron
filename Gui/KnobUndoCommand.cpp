@@ -53,7 +53,7 @@ NATRON_NAMESPACE_ENTER;
 struct PasteUndoCommandPrivate
 {
     
-    KnobGui* knob;
+    KnobGuiPtr knob;
     KnobClipBoardType type;
     int fromDimension;
     int targetDimension;
@@ -61,7 +61,7 @@ struct PasteUndoCommandPrivate
     KnobPtr fromKnob;
     
     PasteUndoCommandPrivate()
-    : knob(0)
+    : knob()
     , type(eKnobClipBoardTypeCopyLink)
     , fromDimension(-1)
     , targetDimension(-1)
@@ -71,7 +71,7 @@ struct PasteUndoCommandPrivate
     }
 };
 
-PasteUndoCommand::PasteUndoCommand(KnobGui* knob,
+PasteUndoCommand::PasteUndoCommand(const KnobGuiPtr& knob,
                                    KnobClipBoardType type,
                                    int fromDimension,
                                    int targetDimension,
@@ -113,7 +113,7 @@ PasteUndoCommand::PasteUndoCommand(KnobGui* knob,
     assert(knob);
     assert(_imp->targetDimension >= -1 && _imp->targetDimension < _imp->knob->getKnob()->getDimension());
     assert(_imp->fromDimension >= -1 && _imp->fromDimension < _imp->fromKnob->getDimension());
-    QString text = QObject::tr("Paste") + ' ';
+    QString text = QObject::tr("Paste") + QLatin1Char(' ');
     switch (type) {
         case eKnobClipBoardTypeCopyAnim:
             text += QObject::tr("Animation");
@@ -125,10 +125,10 @@ PasteUndoCommand::PasteUndoCommand(KnobGui* knob,
             text += QObject::tr("Link");
             break;
     }
-    text += ' ';
+    text += QLatin1Char(' ');
     text += QObject::tr("to");
-    text += ' ';
-    text += knob->getKnob()->getLabel().c_str();
+    text += QLatin1Char(' ');
+    text += QString::fromUtf8(knob->getKnob()->getLabel().c_str());
     setText(text);
 }
 
@@ -208,6 +208,9 @@ PasteUndoCommand::copyFrom(const KnobPtr& serializedKnob, bool isRedo)
             internalKnob->endChanges();
         }   break;
         case eKnobClipBoardTypeCopyLink: {
+            
+            //bool useExpression = !KnobI::areTypesCompatibleForSlave(internalKnob.get(), serializedKnob.get());
+            
             internalKnob->beginChanges();
             for (int i = 0; i < internalKnob->getDimension(); ++i) {
                 if (_imp->targetDimension == -1 || i == _imp->targetDimension) {
@@ -228,7 +231,7 @@ PasteUndoCommand::copyFrom(const KnobPtr& serializedKnob, bool isRedo)
     }
 } // redo
 
-MultipleKnobEditsUndoCommand::MultipleKnobEditsUndoCommand(KnobGui* knob,
+MultipleKnobEditsUndoCommand::MultipleKnobEditsUndoCommand(const KnobGuiPtr& knob,
                                                            ValueChangedReasonEnum reason,
                                                            bool createNew,
                                                            bool setKeyFrame,
@@ -256,7 +259,7 @@ MultipleKnobEditsUndoCommand::MultipleKnobEditsUndoCommand(KnobGui* knob,
     EffectInstance* effect = dynamic_cast<EffectInstance*>(holder);
     QString holderName;
     if (effect) {
-        holderName = effect->getNode()->getLabel().c_str();
+        holderName = QString::fromUtf8(effect->getNode()->getLabel().c_str());
     }
 
     setText( QObject::tr("Multiple edits for %1").arg(holderName) );
@@ -557,7 +560,7 @@ RestoreDefaultsCommand::undo()
     }
     app->addMultipleKeyframeIndicatorsAdded(times,true);
 
-    first->getHolder()->evaluate_public(NULL, true, true, eValueChangedReasonUserEdited);
+    first->getHolder()->incrHashAndEvaluate(true, true);
     if ( first->getHolder()->getApp() ) {
         first->getHolder()->getApp()->redrawAllViewers();
     }
@@ -647,7 +650,7 @@ RestoreDefaultsCommand::redo()
     
     
     if (first->getHolder()) {
-        first->getHolder()->evaluate_public(NULL, true, true, eValueChangedReasonUserEdited);
+        first->getHolder()->incrHashAndEvaluate(true, true);
         if (first->getHolder()->getApp() ) {
             first->getHolder()->getApp()->redrawAllViewers();
         }

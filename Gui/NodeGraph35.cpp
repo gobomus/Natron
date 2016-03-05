@@ -44,6 +44,7 @@ CLANG_DIAG_ON(uninitialized)
 #include "Engine/Node.h"
 #include "Engine/Project.h"
 #include "Engine/Settings.h"
+#include "Engine/FileSystemModel.h"
 
 #include "Gui/ActionShortcuts.h"
 #include "Gui/Gui.h"
@@ -494,11 +495,13 @@ NodeGraph::dropEvent(QDropEvent* e)
         QString path = rl.toLocalFile();
 
 #ifdef __NATRON_WIN32__
-        if ( !path.isEmpty() && ( path.at(0) == QChar('/') ) || ( path.at(0) == QChar('\\') ) ) {
+        if ( !path.isEmpty() && ( path.at(0) == QLatin1Char('/')  || path.at(0) == QLatin1Char('\\') ) ) {
             path = path.remove(0,1);
         }
+		path = FileSystemModel::mapPathWithDriveLetterToPathWithNetworkShareName(path);
 
 #endif
+
         
         QDir dir(path);
 
@@ -512,45 +515,54 @@ NodeGraph::dropEvent(QDropEvent* e)
     }
 
     QStringList supportedExtensions;
-    std::map<std::string,std::string> writersForFormat;
-    appPTR->getCurrentSettings()->getFileFormatsForWritingAndWriter(&writersForFormat);
-    for (std::map<std::string,std::string>::const_iterator it = writersForFormat.begin(); it != writersForFormat.end(); ++it) {
-        supportedExtensions.push_back( it->first.c_str() );
+    supportedExtensions.push_back(QString::fromLatin1(NATRON_PROJECT_FILE_EXT));
+    ///get all the decoders
+    std::map<std::string,std::string> readersForFormat;
+    appPTR->getCurrentSettings()->getFileFormatsForReadingAndReader(&readersForFormat);
+    for (std::map<std::string,std::string>::const_iterator it = readersForFormat.begin(); it != readersForFormat.end(); ++it) {
+        supportedExtensions.push_back( QString::fromUtf8(it->first.c_str()) );
     }
     QPointF scenePos = mapToScene(e->pos());
     std::vector< boost::shared_ptr<SequenceParsing::SequenceFromFiles> > files = SequenceFileDialog::fileSequencesFromFilesList(filesList,supportedExtensions);
     std::locale local;
     for (U32 i = 0; i < files.size(); ++i) {
-        ///get all the decoders
-        std::map<std::string,std::string> readersForFormat;
-        appPTR->getCurrentSettings()->getFileFormatsForReadingAndReader(&readersForFormat);
+        
 
         boost::shared_ptr<SequenceParsing::SequenceFromFiles> & sequence = files[i];
-
+        if (sequence->count() < 1) {
+            continue;
+        }
+        
         ///find a decoder for this file type
         std::string ext = sequence->fileExtension();
         std::string extLower;
         for (size_t j = 0; j < ext.size(); ++j) {
             extLower.append( 1,std::tolower( ext.at(j),local ) );
         }
-        std::map<std::string,std::string>::iterator found = readersForFormat.find(extLower);
-        if ( found == readersForFormat.end() ) {
-            Dialogs::errorDialog("Reader", "No plugin capable of decoding " + extLower + " was found.");
+        if (extLower == NATRON_PROJECT_FILE_EXT) {
+            const std::map<int, SequenceParsing::FileNameContent>& content = sequence->getFrameIndexes();
+            assert(!content.empty());
+            (void)getGui()->openProject(content.begin()->second.absoluteFileName());
         } else {
-            
-            std::string pattern = sequence->generateValidSequencePattern();
-            
-            CreateNodeArgs args(found->second.c_str(), eCreateNodeReasonUserCreate, getGroup());
-            args.xPosHint = scenePos.x();
-            args.yPosHint = scenePos.y();
-            args.paramValues.push_back(createDefaultValueForParam<std::string>(kOfxImageEffectFileParamName, pattern));
-
-            NodePtr  n = getGui()->getApp()->createNode(args);
-            
-            //And offset scenePos by the Width of the previous node created if several nodes are created
-            double w,h;
-            n->getSize(&w, &h);
-            scenePos.rx() += (w + 10);
+            std::map<std::string,std::string>::iterator found = readersForFormat.find(extLower);
+            if ( found == readersForFormat.end() ) {
+                Dialogs::errorDialog("Reader", "No plugin capable of decoding " + extLower + " was found.");
+            } else {
+                
+                std::string pattern = sequence->generateValidSequencePattern();
+                
+                CreateNodeArgs args(QString::fromUtf8(found->second.c_str()), eCreateNodeReasonUserCreate, getGroup());
+                args.xPosHint = scenePos.x();
+                args.yPosHint = scenePos.y();
+                args.paramValues.push_back(createDefaultValueForParam<std::string>(kOfxImageEffectFileParamName, pattern));
+                
+                NodePtr  n = getGui()->getApp()->createNode(args);
+                
+                //And offset scenePos by the Width of the previous node created if several nodes are created
+                double w,h;
+                n->getSize(&w, &h);
+                scenePos.rx() += (w + 10);
+            }
         }
     }
 } // dropEvent

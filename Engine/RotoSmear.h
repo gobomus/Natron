@@ -132,6 +132,7 @@ private:
                         const RectI & roi,
                         ViewIdx view,
                         double* inputTime,
+                            ViewIdx* inputView,
                         int* inputNb) OVERRIDE FINAL WARN_UNUSED_RETURN;
 
     virtual StatusEnum render(const RenderActionArgs& args) OVERRIDE WARN_UNUSED_RETURN;

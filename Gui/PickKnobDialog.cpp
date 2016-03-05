@@ -148,7 +148,7 @@ PickKnobDialog::PickKnobDialog(DockablePanel* panel, QWidget* parent)
     }
     QStringList nodeNames;
     for (NodesList::iterator it = _imp->allNodes.begin(); it != _imp->allNodes.end(); ++it) {
-        QString name( (*it)->getLabel().c_str() );
+        QString name = QString::fromUtf8( (*it)->getLabel().c_str() );
         nodeNames.push_back(name);
     }
     nodeNames.sort();
@@ -187,7 +187,7 @@ PickKnobDialog::PickKnobDialog(DockablePanel* panel, QWidget* parent)
             boost::shared_ptr<KnobPage> isPage = boost::dynamic_pointer_cast<KnobPage>(knobs[i]);
             if (isPage) {
                 _imp->pages.push_back(isPage);
-                _imp->destPageCombo->addItem(isPage->getName().c_str());
+                _imp->destPageCombo->addItem(QString::fromUtf8(isPage->getName().c_str()));
             } else {
                 boost::shared_ptr<KnobGroup> isGrp = boost::dynamic_pointer_cast<KnobGroup>(knobs[i]);
                 if (isGrp) {
@@ -256,7 +256,7 @@ PickKnobDialog::onNodeComboEditingFinished()
             KnobPage* isPage = dynamic_cast<KnobPage*>( knobs[j].get() );
             KnobGroup* isGroup = dynamic_cast<KnobGroup*>( knobs[j].get() );
             if (!isPage && !isGroup) {
-                QString name( knobs[j]->getName().c_str() );
+                QString name = QString::fromUtf8( knobs[j]->getName().c_str() );
                 
                 bool canInsertKnob = true;
                 for (int k = 0; k < knobs[j]->getDimension(); ++k) {
@@ -281,7 +281,7 @@ PickKnobDialog::onPageComboIndexChanged(int index)
         _imp->groupCombo->hide();
     }
     _imp->groupCombo->clear();
-    _imp->groupCombo->addItem("-");
+    _imp->groupCombo->addItem(QString::fromUtf8("-"));
     
     std::string selectedPage = _imp->destPageCombo->itemText(index).toStdString();
     boost::shared_ptr<KnobPage> parentPage ;
@@ -303,13 +303,13 @@ PickKnobDialog::onPageComboIndexChanged(int index)
         
         ///add only grps whose parent page is the selected page
         if (page == parentPage) {
-            _imp->groupCombo->addItem((*it)->getName().c_str());
+            _imp->groupCombo->addItem(QString::fromUtf8((*it)->getName().c_str()));
         }
         
     }
 }
 
-KnobGui*
+KnobGuiPtr
 PickKnobDialog::getSelectedKnob(bool* makeAlias,boost::shared_ptr<KnobPage>* page,boost::shared_ptr<KnobGroup>* group) const
 {
     QString index = _imp->nodeSelectionCombo->text();
@@ -322,7 +322,7 @@ PickKnobDialog::getSelectedKnob(bool* makeAlias,boost::shared_ptr<KnobPage>* pag
         }
     }
     if (!selectedNode) {
-        return 0;
+        return KnobGuiPtr();
     }
     
     QString str = _imp->knobSelectionCombo->itemText( _imp->knobSelectionCombo->activeIndex() );
@@ -332,18 +332,18 @@ PickKnobDialog::getSelectedKnob(bool* makeAlias,boost::shared_ptr<KnobPage>* pag
     if ( it != _imp->allKnobs.end() ) {
         selectedKnob = it->second;
     } else {
-        return 0;
+        return KnobGuiPtr();
     }
     
     boost::shared_ptr<NodeGuiI> selectedNodeGuiI = selectedNode->getNodeGui();
     assert(selectedNodeGuiI);
     if (!selectedNodeGuiI) {
-        return 0;
+        return KnobGuiPtr();
     }
     NodeGui* selectedNodeGui = dynamic_cast<NodeGui*>(selectedNodeGuiI.get());
     assert(selectedNodeGui);
     if (!selectedNodeGui) {
-        return 0;
+        return KnobGuiPtr();
     }
     NodeSettingsPanel* selectedPanel = selectedNodeGui->getSettingPanel();
     bool hadPanelVisible = selectedPanel && !selectedPanel->isClosed();
@@ -353,7 +353,7 @@ PickKnobDialog::getSelectedKnob(bool* makeAlias,boost::shared_ptr<KnobPage>* pag
         selectedNodeGui->setVisibleSettingsPanel(false);
     }
     if (!selectedPanel) {
-        return 0;
+        return KnobGuiPtr();
     }
     if (!hadPanelVisible && selectedPanel) {
         selectedPanel->setClosed(true);
@@ -367,15 +367,16 @@ PickKnobDialog::getSelectedKnob(bool* makeAlias,boost::shared_ptr<KnobPage>* pag
     
     *group = _imp->getSelectedGroup();
     
-    const std::map<boost::weak_ptr<KnobI>,KnobGui*>& knobsMap = selectedPanel->getKnobs();
-    std::map<boost::weak_ptr<KnobI>,KnobGui*>::const_iterator found = knobsMap.find(selectedKnob);
-    if (found != knobsMap.end()) {
-        *makeAlias = _imp->useAliasCheckBox->isChecked();
-        return found->second;
+    const std::list<std::pair<boost::weak_ptr<KnobI>,KnobGuiPtr> >& knobsMap = selectedPanel->getKnobs();
+    for (std::list<std::pair<boost::weak_ptr<KnobI>,KnobGuiPtr> >::const_iterator it = knobsMap.begin(); it!=knobsMap.end(); ++it) {
+        if (it->first.lock() == selectedKnob) {
+            *makeAlias = _imp->useAliasCheckBox->isChecked();
+            return it->second;
+        }
     }
+
     
-    
-    return 0;
+    return KnobGuiPtr();
 }
 
 NATRON_NAMESPACE_EXIT;

@@ -97,7 +97,7 @@ NATRON_NAMESPACE_ENTER;
 
 struct LinkToKnobDialogPrivate
 {
-    KnobGui* fromKnob;
+    KnobGuiPtr fromKnob;
     QVBoxLayout* mainLayout;
     QHBoxLayout* firstLineLayout;
     QWidget* firstLine;
@@ -108,7 +108,7 @@ struct LinkToKnobDialogPrivate
     NodesList allNodes;
     std::map<QString,boost::shared_ptr<KnobI > > allKnobs;
 
-    LinkToKnobDialogPrivate(KnobGui* from)
+    LinkToKnobDialogPrivate(const KnobGuiPtr& from)
         : fromKnob(from)
         , mainLayout(0)
         , firstLineLayout(0)
@@ -123,7 +123,7 @@ struct LinkToKnobDialogPrivate
     }
 };
 
-LinkToKnobDialog::LinkToKnobDialog(KnobGui* from,
+LinkToKnobDialog::LinkToKnobDialog(const KnobGuiPtr& from,
                                    QWidget* parent)
     : QDialog(parent)
       , _imp( new LinkToKnobDialogPrivate(from) )
@@ -158,7 +158,7 @@ LinkToKnobDialog::LinkToKnobDialog(KnobGui* from,
     }
     QStringList nodeNames;
     for (NodesList::iterator it = _imp->allNodes.begin(); it != _imp->allNodes.end(); ++it) {
-        QString name( (*it)->getLabel().c_str() );
+        QString name = QString::fromUtf8( (*it)->getLabel().c_str() );
         nodeNames.push_back(name);
         //_imp->nodeSelectionCombo->addItem(name);
     }
@@ -209,7 +209,7 @@ LinkToKnobDialog::onNodeComboEditingFinished()
             KnobPage* isPage = dynamic_cast<KnobPage*>( knobs[j].get() );
             KnobGroup* isGroup = dynamic_cast<KnobGroup*>( knobs[j].get() );
             if (from->isTypeCompatible(knobs[j]) && !isButton && !isPage && !isGroup) {
-                QString name( knobs[j]->getName().c_str() );
+                QString name = QString::fromUtf8( knobs[j]->getName().c_str() );
 
                 bool canInsertKnob = true;
                 for (int k = 0; k < knobs[j]->getDimension(); ++k) {

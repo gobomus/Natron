@@ -74,6 +74,11 @@
 #define PLUGINID_OFX_WRITEFFMPEG  "fr.inria.openfx.WriteFFmpeg"
 #define PLUGINID_OFX_READPFM      "fr.inria.openfx.ReadPFM"
 #define PLUGINID_OFX_WRITEPFM     "fr.inria.openfx.WritePFM"
+#define PLUGINID_OFX_READMISC     "fr.inria.openfx.ReadMisc"
+#define PLUGINID_OFX_READPSD      "net.fxarena.openfx.ReadPSD"
+#define PLUGINID_OFX_READKRITA    "fr.inria.openfx.ReadKrita"
+#define PLUGINID_OFX_READSVG      "net.fxarena.openfx.ReadSVG"
+#define PLUGINID_OFX_READORA      "fr.inria.openfx.OpenRaster"
 
 #define PLUGINID_NATRON_VIEWER    (NATRON_ORGANIZATION_DOMAIN_TOPLEVEL "." NATRON_ORGANIZATION_DOMAIN_SUB ".built-in.Viewer")
 #define PLUGINID_NATRON_DISKCACHE (NATRON_ORGANIZATION_DOMAIN_TOPLEVEL "." NATRON_ORGANIZATION_DOMAIN_SUB ".built-in.DiskCache")
@@ -89,6 +94,10 @@
 #define PLUGINID_NATRON_ROTOSMEAR (NATRON_ORGANIZATION_DOMAIN_TOPLEVEL "." NATRON_ORGANIZATION_DOMAIN_SUB ".built-in.RotoSmear")
 #define PLUGINID_NATRON_PRECOMP     (NATRON_ORGANIZATION_DOMAIN_TOPLEVEL "." NATRON_ORGANIZATION_DOMAIN_SUB ".built-in.Precomp")
 #define PLUGINID_NATRON_JOINVIEWS     (NATRON_ORGANIZATION_DOMAIN_TOPLEVEL "." NATRON_ORGANIZATION_DOMAIN_SUB ".built-in.JoinViews")
+#define PLUGINID_NATRON_READ    (NATRON_ORGANIZATION_DOMAIN_TOPLEVEL "." NATRON_ORGANIZATION_DOMAIN_SUB ".built-in.Read")
+#define PLUGINID_NATRON_WRITE    (NATRON_ORGANIZATION_DOMAIN_TOPLEVEL "." NATRON_ORGANIZATION_DOMAIN_SUB ".built-in.Write")
+#define PLUGINID_NATRON_ONEVIEW    (NATRON_ORGANIZATION_DOMAIN_TOPLEVEL "." NATRON_ORGANIZATION_DOMAIN_SUB ".built-in.OneView")
+
 
 #define kNatronTLSEffectPointerProperty "NatronTLSEffectPointerProperty"
 
@@ -302,6 +311,13 @@ public:
      **/
     virtual bool isWriter() const WARN_UNUSED_RETURN
     {
+        return false;
+    }
+
+    /**
+     * @brief Basically returns true for WRITE_FFMPEG
+     **/
+    virtual bool isVideoWriter() const WARN_UNUSED_RETURN {
         return false;
     }
 
@@ -870,6 +886,7 @@ protected:
                             const RectI & /*roi*/,
                             ViewIdx /*view*/,
                             double* /*inputTime*/,
+                            ViewIdx* /*inputView*/,
                             int* /*inputNb*/) WARN_UNUSED_RETURN
     {
         return false;
@@ -884,6 +901,7 @@ public:
                            const RectI & renderWindow,
                            ViewIdx view,
                            double* inputTime,
+                           ViewIdx* inputView,
                            int* inputNb) WARN_UNUSED_RETURN;
 
     /**
@@ -1041,7 +1059,7 @@ public:
      **/
     virtual bool makePreviewByDefault() const WARN_UNUSED_RETURN
     {
-        return false;
+        return isReader();
     }
 
     /**
@@ -1206,10 +1224,6 @@ public:
     {
     }
 
-    virtual std::vector<std::string> supportedFileFormats() const
-    {
-        return std::vector<std::string>();
-    }
 
     /**
      * @brief Called everytimes an input connection is changed
@@ -1272,6 +1286,7 @@ public:
         EffectInstance::InputImagesMap imgs;
         double identityTime;
         bool isIdentity;
+        ViewIdx identityView;
     };
 
     struct ImagePlanesToRender
@@ -1521,10 +1536,25 @@ public:
         return false;
     }
 
+    virtual void onKnobsAboutToBeLoaded(const boost::shared_ptr<NodeSerialization>& /*serialization*/) {}
+
     virtual void onKnobsLoaded() {}
+
+    /**
+     * @brief Called after all knobs have been loaded and the nod ehas been created
+     **/
+    virtual void onEffectCreated(bool /*mayCreateFileDialog*/) {}
 
 
 private:
+
+
+    /**
+     * @brief Must be implemented to evaluate a value change
+     * made to a knob(e.g: force a new render).
+     * @param knob[in] The knob whose value changed.
+    **/
+    virtual void evaluate(bool isSignificant, bool refreshMetadatas) OVERRIDE FINAL;
 
     void getComponentsAvailableRecursive(bool useLayerChoice,
                                          bool useThisNodeComponentsNeeded,
@@ -1802,6 +1832,10 @@ private:
 
     struct Implementation;
     boost::scoped_ptr<Implementation> _imp; // PIMPL: hide implementation details
+
+    friend class ReadNode;
+    friend class WriteNode;
+
     enum RenderRoIStatusEnum
     {
         eRenderRoIStatusImageAlreadyRendered = 0, // there was nothing left to render
@@ -1893,6 +1927,7 @@ private:
                                          U64* nodeHash_p,
                                          bool* isIdentity_p,
                                          double* identityTime,
+                                         ViewIdx *inputView,
                                          EffectInstPtr* identityInput_p,
                                          bool* duringPaintStroke_p,
                                          RectD* rod_p,
@@ -1917,13 +1952,8 @@ private:
                             boost::shared_ptr<Image>* fullScaleImage,
                             boost::shared_ptr<Image>* downscaleImage);
 
-    /**
-     * @brief Must be implemented to evaluate a value change
-     * made to a knob(e.g: force a new render).
-     * @param knob[in] The knob whose value changed.
-     **/
-    void evaluate(KnobI* knob, bool isSignificant, bool refreshMetadatas, ValueChangedReasonEnum reason) OVERRIDE;
 
+    virtual void onSignificantEvaluateAboutToBeCalled(KnobI* knob) OVERRIDE FINAL;
 
     virtual void onAllKnobsSlaved(bool isSlave, KnobHolder* master) OVERRIDE FINAL;
     virtual void onKnobSlaved(KnobI* slave, KnobI* master,

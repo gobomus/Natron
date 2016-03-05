@@ -132,7 +132,7 @@ Gui::openRecentFile()
 
     if (action) {
         QFileInfo f( action->data().toString() );
-        QString path = f.path() + '/';
+        QString path = f.path() + QLatin1Char('/');
         QString filename = path + f.fileName();
         int openedProject = appPTR->isProjectAlreadyOpened( filename.toStdString() );
         if (openedProject != -1) {
@@ -163,7 +163,7 @@ void
 Gui::updateRecentFileActions()
 {
     QSettings settings;
-    QStringList files = settings.value("recentFileList").toStringList();
+    QStringList files = settings.value(QString::fromUtf8("recentFileList")).toStringList();
     int numRecentFiles = std::min(files.size(), (int)NATRON_MAX_RECENT_FILES);
 
     for (int i = 0; i < numRecentFiles; ++i) {
@@ -181,7 +181,7 @@ QPixmap
 Gui::screenShot(QWidget* w)
 {
 #if QT_VERSION < 0x050000
-    if (w->objectName() == "CurveEditor") {
+    if (w->objectName() == QString::fromUtf8("CurveEditor")) {
         return QPixmap::grabWidget(w);
     }
 
@@ -199,7 +199,7 @@ Gui::onProjectNameChanged(const QString & filePath, bool modified)
     // http://doc.qt.io/qt-4.8/qwidget.html#windowModified-prop
     setWindowModified(modified);
     // http://doc.qt.io/qt-4.8/qwidget.html#windowFilePath-prop
-    setWindowFilePath(filePath.isEmpty() ? NATRON_PROJECT_UNTITLED : filePath);
+    setWindowFilePath(filePath.isEmpty() ? QString::fromUtf8(NATRON_PROJECT_UNTITLED) : filePath);
 }
 
 void
@@ -416,7 +416,7 @@ Gui::getAvailablePaneName(const QString & baseName) const
     int baseNumber = _imp->_panes.size();
 
     if ( name.isEmpty() ) {
-        name.append("pane");
+        name.append(QString::fromUtf8("pane"));
         name.append( QString::number(baseNumber) );
     }
 
@@ -430,7 +430,7 @@ Gui::getAvailablePaneName(const QString & baseName) const
         }
         if (foundName) {
             ++baseNumber;
-            name = QString("pane%1").arg(baseNumber);
+            name = QString::fromUtf8("pane%1").arg(baseNumber);
         } else {
             break;
         }
@@ -617,7 +617,7 @@ Gui::debugImage(const Image* image,
     
     U64 hashKey = image->getHashKey();
     QString hashKeyStr = QString::number(hashKey);
-    QString realFileName = filename.isEmpty() ? QString(hashKeyStr + ".png") : filename;
+    QString realFileName = filename.isEmpty() ? QString(hashKeyStr + QString::fromUtf8(".png")) : filename;
 #ifdef DEBUG
     qDebug() << "Writing image: " << realFileName;
     renderWindow.debug();
@@ -657,7 +657,6 @@ Gui::onRenderStarted(const QString & sequenceName,
                      const boost::shared_ptr<ProcessHandler> & process)
 {
     assert( QThread::currentThread() == qApp->thread() );
-    ensureProgressPanelVisible();
     _imp->_progressPanel->startTask(writer->getNode(), firstFrame, lastFrame, frameStep, canPause, true, sequenceName, process);
 }
 
@@ -666,7 +665,6 @@ Gui::onRenderRestarted(OutputEffectInstance* writer,
                        const boost::shared_ptr<ProcessHandler> & process)
 {
     assert( QThread::currentThread() == qApp->thread() );
-    ensureProgressPanelVisible();
     _imp->_progressPanel->onTaskRestarted(writer->getNode(), process);
 }
 
@@ -725,19 +723,19 @@ Gui::getOpenGLVersion() const
 QString
 Gui::getBoostVersion() const
 {
-    return QString(BOOST_LIB_VERSION);
+    return QString::fromUtf8(BOOST_LIB_VERSION);
 }
 
 QString
 Gui::getQtVersion() const
 {
-    return QString(QT_VERSION_STR) + " / " + qVersion();
+    return QString::fromUtf8(QT_VERSION_STR) + QString::fromUtf8(" / ") + QString::fromUtf8(qVersion());
 }
 
 QString
 Gui::getCairoVersion() const
 {
-    return QString(CAIRO_VERSION_STRING) + " / " + QString( cairo_version_string() );
+    return QString::fromUtf8(CAIRO_VERSION_STRING) + QString::fromUtf8(" / ") + QString::fromUtf8( cairo_version_string() );
 }
 
 void
@@ -804,7 +802,12 @@ Gui::renderSelectedNode()
         } else {
             if (selectedNodes.size() == 1) {
                 ///create a node and connect it to the node and use it to render
+#ifndef NATRON_ENABLE_IO_META_NODES
                 NodePtr writer = createWriter();
+#else
+                NodeGraph* graph = selectedNodes.front()->getDagGui();
+                NodePtr writer = getApp()->createWriter("", eCreateNodeReasonInternal, graph->getGroup());
+#endif
                 if (writer) {
                     AppInstance::RenderWork w;
                     w.writer = dynamic_cast<OutputEffectInstance*>( writer->getEffectInstance().get() );
@@ -888,10 +891,22 @@ Gui::onTimelineTimeAboutToChange()
 }
 
 void
-Gui::onTimeChanged(SequenceTime time,
+Gui::renderViewersAndRefreshKnobsAfterTimelineTimeChange(SequenceTime time,
                          int reason)
 {
+    TimeLine* timeline = qobject_cast<TimeLine*>(sender());
+    if (timeline != getApp()->getTimeLine().get()) {
+        return;
+    }
+    
     assert(QThread::currentThread() == qApp->thread());
+    if (reason == eTimelineChangeReasonUserSeek ||
+        reason == eTimelineChangeReasonDopeSheetEditorSeek ||
+        reason == eTimelineChangeReasonCurveEditorSeek) {
+        if (getApp()->checkAllReadersModificationDate(true)) {
+            return;
+        }
+    }
     
     boost::shared_ptr<Project> project = getApp()->getProject();
     bool isPlayback = reason == eTimelineChangeReasonPlaybackSeek;
@@ -901,7 +916,14 @@ Gui::onTimeChanged(SequenceTime time,
         for (std::list<DockablePanel*>::const_iterator it = _imp->openedPanels.begin(); it!=_imp->openedPanels.end(); ++it) {
             NodeSettingsPanel* nodePanel = dynamic_cast<NodeSettingsPanel*>(*it);
             if (nodePanel) {
-                nodePanel->getNode()->getNode()->getEffectInstance()->refreshAfterTimeChange(isPlayback, time);
+                NodePtr node = nodePanel->getNode()->getNode();
+                node->getEffectInstance()->refreshAfterTimeChange(isPlayback, time);
+                
+                NodesList children;
+                node->getChildrenMultiInstance(&children);
+                for (NodesList::iterator it2 = children.begin(); it2!=children.end(); ++it2) {
+                    (*it2)->getEffectInstance()->refreshAfterTimeChange(isPlayback, time);
+                }
             }
         }
     }

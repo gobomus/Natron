@@ -152,9 +152,12 @@ public:
     EffectInstPtr createOFXEffect(NodePtr node,
                                             const NodeSerialization* serialization,
                                             const std::list<boost::shared_ptr<KnobSerialization> >& paramValues,
-                                            bool allowFileDialogs,
-                                            bool disableRenderScaleSupport,
-                                                              bool *hasUsedFileDialog) const;
+                                            bool disableRenderScaleSupport
+#ifndef NATRON_ENABLE_IO_META_NODES
+                                            ,bool allowFileDialogs,
+                                            bool *hasUsedFileDialog
+#endif
+                                  ) const;
 
     void registerAppInstance(AppInstance* app);
 
@@ -430,7 +433,7 @@ public:
      **/
     std::list<std::string> getPluginIDs(const std::string& filter);
 
-    virtual QString getAppFont() const { return ""; }
+    virtual QString getAppFont() const { return QString(); }
     virtual int getAppFontSize() const { return 11; }
     
     void setProjectCreatedDuringRC2Or3(bool b);
