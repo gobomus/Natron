@@ -240,6 +240,7 @@ struct Node::Implementation
     , pyPlugID()
     , pyPlugLabel()
     , pyPlugDesc()
+    , pyPlugGrouping()
     , pyPlugVersion(0)
     , computingPreview(false)
     , computingPreviewMutex()
@@ -432,6 +433,7 @@ struct Node::Implementation
     std::string pyPlugID; //< if this is a pyplug, this is the ID of the Plug-in. This is because the plugin handle will be the one of the Group
     std::string pyPlugLabel;
     std::string pyPlugDesc;
+    std::list<std::string> pyPlugGrouping;
     int pyPlugVersion;
     
     bool computingPreview;
@@ -2046,10 +2048,10 @@ Node::Implementation::restoreUserKnobsRecursive(const std::list<boost::shared_pt
                 }
                 const TextExtraData* data = dynamic_cast<const TextExtraData*>(isRegular->getExtraData());
                 assert(data);
-                if (data->label) {
-                    k->setAsLabel();
-                } else {
-                    if (data->multiLine) {
+                if (data) {
+                    if (data->label) {
+                        k->setAsLabel();
+                    } else if (data->multiLine) {
                         k->setAsMultiLine();
                         if (data->richText) {
                             k->setUsesRichText(true);
@@ -2311,8 +2313,9 @@ Node::setMustQuitProcessing(bool mustQuit)
             (*it)->setMustQuitProcessing(mustQuit);
         }
     }
-    //Attempt to wake-up a sleeping thread
+    //Attempt to wake-up  sleeping threads of the thread pool
     QMutexLocker k(&_imp->nodeIsDequeuingMutex);
+    _imp->nodeIsDequeuing = false;
     _imp->nodeIsDequeuingCond.wakeAll();
 }
 
@@ -2323,7 +2326,9 @@ Node::quitAnyProcessing()
         QMutexLocker k(&_imp->nodeIsDequeuingMutex);
         if (_imp->nodeIsDequeuing) {
             _imp->nodeIsDequeuing = false;
-            _imp->nodeIsDequeuingCond.wakeOne();
+            
+            //Attempt to wake-up  sleeping threads of the thread pool
+            _imp->nodeIsDequeuingCond.wakeAll();
         }
     }
     
@@ -2736,6 +2741,24 @@ Node::setNameInternal(const std::string& name, bool throwErrors, bool declareToP
     std::string oldName = getScriptName_mt_safe();
     std::string fullOldName = getFullyQualifiedName();
     std::string newName = name;
+    
+    bool onlySpaces = true;
+    for (std::size_t i = 0; i < name.size(); ++i) {
+        if (name[i] != '_') {
+            onlySpaces = false;
+            break;
+        }
+    }
+    if (onlySpaces) {
+        std::string err = tr("The name must at least contain a character").toStdString();
+        if (throwErrors) {
+            throw std::runtime_error(err);
+        } else {
+            appPTR->writeToErrorLog_mt_safe(QString::fromUtf8(err.c_str()));
+            std::cerr << err << std::endl;
+            return;
+        }
+    }
     
     boost::shared_ptr<NodeCollection> collection = getGroup();
     if (collection) {
@@ -6063,6 +6086,18 @@ Node::getPluginDescription() const
     return _imp->effect->getPluginDescription();
 }
 
+void
+Node::getPluginGrouping(std::list<std::string>* grouping) const
+{
+    {
+        QMutexLocker k(&_imp->pluginPythonModuleMutex);
+        if (!_imp->pyPlugGrouping.empty()) {
+            *grouping =  _imp->pyPlugGrouping;
+        }
+    }
+    _imp->effect->getPluginGrouping(grouping);
+}
+
 int
 Node::getMaxInputCount() const
 {
@@ -6128,9 +6163,10 @@ Node::notifyRenderBeingAborted()
     QMutexLocker k(&_imp->nodeIsDequeuingMutex);
     if (_imp->nodeIsDequeuing) {
         _imp->nodeIsDequeuing = false;
-        _imp->nodeIsDequeuingCond.wakeOne();
+        //Attempt to wake-up  sleeping threads of the thread pool
+        _imp->nodeIsDequeuingCond.wakeAll();
     }
-//    }
+    
     
 }
 
@@ -7220,7 +7256,7 @@ Node::setPluginDescription(const std::string& description)
 
 
 void
-Node::setPluginIDAndVersionForGui(const std::string& pluginLabel,const std::string& pluginID,unsigned int version)
+Node::setPluginIDAndVersionForGui(const std::list<std::string>& grouping, const std::string& pluginLabel,const std::string& pluginID,unsigned int version)
 {
     
     assert(QThread::currentThread() == qApp->thread());
@@ -7234,9 +7270,10 @@ Node::setPluginIDAndVersionForGui(const std::string& pluginLabel,const std::stri
         _imp->pyPlugVersion = version;
         _imp->pyPlugID = pluginID;
         _imp->pyPlugLabel = pluginLabel;
+        _imp->pyPlugGrouping = grouping;
     }
     
-    nodeGui->setPluginIDAndVersion(pluginLabel,pluginID, version);
+    nodeGui->setPluginIDAndVersion(grouping, pluginLabel,pluginID, version);
     
 }
 
@@ -7255,6 +7292,7 @@ Node::setPyPlugEdited(bool edited)
     _imp->pyPlugID.clear();
     _imp->pyPlugLabel.clear();
     _imp->pyPlugDesc.clear();
+    _imp->pyPlugGrouping.clear();
 }
 
 void
@@ -8418,7 +8456,9 @@ Node::dequeueActions()
         //Another slots in this thread might have aborted the dequeuing
         if (_imp->nodeIsDequeuing) {
             _imp->nodeIsDequeuing = false;
-            _imp->nodeIsDequeuingCond.wakeOne();
+            
+            //There might be multiple threads waiting
+            _imp->nodeIsDequeuingCond.wakeAll();
         }
     }
 }
@@ -9926,11 +9966,11 @@ Node::refreshChannelSelectors()
                 std::string option;
                 if (!nodeName.empty()) {
                     option += nodeName;
-                    option += ' ';
+                    option += '.';
                 }
                 if (!layerName.empty()) {
                     option += layerName;
-                    option += ' ';
+                    option += '.';
                 }
                 option += channels[i];
                 choices.push_back(option);

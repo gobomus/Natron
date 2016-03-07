@@ -854,7 +854,16 @@ AppInstance::setGroupLabelIDAndVersion(const NodePtr& node,
     if (Python::getGroupInfos(pythonModulePath.toStdString(),pythonModule.toStdString(), &pluginID, &pluginLabel, &iconFilePath, &pluginGrouping, &description, &istoolset, &version)) {
         node->setPluginIconFilePath(iconFilePath);
         node->setPluginDescription(description);
-        node->setPluginIDAndVersionForGui(pluginLabel, pluginID, version);
+        
+        QString groupingStr = QString::fromUtf8(pluginGrouping.c_str());
+        QStringList groupingSplits = groupingStr.split(QLatin1Char('/'));
+        
+        std::list<std::string> stdGrouping;
+        for (QStringList::iterator it = groupingSplits.begin(); it!=groupingSplits.end(); ++it) {
+            stdGrouping.push_back(it->toStdString());
+        }
+        
+        node->setPluginIDAndVersionForGui(stdGrouping, pluginLabel, pluginID, version);
         node->setPluginPythonModule(QString(pythonModulePath + pythonModule + QString::fromUtf8(".py")).toStdString());
     }
     
@@ -1449,18 +1458,22 @@ AppInstance::startWritersRendering(bool doBlockingRender, const std::list<Render
 
 
 void
-AppInstancePrivate::getSequenceNameFromWriter(const OutputEffectInstance* writer,QString* sequenceName)
+AppInstancePrivate::getSequenceNameFromWriter(const OutputEffectInstance* writer,
+                                              QString* sequenceName)
 {
     ///get the output file knob to get the name of the sequence
     const DiskCacheNode* isDiskCache = dynamic_cast<const DiskCacheNode*>(writer);
     if (isDiskCache) {
         *sequenceName = QObject::tr("Caching");
     } else {
+        *sequenceName = QString();
         KnobPtr fileKnob = writer->getKnobByName(kOfxImageEffectFileParamName);
         if (fileKnob) {
             Knob<std::string>* isString = dynamic_cast<Knob<std::string>*>(fileKnob.get());
             assert(isString);
-            *sequenceName = QString::fromUtf8(isString->getValue().c_str());
+            if (isString) {
+                *sequenceName = QString::fromUtf8(isString->getValue().c_str());
+            }
         }
     }
 }

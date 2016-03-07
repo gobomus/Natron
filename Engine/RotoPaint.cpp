@@ -126,10 +126,10 @@ RotoPaint::isHostChannelSelectorSupported(bool* defaultR,bool* defaultG, bool* d
 bool
 RotoNode::isHostChannelSelectorSupported(bool* defaultR,bool* defaultG, bool* defaultB, bool* defaultA) const
 {
-    *defaultR = true;
-    *defaultG = true;
-    *defaultB = true;
-    *defaultA = false;
+    *defaultR = false;
+    *defaultG = false;
+    *defaultB = false;
+    *defaultA = true;
     return false;
 }
 
@@ -549,9 +549,8 @@ RotoPaint::render(const RenderActionArgs& args)
             if (premultiply && plane->second->getComponents() == ImageComponents::getRGBAComponents()) {
                 plane->second->premultImage(args.roi);
             }
-            if (bgImg) {
-                plane->second->copyUnProcessedChannels(args.roi, outputPremult, bgImg->getPremultiplication(), copyChannels, bgImg, false);
-            }
+            plane->second->copyUnProcessedChannels(args.roi, outputPremult, bgImg ? bgImg->getPremultiplication() : eImagePremultiplicationOpaque, copyChannels, bgImg, false);
+            
             
         }
     } // RenderingFlagSetter flagIsRendering(bottomMerge.get());

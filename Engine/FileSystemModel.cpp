@@ -265,7 +265,11 @@ boost::shared_ptr<FileSystemItem>
 FileSystemItem::childAt(int position) const
 {
     QMutexLocker l(&_imp->childrenMutex);
-    return _imp->children[position];
+    if (position >= 0 && position < (int)_imp->children.size()) {
+        return _imp->children[position];
+    } else {
+        return boost::shared_ptr<FileSystemItem>();
+    }
 }
 
 int
@@ -1020,7 +1024,7 @@ FileSystemModelPrivate::mkPathInternal(const boost::shared_ptr<FileSystemItem>& 
     boost::shared_ptr<FileSystemItem> child;
     for (int i = 0; i < item->childCount(); ++i) {
         boost::shared_ptr<FileSystemItem> c = item->childAt(i);
-        if ( c->fileName() == path[index] ) {
+        if (c &&  c->fileName() == path[index] ) {
             child = c;
             break;
         }
